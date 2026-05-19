@@ -1,0 +1,74 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="8"><MudTextField @bind-Value="_nom" Label="Nom (ex: Saison 4)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="4"><MudNumericField @bind-Value="_ordre" Label="Ordre" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12"><MudCheckBox @bind-Value="_estActive" Label="Définir comme version active (désactive l'actuelle)" /></MudItem>
+            <MudItem xs="12">
+                <MudSelect T="int?" @bind-Value="_cloneFromId" Label="Cloner depuis (optionnel)" Variant="Variant.Outlined" Clearable="true">
+                    <MudSelectItem T="int?" Value="@((int?)null)">Vide (pas de clonage)</MudSelectItem>
+                    @foreach (var v in VersionsDispo)
+                    {
+                        <MudSelectItem T="int?" Value="@((int?)v.Id)">@v.Nom @(v.EstActive ? "(active)" : "")</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudText Typo="Typo.caption" Style="color:#9e9e9e">
+                    Le clonage copie tous les TeamTypes, postes, compétences et limites de la version source. Opération transactionnelle.
+                </MudText>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="Valider" Disabled="@(string.IsNullOrWhiteSpace(_nom) || _saving)">
+            @(_saving ? "Création…" : "Créer")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int GameId { get; set; }
+    [Parameter] public List<RulesVersion> VersionsDispo { get; set; } = [];
+
+    string _nom = "";
+    int _ordre = 1;
+    bool _estActive = false;
+    int? _cloneFromId;
+    bool _saving;
+
+    protected override void OnInitialized()
+    {
+        _ordre = (VersionsDispo.Any() ? VersionsDispo.Max(v => v.Ordre) : 0) + 1;
+        _cloneFromId = VersionsDispo.FirstOrDefault(v => v.EstActive)?.Id;
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Valider()
+    {
+        _saving = true;
+        try
+        {
+            await DataEditService.CreerVersionAsync(GameId, _nom, _ordre, _estActive, _cloneFromId);
+            Snackbar.Add("Version créée", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

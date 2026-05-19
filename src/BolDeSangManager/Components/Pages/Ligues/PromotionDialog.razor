@@ -1,0 +1,59 @@
+@using BolDeSangManager.Data
+@using BolDeSangManager.Services
+@inject LeagueService LeagueService
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        @if (Coaches.Any())
+        {
+            <MudText Class="mb-2">Sélectionne les coaches à promouvoir commissaires de cette ligue :</MudText>
+            @foreach (var c in Coaches)
+            {
+                <MudCheckBox @bind-Value="_selection[c.Id]" Label="@(c.PseudoCoach ?? c.Email)" />
+            }
+        }
+        else
+        {
+            <MudText>Aucun coach disponible (tous déjà commissaires ou pas d'équipe inscrite).</MudText>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="Valider" Disabled="@(!_selection.Values.Any(v => v))">
+            Promouvoir
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int LigueId { get; set; }
+    [Parameter] public List<ApplicationUser> Coaches { get; set; } = [];
+
+    readonly Dictionary<string, bool> _selection = new();
+
+    protected override void OnInitialized()
+    {
+        foreach (var c in Coaches) _selection[c.Id] = false;
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Valider()
+    {
+        var auth = await AuthProvider.GetAuthenticationStateAsync();
+        var assignePar = auth.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        foreach (var (userId, selected) in _selection)
+        {
+            if (!selected) continue;
+            await LeagueService.PromouvoirCommissaireDeLigueAsync(LigueId, userId, assignePar);
+        }
+
+        Snackbar.Add("Promotion effectuée", Severity.Success);
+        MudDialog.Close(DialogResult.Ok(true));
+    }
+}

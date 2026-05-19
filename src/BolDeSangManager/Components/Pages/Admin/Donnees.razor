@@ -1,0 +1,252 @@
+@page "/admin/donnees"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin,GrandCommissaire")]
+@using BolDeSangManager.Data
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Data.Enums
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject LeagueService LeagueService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Édition des données</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudText Typo="Typo.h4" Class="mb-4">Édition des données</MudText>
+
+    <MudStack Row="true" Spacing="2" Class="mb-4">
+        <MudSelect T="int" Label="Jeu" Value="_selectedGameId" ValueChanged="@OnGameChanged"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px">
+            @foreach (var g in _games)
+            {
+                <MudSelectItem Value="@g.Id">@g.Nom</MudSelectItem>
+            }
+        </MudSelect>
+        <MudSelect T="int" Label="Version de règles" Value="_selectedVersionId" ValueChanged="@OnVersionChanged"
+                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:200px">
+            @foreach (var v in _versions)
+            {
+                <MudSelectItem Value="@v.Id">@v.Nom @(v.EstActive ? "(active)" : "")</MudSelectItem>
+            }
+        </MudSelect>
+    </MudStack>
+
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4">
+        <MudTabPanel Text="Équipes">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_teamTypes.Count équipe(s)</b></MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           OnClick="AjouterTeamType">Ajouter une équipe</MudButton>
+            </MudStack>
+            <MudTable Items="@_teamTypes" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Nom</MudTh>
+                    <MudTh>Catégorie</MudTh>
+                    <MudTh>Coût relance</MudTh>
+                    <MudTh>Nb postes</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Nom</MudTd>
+                    <MudTd>@context.Categorie</MudTd>
+                    <MudTd>@context.CoutRelance.ToString("N0") po</MudTd>
+                    <MudTd>@(context.Postes?.Count ?? 0)</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditerTeamType(context.Id))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerTeamType(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Compétences">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle1"><b>@_skillsFiltres.Count compétence(s)</b></MudText>
+                    <MudSelect T="SkillCategory?" Label="Catégorie" Value="_categorieFiltre" ValueChanged="@OnCategorieChanged"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:150px" Clearable="true">
+                        @foreach (var c in Enum.GetValues<SkillCategory>())
+                        {
+                            <MudSelectItem T="SkillCategory?" Value="@((SkillCategory?)c)">@c</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           OnClick="AjouterSkill">Ajouter une compétence</MudButton>
+            </MudStack>
+            <MudTable Items="@_skillsFiltres" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Nom</MudTh>
+                    <MudTh>Catégorie</MudTh>
+                    <MudTh>Trait/Élite</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Nom</MudTd>
+                    <MudTd>@context.Categorie</MudTd>
+                    <MudTd>
+                        @if (context.EstElite) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Élite</MudChip> }
+                        @if (context.EstTrait) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Trait</MudChip> }
+                    </MudTd>
+                    <MudTd Style="max-width:400px; white-space:normal">@context.Description</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditerSkill(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerSkill(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Versions">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_versions.Count version(s)</b></MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           OnClick="CreerVersion">Créer une nouvelle version</MudButton>
+            </MudStack>
+            <MudTable Items="@_versions" Dense="true">
+                <HeaderContent>
+                    <MudTh>Nom</MudTh>
+                    <MudTh>Ordre</MudTh>
+                    <MudTh>Active</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Nom</MudTd>
+                    <MudTd>@context.Ordre</MudTd>
+                    <MudTd>@(context.EstActive ? "Oui" : "Non")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    List<Game> _games = [];
+    List<RulesVersion> _versions = [];
+    List<TeamType> _teamTypes = [];
+    List<Skill> _skills = [];
+    int _selectedGameId;
+    int _selectedVersionId;
+    SkillCategory? _categorieFiltre;
+
+    List<Skill> _skillsFiltres =>
+        _categorieFiltre is null ? _skills : _skills.Where(s => s.Categorie == _categorieFiltre).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _games = await LeagueService.GetGamesAsync();
+        if (_games.Any())
+        {
+            _selectedGameId = _games[0].Id;
+            await ChargerVersionsAsync();
+        }
+    }
+
+    async Task ChargerVersionsAsync()
+    {
+        _versions = await DataEditService.GetVersionsAsync(_selectedGameId);
+        _selectedVersionId = _versions.FirstOrDefault(v => v.EstActive)?.Id ?? _versions.FirstOrDefault()?.Id ?? 0;
+        await ChargerDonneesAsync();
+    }
+
+    async Task ChargerDonneesAsync()
+    {
+        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; return; }
+        _teamTypes = await DataEditService.GetTeamTypesAsync(_selectedVersionId);
+        _skills = await DataEditService.GetSkillsAsync(_selectedVersionId);
+    }
+
+    async Task OnGameChanged(int id)
+    {
+        _selectedGameId = id;
+        await ChargerVersionsAsync();
+    }
+
+    async Task OnVersionChanged(int id)
+    {
+        _selectedVersionId = id;
+        await ChargerDonneesAsync();
+    }
+
+    void OnCategorieChanged(SkillCategory? c) => _categorieFiltre = c;
+
+    void AjouterTeamType()
+    {
+        Nav.NavigateTo($"/admin/donnees/equipes/new?versionId={_selectedVersionId}");
+    }
+
+    void EditerTeamType(int id)
+    {
+        Nav.NavigateTo($"/admin/donnees/equipes/{id}");
+    }
+
+    async Task SupprimerTeamType(TeamType t)
+    {
+        var ok = await DialogService.ShowMessageBox("Confirmer", $"Supprimer définitivement « {t.Nom} » ?", "Supprimer", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.SupprimerTeamTypeAsync(t.Id);
+            Snackbar.Add("Équipe supprimée", Severity.Success);
+            await ChargerDonneesAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    async Task AjouterSkill()
+    {
+        var parameters = new DialogParameters<EditionSkillDialog> { { x => x.VersionId, _selectedVersionId } };
+        var dialog = await DialogService.ShowAsync<EditionSkillDialog>("Nouvelle compétence", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task EditerSkill(Skill s)
+    {
+        var parameters = new DialogParameters<EditionSkillDialog>
+        {
+            { x => x.VersionId, _selectedVersionId },
+            { x => x.Existant, s }
+        };
+        var dialog = await DialogService.ShowAsync<EditionSkillDialog>("Éditer compétence", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task SupprimerSkill(Skill s)
+    {
+        var ok = await DialogService.ShowMessageBox("Confirmer", $"Supprimer la compétence « {s.Nom} » ?", "Supprimer", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.SupprimerSkillAsync(s.Id);
+            Snackbar.Add("Compétence supprimée", Severity.Success);
+            await ChargerDonneesAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    async Task CreerVersion()
+    {
+        var parameters = new DialogParameters<CreerVersionDialog>
+        {
+            { x => x.GameId, _selectedGameId },
+            { x => x.VersionsDispo, _versions }
+        };
+        var dialog = await DialogService.ShowAsync<CreerVersionDialog>("Créer une nouvelle version", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerVersionsAsync();
+    }
+}

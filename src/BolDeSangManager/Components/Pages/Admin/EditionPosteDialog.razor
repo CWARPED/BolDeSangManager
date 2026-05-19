@@ -1,0 +1,90 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_data.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="6" sm="3"><MudNumericField @bind-Value="_data.QuantiteMax" Label="Quota" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="6" sm="3"><MudNumericField @bind-Value="_data.Cout" Label="Coût" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12"><MudText Typo="Typo.subtitle2">Caractéristiques</MudText></MudItem>
+            <MudItem xs="4" sm="2"><MudNumericField @bind-Value="_data.Mouvement" Label="MOV" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="4" sm="2"><MudNumericField @bind-Value="_data.Force" Label="FOR" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="4" sm="2"><MudTextField @bind-Value="_data.Agilite" Label="AGI" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="4" sm="2"><MudTextField @bind-Value="_data.CapacitePasse" Label="CP" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="4" sm="2"><MudTextField @bind-Value="_data.Armure" Label="ARM" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_data.CompetencesPrincipales" Label="Accès Principal (ex: GAF)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_data.CompetencesSecondaires" Label="Accès Secondaire (ex: ASF)" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12"><MudTextField @bind-Value="_data.MotsCles" Label="Mots-clés (CSV: Trois-quart,Humain,...)" Variant="Variant.Outlined" /></MudItem>
+
+            <MudItem xs="12">
+                <MudText Typo="Typo.subtitle2">Compétences de départ</MudText>
+                <MudSelect T="int" MultiSelection="true" SelectAll="false"
+                           SelectedValues="_skillsSelectionnes" SelectedValuesChanged="@(v => _skillsSelectionnes = v.ToHashSet())"
+                           ToStringFunc="@(id => _skillsDispo.FirstOrDefault(s => s.Id == id)?.Nom ?? id.ToString())"
+                           Label="Skills" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var s in _skillsDispo)
+                    {
+                        <MudSelectItem T="int" Value="@s.Id">@s.Nom (@s.Categorie)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Sauvegarder">Sauvegarder</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int TeamTypeId { get; set; }
+    [Parameter] public int VersionId { get; set; }
+    [Parameter] public PlayerPosition? Existant { get; set; }
+
+    PlayerPosition _data = new() { Nom = "", QuantiteMax = 1, Cout = 50_000, Mouvement = 6, Force = 3, Agilite = "3+", CapacitePasse = "-", Armure = "9+" };
+    HashSet<int> _skillsSelectionnes = new();
+    List<Skill> _skillsDispo = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _skillsDispo = await DataEditService.GetSkillsAsync(VersionId);
+        if (Existant is not null)
+        {
+            _data = new PlayerPosition
+            {
+                Id = Existant.Id, Nom = Existant.Nom, QuantiteMax = Existant.QuantiteMax,
+                Cout = Existant.Cout, Mouvement = Existant.Mouvement, Force = Existant.Force,
+                Agilite = Existant.Agilite, CapacitePasse = Existant.CapacitePasse, Armure = Existant.Armure,
+                CompetencesPrincipales = Existant.CompetencesPrincipales, CompetencesSecondaires = Existant.CompetencesSecondaires,
+                MotsCles = Existant.MotsCles
+            };
+            _skillsSelectionnes = Existant.CompetencesDepart.Select(c => c.SkillId).ToHashSet();
+        }
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Sauvegarder()
+    {
+        try
+        {
+            if (Existant is null)
+                await DataEditService.AjouterPosteAsync(TeamTypeId, _data, _skillsSelectionnes);
+            else
+                await DataEditService.ModifierPosteAsync(Existant.Id, _data, _skillsSelectionnes);
+            Snackbar.Add("Poste sauvegardé", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+}

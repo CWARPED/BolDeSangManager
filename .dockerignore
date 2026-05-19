@@ -1,0 +1,22 @@
+# Build artifacts
+src/**/bin/
+src/**/obj/
+tests/**/bin/
+tests/**/obj/
+
+# Base de données locale
+src/BolDeSangManager/Data/*.db
+src/BolDeSangManager/Data/*.db-shm
+src/BolDeSangManager/Data/*.db-wal
+
+# Outils dev
+.claude/
+.git/
+.vs/
+*.user
+*.suo
+
+# Documentation et tests (pas nécessaires dans l'image)
+tests/
+docs/
+*.md

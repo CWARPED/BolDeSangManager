@@ -1,0 +1,180 @@
+@page "/ligues"
+@rendermode InteractiveServer
+@inject LeagueService LeagueService
+@inject LeagueExportService ExportService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IJSRuntime JSRuntime
+@inject AuthenticationStateProvider AuthProvider
+@inject IDialogService DialogService
+
+<PageTitle>Ligues — BolDeSang Manager</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+    <MudText Typo="Typo.h5" Color="Color.Error"><b>Ligues</b></MudText>
+    <AuthorizeView Roles="Admin,GrandCommissaire">
+        <Authorized>
+            <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Upload"
+                          OnClick="@(async () => await JSRuntime.InvokeVoidAsync("clickElement", "importLeagueFile"))"
+                          Disabled="@_importing">
+                    @(_importing ? "Import en cours…" : "Importer une ligue")
+                </MudButton>
+                <InputFile id="importLeagueFile" OnChange="ImporterLigue"
+                          style="display:none" accept=".json" />
+                <MudButton Href="/ligues/creer" Variant="Variant.Filled"
+                          Color="Color.Error" StartIcon="@Icons.Material.Filled.Add">
+                    Créer une ligue
+                </MudButton>
+            </MudStack>
+        </Authorized>
+    </AuthorizeView>
+</MudStack>
+
+@if (_ligues is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else if (!_ligues.Any())
+{
+    <MudAlert Severity="Severity.Info">Aucune ligue pour le moment. Un commissaire peut en créer une.</MudAlert>
+}
+else
+{
+    <MudGrid>
+        @foreach (var ligue in _ligues)
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="2" Style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/ligues/{ligue.Id}"))">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6"><b>@ligue.Nom</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @ligue.Game?.Nom — @ligue.RulesVersion?.Nom
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudChip T="string" Color="@LeagueColor(ligue.Statut)" Size="Size.Small">
+                                @LeagueLabel(ligue.Statut)
+                            </MudChip>
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        <MudStack Row="true" Spacing="3">
+                            <div>
+                                <MudText Typo="Typo.caption">Commissaire</MudText>
+                                <MudText Typo="Typo.body2">
+                                    @(ligue.Commissaire?.PseudoCoach ?? ligue.Commissaire?.UserName)
+                                </MudText>
+                            </div>
+                            <div>
+                                <MudText Typo="Typo.caption">Équipes</MudText>
+                                <MudText Typo="Typo.body2">@ligue.Equipes.Count</MudText>
+                            </div>
+                            <div>
+                                <MudText Typo="Typo.caption">Format</MudText>
+                                <MudText Typo="Typo.body2">@LeagueFormatLabel(ligue.Format)</MudText>
+                            </div>
+                        </MudStack>
+                        @if (!string.IsNullOrEmpty(ligue.Description))
+                        {
+                            <MudText Typo="Typo.body2" Class="mt-2" Color="Color.Secondary">
+                                @ligue.Description
+                            </MudText>
+                        }
+                    </MudCardContent>
+                    <AuthorizeView Roles="Admin,GrandCommissaire" Context="commCtx">
+                        <Authorized>
+                            <MudCardActions>
+                                <div @onclick:stopPropagation="true" style="display:contents">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Download"
+                                                  Color="Color.Primary" Size="Size.Small"
+                                                  title="Exporter en JSON"
+                                                  OnClick="@(() => ExporterLigue(ligue.Id, ligue.Nom))"
+                                                  Disabled="@_exporting" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                  Color="Color.Error" Size="Size.Small"
+                                                  title="Supprimer la ligue"
+                                                  OnClick="@(() => SupprimerLigue(ligue.Id, ligue.Nom))"
+                                                  Disabled="@_deleting" />
+                                </div>
+                            </MudCardActions>
+                        </Authorized>
+                    </AuthorizeView>
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+}
+
+@code {
+    List<League>? _ligues;
+    bool _exporting;
+    bool _importing;
+    bool _deleting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ligues = await LeagueService.GetAllLiguesAsync();
+    }
+
+    async Task ExporterLigue(int ligueId, string nom)
+    {
+        _exporting = true;
+        try
+        {
+            var bytes = await ExportService.ExportAsync(ligueId);
+            var base64 = Convert.ToBase64String(bytes);
+            var filename = $"ligue-{nom.ToLowerInvariant().Replace(' ', '-')}-{DateTime.Now:yyyyMMdd}.json";
+            await JSRuntime.InvokeVoidAsync("blazorDownloadBase64File", filename, "application/json", base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur d'export : {ex.Message}", Severity.Error);
+        }
+        finally { _exporting = false; }
+    }
+
+    async Task SupprimerLigue(int ligueId, string nom)
+    {
+        var confirmed = await DialogService.ShowMessageBox(
+            "Supprimer la ligue",
+            $"Supprimer définitivement « {nom} » et toutes ses données (équipes, matchs, joueurs) ?",
+            yesText: "Supprimer", cancelText: "Annuler");
+        if (confirmed != true) return;
+
+        _deleting = true;
+        try
+        {
+            await LeagueService.SupprimerLigueAsync(ligueId);
+            _ligues = await LeagueService.GetAllLiguesAsync();
+            Snackbar.Add($"Ligue « {nom} » supprimée.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _deleting = false; }
+    }
+
+    async Task ImporterLigue(InputFileChangeEventArgs e)
+    {
+        _importing = true;
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+            using var stream = e.File.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+            var ligue = await ExportService.ImportAsync(stream, userId);
+            _ligues = await LeagueService.GetAllLiguesAsync();
+            Snackbar.Add($"Ligue \"{ligue.Nom}\" importée avec succès.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur d'import : {ex.Message}", Severity.Error);
+        }
+        finally { _importing = false; }
+    }
+
+}

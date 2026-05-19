@@ -1,0 +1,325 @@
+@page "/admin"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin")]
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using BolDeSangManager.Data
+@inject UserManager<ApplicationUser> UserManager
+@inject RoleManager<IdentityRole> RoleManager
+@inject SettingsService SettingsService
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject ISnackbar Snackbar
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+
+<PageTitle>Administration — BolDeSang Manager</PageTitle>
+
+<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.AdminPanelSettings" Class="mr-2" />
+    <b>Administration</b>
+</MudText>
+
+<MudTabs Elevation="1" Rounded="true" PanelClass="pt-4">
+
+    <!-- Utilisateurs -->
+    <MudTabPanel Text="Utilisateurs" Icon="@Icons.Material.Filled.People">
+        @if (_utilisateurs is null)
+        {
+            <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+        }
+        else
+        {
+            <MudTable Items="@_utilisateurs" Dense="true" Hover="true" Elevation="1">
+                <HeaderContent>
+                    <MudTh>Pseudo</MudTh>
+                    <MudTh>Email</MudTh>
+                    <MudTh>Rôle</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="u">
+                    <MudTd>
+                        <b>@(string.IsNullOrEmpty(u.PseudoCoach) ? u.UserName : u.PseudoCoach)</b>
+                    </MudTd>
+                    <MudTd>@u.Email</MudTd>
+                    <MudTd DataLabel="Rôle">
+                        @if (_rolesById.TryGetValue(u.Id, out var roleActuel))
+                        {
+                            <MudSelect T="string" Value="@roleActuel"
+                                       ValueChanged="@(async (string r) => await ChangerRoleAsync(u, r))"
+                                       Dense="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       Disabled="@(u.Id == _currentUserId)">
+                                <MudSelectItem Value="@("Coach")">Coach</MudSelectItem>
+                                <MudSelectItem Value="@("GrandCommissaire")">Grand Commissaire</MudSelectItem>
+                                <MudSelectItem Value="@("Admin")">Admin</MudSelectItem>
+                            </MudSelect>
+                        }
+                        else
+                        {
+                            <MudText>—</MudText>
+                        }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudTabPanel>
+
+    <!-- Données -->
+    <MudTabPanel Text="Données" Icon="@Icons.Material.Filled.DataObject">
+        <MudPaper Class="pa-6" Elevation="0">
+            <MudStack AlignItems="AlignItems.Center" Spacing="3">
+                <MudIcon Icon="@Icons.Material.Filled.DataObject" Size="Size.Large" Color="Color.Primary" />
+                <MudText Typo="Typo.h5">Édition des données de jeu</MudText>
+                <MudText Typo="Typo.body2" Class="text-center" Style="max-width:500px">
+                    Gère les équipes, postes, compétences, limites par mot-clé et versions de règles
+                    pour Blood Bowl et Dungeon Bowl. Crée de nouvelles équipes, ajuste les coûts/stats,
+                    ou clone une version pour préparer une saison future.
+                </MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.Edit"
+                           OnClick="@(() => Nav.NavigateTo("/admin/donnees"))">
+                    Ouvrir l'éditeur
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+    </MudTabPanel>
+
+    <!-- Paramètres -->
+    <MudTabPanel Text="Paramètres" Icon="@Icons.Material.Filled.Settings">
+        <MudCard Elevation="1" Style="max-width:600px">
+            <MudCardContent>
+                <MudText Typo="Typo.subtitle1" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-1" Size="Size.Small" />
+                    <b>URL externe de l'application</b>
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                    Utilisée pour générer les QR codes dans les feuilles d'équipe PDF.
+                    Exemple : <code>https://boldesang.mon-asso.fr</code>
+                </MudText>
+                <MudTextField @bind-Value="_urlExterne"
+                              Label="URL externe"
+                              Placeholder="https://boldesang.mon-asso.fr"
+                              Variant="Variant.Outlined"
+                              FullWidth="true"
+                              HelperText="Sans slash final"
+                              Disabled="@_savingUrl" />
+            </MudCardContent>
+            <MudCardActions>
+                <MudButton Variant="Variant.Filled" Color="Color.Error"
+                           OnClick="SauvegarderUrl" Disabled="@_savingUrl"
+                           StartIcon="@Icons.Material.Filled.Save">
+                    @(_savingUrl ? "Enregistrement…" : "Enregistrer")
+                </MudButton>
+            </MudCardActions>
+        </MudCard>
+    </MudTabPanel>
+
+    <!-- Email -->
+    <MudTabPanel Text="Email" Icon="@Icons.Material.Filled.Email">
+        <MudGrid Spacing="3">
+            <MudItem xs="12" md="7">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.subtitle1" Class="mb-1">
+                            <MudIcon Icon="@Icons.Material.Filled.AlternateEmail" Class="mr-1" Size="Size.Small" />
+                            <b>Compte Gmail expéditeur</b>
+                        </MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                            Utilisé pour envoyer les emails de réinitialisation de mot de passe.
+                            Requiert un <b>Mot de passe d'application</b> Gmail (pas le mot de passe du compte).
+                        </MudText>
+
+                        <MudTextField @bind-Value="_emailExp"
+                                      Label="Adresse Gmail expéditrice"
+                                      Placeholder="boldesang@gmail.com"
+                                      Variant="Variant.Outlined"
+                                      Class="mb-3"
+                                      InputType="InputType.Email"
+                                      FullWidth="true"
+                                      Disabled="@_savingEmail" />
+
+                        <MudTextField @bind-Value="_nomExp"
+                                      Label="Nom affiché"
+                                      Placeholder="BolDeSang Manager"
+                                      Variant="Variant.Outlined"
+                                      Class="mb-3"
+                                      FullWidth="true"
+                                      HelperText="Nom visible dans la boîte de réception du destinataire"
+                                      Disabled="@_savingEmail" />
+
+                        <MudTextField @bind-Value="_mdpApp"
+                                      Label="Mot de passe d'application Gmail"
+                                      Placeholder="xxxx xxxx xxxx xxxx"
+                                      Variant="Variant.Outlined"
+                                      Class="mb-3"
+                                      InputType="@(_showMdp ? InputType.Text : InputType.Password)"
+                                      FullWidth="true"
+                                      HelperText="16 caractères — généré sur myaccount.google.com"
+                                      Disabled="@_savingEmail"
+                                      Adornment="Adornment.End"
+                                      AdornmentIcon="@(_showMdp ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                                      OnAdornmentClick="@(() => _showMdp = !_showMdp)" />
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Error"
+                                       OnClick="SauvegarderEmail" Disabled="@_savingEmail"
+                                       StartIcon="@Icons.Material.Filled.Save">
+                                @(_savingEmail ? "Enregistrement…" : "Enregistrer")
+                            </MudButton>
+                            <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                                       OnClick="TesterEmail" Disabled="@(_savingEmail || string.IsNullOrWhiteSpace(_emailTest))"
+                                       StartIcon="@Icons.Material.Filled.Send">
+                                Tester
+                            </MudButton>
+                            <MudTextField @bind-Value="_emailTest"
+                                          Placeholder="email de test"
+                                          Variant="Variant.Text"
+                                          Margin="Margin.Dense"
+                                          Style="min-width:180px"
+                                          Disabled="@_savingEmail" />
+                        </MudStack>
+                    </MudCardActions>
+                </MudCard>
+            </MudItem>
+
+            <MudItem xs="12" md="5">
+                <MudCard Elevation="1">
+                    <MudCardContent>
+                        <MudText Typo="Typo.subtitle2" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.Help" Class="mr-1" Size="Size.Small" />
+                            <b>Comment obtenir un mot de passe d'application ?</b>
+                        </MudText>
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                            <ol style="padding-left:1.2rem;line-height:2">
+                                <li>Activez la <b>validation en 2 étapes</b> sur votre compte Google</li>
+                                <li>Allez dans <b>Sécurité → Mots de passe des applications</b></li>
+                                <li>Créez une application nommée "BolDeSang"</li>
+                                <li>Copiez le code 16 caractères généré</li>
+                            </ol>
+                        </MudText>
+                        @if (_emailConfigured)
+                        {
+                            <MudAlert Severity="Severity.Success" Dense="true" Class="mt-3">
+                                Email configuré
+                            </MudAlert>
+                        }
+                        else
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                                Email non configuré — la récupération de mot de passe est désactivée
+                            </MudAlert>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </MudTabPanel>
+
+</MudTabs>
+
+@code {
+    List<ApplicationUser>? _utilisateurs;
+    Dictionary<string, string> _rolesById = new();
+    string _currentUserId = "";
+
+    string _urlExterne = "";
+    bool _savingUrl;
+
+    string _emailExp  = "";
+    string _nomExp    = "";
+    string _mdpApp    = "";
+    string _emailTest = "";
+    bool   _savingEmail;
+    bool   _showMdp;
+    bool   _emailConfigured;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _utilisateurs = await UserManager.Users.ToListAsync();
+
+        var auth = await AuthProvider.GetAuthenticationStateAsync();
+        _currentUserId = auth.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+        await ChargerRolesAsync();
+
+        _urlExterne = await SettingsService.GetAsync(SettingsService.CleUrlExterne) ?? "";
+
+        _emailExp  = await SettingsService.GetAsync(SettingsService.CleEmailExpediteur)    ?? "";
+        _nomExp    = await SettingsService.GetAsync(SettingsService.CleEmailNomExpediteur) ?? "BolDeSang Manager";
+        _mdpApp    = await SettingsService.GetAsync(SettingsService.CleEmailMotDePasse)    ?? "";
+        _emailConfigured = !string.IsNullOrWhiteSpace(_emailExp) && !string.IsNullOrWhiteSpace(_mdpApp);
+    }
+
+    async Task ChargerRolesAsync()
+    {
+        _rolesById.Clear();
+        var users = await UserManager.Users.ToListAsync();
+        foreach (var user in users)
+        {
+            var roles = await UserManager.GetRolesAsync(user);
+            _rolesById[user.Id] = roles.FirstOrDefault() ?? "Coach";
+        }
+    }
+
+    async Task ChangerRoleAsync(ApplicationUser user, string nouveauRole)
+    {
+        var rolesActuels = await UserManager.GetRolesAsync(user);
+        foreach (var r in rolesActuels)
+            await UserManager.RemoveFromRoleAsync(user, r);
+        await UserManager.AddToRoleAsync(user, nouveauRole);
+        _rolesById[user.Id] = nouveauRole;
+        Snackbar.Add($"Rôle de {user.Email} changé en {nouveauRole}", Severity.Success);
+        StateHasChanged();
+    }
+
+    async Task SauvegarderUrl()
+    {
+        _savingUrl = true;
+        try
+        {
+            var url = _urlExterne.TrimEnd('/').Trim();
+            await SettingsService.SetAsync(SettingsService.CleUrlExterne, url);
+            _urlExterne = url;
+            Snackbar.Add("URL enregistrée.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _savingUrl = false; }
+    }
+
+    async Task SauvegarderEmail()
+    {
+        _savingEmail = true;
+        try
+        {
+            await SettingsService.SetAsync(SettingsService.CleEmailExpediteur,    _emailExp.Trim());
+            await SettingsService.SetAsync(SettingsService.CleEmailNomExpediteur, _nomExp.Trim().Length > 0 ? _nomExp.Trim() : "BolDeSang Manager");
+            await SettingsService.SetAsync(SettingsService.CleEmailMotDePasse,    _mdpApp.Trim());
+            _emailConfigured = !string.IsNullOrWhiteSpace(_emailExp) && !string.IsNullOrWhiteSpace(_mdpApp);
+            Snackbar.Add("Configuration email enregistrée.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _savingEmail = false; }
+    }
+
+    async Task TesterEmail()
+    {
+        if (string.IsNullOrWhiteSpace(_emailTest)) return;
+        _savingEmail = true;
+        try
+        {
+            var fakeUser = new ApplicationUser { Email = _emailTest, UserName = _emailTest };
+            await EmailSender.SendPasswordResetLinkAsync(fakeUser, _emailTest,
+                "https://boldesang.example.com/Account/ResetPassword?code=TEST");
+            Snackbar.Add($"Email de test envoyé à {_emailTest}.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Échec : {ex.Message}", Severity.Error);
+        }
+        finally { _savingEmail = false; }
+    }
+}

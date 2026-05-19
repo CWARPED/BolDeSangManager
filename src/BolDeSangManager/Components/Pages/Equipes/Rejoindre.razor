@@ -1,0 +1,409 @@
+@page "/equipes/rejoindre"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject TeamService TeamService
+@inject LeagueService LeagueService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Rejoindre la ligue — BolDeSang Manager</PageTitle>
+
+<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4"><b>Rejoindre la ligue</b></MudText>
+
+@if (_ligue is null && LigueId > 0)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else if (_ligue is null)
+{
+    <MudAlert Severity="Severity.Error">
+        Ligue introuvable. <MudLink Href="/ligues">Retour aux ligues</MudLink>
+    </MudAlert>
+}
+else
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        Ligue : <b>@_ligue.Nom</b> | Jeu : <b>@_ligue.Game?.Nom</b> | Budget de départ : <b>@_ligue.BudgetDepart.ToString("N0") po</b>
+    </MudText>
+
+    @if (_selectedType is null)
+    {
+        <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Choisissez votre race / collège</b></MudText>
+        @if (!_teamTypes.Any())
+        {
+            <MudAlert Severity="Severity.Warning">Aucune race disponible pour ce jeu.</MudAlert>
+        }
+        <MudGrid>
+            @foreach (var tt in _teamTypes)
+            {
+                <MudItem xs="12" sm="6" md="4" Class="d-flex">
+                    <MudCard Elevation="1" Style="cursor:pointer; border:1px solid rgba(255,255,255,0.07); transition:border-color .2s; width:100%"
+                             @onclick="@(() => SelectionnerType(tt))"
+                             @onmouseenter="@(e => { })" @onmouseleave="@(e => { })">
+                        <MudCardContent>
+                            <MudText Typo="Typo.h6"><b>@tt.Nom</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Relance : @tt.CoutRelance.ToString("N0") po
+                            </MudText>
+                            @if (!string.IsNullOrEmpty(tt.ReglesSpeciales))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@tt.ReglesSpeciales</MudText>
+                            }
+                        </MudCardContent>
+                    </MudCard>
+                </MudItem>
+            }
+        </MudGrid>
+    }
+    else
+    {
+        <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
+            <MudText Typo="Typo.subtitle1"><b>@_selectedType.Nom</b></MudText>
+            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                      OnClick="@(() => { _selectedType = null; _slots.Clear(); })">
+                ← Changer de race
+            </MudButton>
+        </MudStack>
+
+        <MudGrid>
+            <!-- Formulaire principal -->
+            <MudItem xs="12" md="8">
+                <MudTextField @bind-Value="_nomEquipe" Label="Nom de l'équipe"
+                             Variant="Variant.Outlined" Required="true" Class="mb-4"
+                             HelperText="Ex: Les Crocs de Nuln" />
+
+                <!-- Budget tracker -->
+                <MudPaper Elevation="0" Class="pa-3 mb-4" Style="background:#fafafa; border:1px solid #e0e0e0; border-radius:8px">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.subtitle2">Budget restant</MudText>
+                        <MudText Typo="Typo.h6" Color="@(_budgetRestant < 0 ? Color.Error : Color.Success)">
+                            <b>@_budgetRestant.ToString("N0") po</b>
+                        </MudText>
+                    </MudStack>
+                </MudPaper>
+
+                <!-- Effectif -->
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Effectif — @_slots.Count joueur(s)</b></MudText>
+
+                @foreach (var slot in _slots.ToList())
+                {
+                    var idx = _slots.IndexOf(slot) + 1;
+                    <MudPaper Elevation="0" Class="pa-2 mb-2" Style="border:1px solid #e0e0e0; border-radius:4px">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                            <MudText Typo="Typo.caption" Style="width:20px; color:#999">@idx</MudText>
+                            <MudText Typo="Typo.body2" Style="min-width:120px"><b>@slot.PositionNom</b></MudText>
+                            <MudTextField @bind-Value="slot.Nom" Placeholder="Nom du joueur"
+                                         Variant="Variant.Text" Margin="Margin.Dense" Style="min-width:140px; flex:1" />
+                            <MudNumericField @bind-Value="slot.Numero" Min="1" Max="99"
+                                           Label="#" Variant="Variant.Text" Margin="Margin.Dense" Style="width:60px" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width:70px; text-align:right">
+                                @slot.Cout.ToString("N0") po
+                            </MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small"
+                                         Color="Color.Error" OnClick="@(() => _slots.Remove(slot))" />
+                        </MudStack>
+                    </MudPaper>
+                }
+
+                @if (!_slots.Any())
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        Cliquez sur ✚ à droite pour ajouter des joueurs.
+                    </MudText>
+                }
+
+                <MudDivider Class="my-4" />
+
+                <!-- Staff -->
+                <MudText Typo="Typo.subtitle2" Class="mb-3"><b>Staff & Équipement</b></MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField @bind-Value="_nombreRelances" Label="Relances" Min="0" Max="8"
+                                        Variant="Variant.Outlined" Margin="Margin.Dense"
+                                        HelperText="@($"{_selectedType.CoutRelance:N0} po")" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField @bind-Value="_fansDevoues" Label="Fans dévoués" Min="0" Max="6"
+                                        Variant="Variant.Outlined" Margin="Margin.Dense"
+                                        HelperText="10 000 po" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField @bind-Value="_coachsAssistants" Label="Coachs assistants" Min="0" Max="6"
+                                        Variant="Variant.Outlined" Margin="Margin.Dense"
+                                        HelperText="@(_estDB ? "Non disponible en DB" : "10 000 po")"
+                                        Disabled="@_estDB" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField @bind-Value="_cheerleaders" Label="Cheerleaders" Min="0" Max="6"
+                                        Variant="Variant.Outlined" Margin="Margin.Dense"
+                                        HelperText="@(_estDB ? "Non disponible en DB" : "10 000 po")"
+                                        Disabled="@_estDB" />
+                    </MudItem>
+                    <MudItem xs="12" sm="8">
+                        <MudCheckBox @bind-Value="_apothicaire" Color="Color.Primary">
+                            Apothicaire (50 000 po)
+                        </MudCheckBox>
+                    </MudItem>
+                </MudGrid>
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-6" Spacing="2">
+                    <MudButton Href="@($"/ligues/{LigueId}")" Variant="Variant.Text">Annuler</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error"
+                              StartIcon="@Icons.Material.Filled.Save"
+                              Disabled="@(_saving || _budgetRestant < 0 || string.IsNullOrWhiteSpace(_nomEquipe) || _slots.Count == 0)"
+                              OnClick="Soumettre">
+                        @(_saving ? "Création..." : "Créer l'équipe")
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+
+            <!-- Panel postes disponibles -->
+            <MudItem xs="12" md="4">
+                <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Postes disponibles</b></MudText>
+                @if (_selectedType?.LimitesMotsCles is not null && _selectedType.LimitesMotsCles.Any())
+                {
+                    <MudPaper Elevation="0" Class="pa-2 mb-3" Style="background:rgba(229,57,53,0.06); border:1px solid rgba(229,57,53,0.2); border-radius:4px">
+                        <MudText Typo="Typo.caption" Style="font-weight:600; color:rgba(255,255,255,0.7)">Limites par mot-clé</MudText>
+                        @foreach (var lim in _selectedType.LimitesMotsCles)
+                        {
+                            var countCurrent = _slots.Count(s =>
+                            {
+                                var p = _selectedType.Postes.FirstOrDefault(pp => pp.Id == s.PositionId);
+                                return p is not null && p.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                    .Any(k => k.Trim().Equals(lim.MotCle, StringComparison.OrdinalIgnoreCase));
+                            });
+                            <MudText Typo="Typo.caption" Style="display:block; font-size:11px">
+                                <b>@lim.MotCle</b> : @countCurrent/@lim.Max
+                            </MudText>
+                        }
+                    </MudPaper>
+                }
+                @foreach (var pos in _selectedType.Postes.OrderBy(p => p.Cout))
+                {
+                    var count = _slots.Count(s => s.PositionId == pos.Id);
+                    var complet = count >= pos.QuantiteMax || DepasseLimiteMotCle(pos);
+                        var sansFonds = _budgetRestant < pos.Cout;
+                        <MudPaper Elevation="0" Class="pa-2 mb-2"
+                                 Style="@($"border:1px solid {(complet ? "rgba(255,255,255,0.06)" : "rgba(229,57,53,0.35)")}; border-radius:4px; opacity:{(complet ? "0.45" : "1")}")">
+                            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Spacing="1">
+                                <div style="flex:1; min-width:0">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                        <MudText Typo="Typo.body2"><b>@pos.Nom</b></MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                            @count/@pos.QuantiteMax &nbsp;·&nbsp; @pos.Cout.ToString("N0") po
+                                        </MudText>
+                                    </MudStack>
+                                    @if (!string.IsNullOrEmpty(pos.MotsCles))
+                                    {
+                                        <MudText Typo="Typo.caption" Style="font-style:italic; color:#9e9e9e; font-size:10px; display:block; line-height:1.2; margin-bottom:2px">
+                                            @string.Join(", ", pos.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(k => k.Trim()))
+                                        </MudText>
+                                    }
+                                    <!-- Caractéristiques en colonnes -->
+                                    <div style="display:grid; grid-template-columns:repeat(5,1fr); text-align:center; margin:4px 0 2px">
+                                        <span style="font-size:10px; color:#9e9e9e">MOV</span>
+                                        <span style="font-size:10px; color:#9e9e9e">FOR</span>
+                                        <span style="font-size:10px; color:#9e9e9e">AGI</span>
+                                        <span style="font-size:10px; color:#9e9e9e">CP</span>
+                                        <span style="font-size:10px; color:#9e9e9e">ARM</span>
+                                        <span style="font-size:12px; font-weight:600">@pos.Mouvement</span>
+                                        <span style="font-size:12px; font-weight:600">@pos.Force</span>
+                                        <span style="font-size:12px; font-weight:600">@pos.Agilite</span>
+                                        <span style="font-size:12px; font-weight:600">@pos.CapacitePasse</span>
+                                        <span style="font-size:12px; font-weight:600">@pos.Armure</span>
+                                    </div>
+                                    @if (pos.CompetencesDepart.Any())
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Primary">
+                                            @SkillSpans(pos)
+                                        </MudText>
+                                    }
+                                    <MudStack Row="true" Spacing="1" Class="mt-1" Style="font-size:10px">
+                                        @if (!string.IsNullOrEmpty(pos.CompetencesPrincipales))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                                                     Style="height:18px; font-size:10px">
+                                                P: @pos.CompetencesPrincipales
+                                            </MudChip>
+                                        }
+                                        @if (!string.IsNullOrEmpty(pos.CompetencesSecondaires))
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                                                     Style="height:18px; font-size:10px">
+                                                S: @pos.CompetencesSecondaires
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+                                </div>
+                                <MudIconButton Icon="@Icons.Material.Filled.AddCircleOutline"
+                                             Size="Size.Small"
+                                             Color="@(!complet && !sansFonds ? Color.Warning : Color.Default)"
+                                             Disabled="@(complet || sansFonds)"
+                                             OnClick="@(() => AjouterJoueur(pos))" />
+                            </MudStack>
+                        </MudPaper>
+                }
+            </MudItem>
+        </MudGrid>
+    }
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public int LigueId { get; set; }
+
+    League? _ligue;
+    List<TeamType> _teamTypes = [];
+    TeamType? _selectedType;
+    string _nomEquipe = "";
+    readonly List<PlayerSlot> _slots = [];
+    int _nombreRelances;
+    int _fansDevoues;
+    int _coachsAssistants;
+    int _cheerleaders;
+    bool _apothicaire;
+    bool _saving;
+
+    bool _estDB => _ligue?.Game?.Type == GameType.DungeonBowl;
+
+    int _budgetRestant => _ligue is null ? 0 :
+        _ligue.BudgetDepart
+        - _slots.Sum(s => s.Cout)
+        - _nombreRelances * (_selectedType?.CoutRelance ?? 50_000)
+        - _fansDevoues * 10_000
+        - (_estDB ? 0 : _coachsAssistants * 10_000)
+        - (_estDB ? 0 : _cheerleaders * 10_000)
+        - (_apothicaire ? 50_000 : 0);
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (LigueId <= 0) return;
+        _ligue = await LeagueService.GetLigueAsync(LigueId);
+        if (_ligue is not null && _ligue.RulesVersionId != 0)
+            _teamTypes = await TeamService.GetTypesEquipesParVersionAsync(_ligue.RulesVersionId);
+    }
+
+    async Task SelectionnerType(TeamType type)
+    {
+        _selectedType = await TeamService.GetTeamTypeAvecPostesAsync(type.Id);
+        _slots.Clear();
+    }
+
+    void AjouterJoueur(PlayerPosition pos)
+    {
+        var countPoste = _slots.Count(s => s.PositionId == pos.Id);
+        if (countPoste >= pos.QuantiteMax)
+        {
+            Snackbar.Add($"Limite atteinte : maximum {pos.QuantiteMax} {pos.Nom} par équipe.", Severity.Warning);
+            return;
+        }
+        if (DepasseLimiteMotCle(pos))
+        {
+            var limiteDepassee = _selectedType?.LimitesMotsCles.FirstOrDefault(l =>
+                pos.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(k => k.Trim().Equals(l.MotCle, StringComparison.OrdinalIgnoreCase)));
+            Snackbar.Add($"Limite « {limiteDepassee?.MotCle} » atteinte : maximum {limiteDepassee?.Max} joueurs.", Severity.Warning);
+            return;
+        }
+        var nextNum = _slots.Count == 0 ? 1 : Math.Min(_slots.Max(s => s.Numero) + 1, 99);
+        _slots.Add(new PlayerSlot
+        {
+            PositionId = pos.Id,
+            PositionNom = pos.Nom,
+            Cout = pos.Cout,
+            Nom = "",
+            Numero = nextNum
+        });
+    }
+
+    bool DepasseLimiteMotCle(PlayerPosition pos)
+    {
+        if (_selectedType?.LimitesMotsCles is null || _selectedType.LimitesMotsCles.Count == 0)
+            return false;
+
+        var posKeywords = pos.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var limite in _selectedType.LimitesMotsCles)
+        {
+            if (!posKeywords.Contains(limite.MotCle)) continue;
+            var count = _slots.Count(s =>
+            {
+                var p = _selectedType.Postes.FirstOrDefault(pp => pp.Id == s.PositionId);
+                if (p is null) return false;
+                return p.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Any(k => k.Trim().Equals(limite.MotCle, StringComparison.OrdinalIgnoreCase));
+            });
+            if (count >= limite.Max) return true;
+        }
+        return false;
+    }
+
+    async Task Soumettre()
+    {
+        if (string.IsNullOrWhiteSpace(_nomEquipe) || _ligue is null || _selectedType is null) return;
+
+        if (_estDB) { _coachsAssistants = 0; _cheerleaders = 0; }
+
+        _saving = true;
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+            var equipe = new Team
+            {
+                Nom = _nomEquipe,
+                CoachId = userId,
+                LeagueId = LigueId,
+                TeamTypeId = _selectedType.Id,
+                Tresorerie = _budgetRestant,
+                NombreRelances = _nombreRelances,
+                FansDevoues = _fansDevoues,
+                NombreCoachsAssistants = _coachsAssistants,
+                NombreCheerleaders = _cheerleaders,
+                Apothicaire = _apothicaire
+            };
+
+            var joueurs = _slots.Select(s => (s.PositionId, s.Nom, s.Numero)).ToList();
+            var created = await TeamService.CreerEquipeAsync(equipe, joueurs);
+
+            Snackbar.Add("Équipe créée avec succès !", Severity.Success);
+            Nav.NavigateTo($"/equipes/{created.Id}");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    static RenderFragment SkillSpans(PlayerPosition pos) => builder =>
+    {
+        var skills = pos.CompetencesDepart.Select(c => c.Skill).Where(s => s is not null).Cast<Skill>().ToList();
+        for (int i = 0; i < skills.Count; i++)
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "title", skills[i].Description ?? "");
+            builder.AddAttribute(2, "style", "cursor:help; border-bottom:1px dotted #aaa");
+            builder.AddContent(3, skills[i].Nom);
+            builder.CloseElement();
+            if (i < skills.Count - 1)
+                builder.AddMarkupContent(4, ", ");
+        }
+    };
+
+    sealed class PlayerSlot
+    {
+        public int PositionId { get; set; }
+        public string PositionNom { get; set; } = "";
+        public int Cout { get; set; }
+        public string Nom { get; set; } = "";
+        public int Numero { get; set; }
+    }
+}

@@ -1,0 +1,41 @@
+# BolDeSangManager — Docker Compose (SQLite, défaut)
+# Usage : docker compose up -d
+
+services:
+  app:
+    # image: cwarp/boldesangmanager:latest
+    # Pour utiliser une image locale construite depuis les sources :
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"        # HTTP — mettre un reverse proxy (nginx/Traefik) devant pour HTTPS
+    volumes:
+      - boldesang-data:/data  # persistance de la base SQLite
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+
+      # Base de données SQLite (fichier dans le volume /data)
+      ConnectionStrings__DefaultConnection: "Data Source=/data/boldesang.db;Cache=Shared"
+
+      # Premier compte Commissaire créé au démarrage (ignoré si le compte existe déjà)
+      BolDeSang__AdminEmail: "commissaire@monasso.fr"
+      BolDeSang__AdminPassword: "MonMotDePasse123!"   # min 8 chars, au moins 1 chiffre
+      BolDeSang__AdminPseudo: "Grand Commissaire"
+
+      # URL publique de l'application (utilisée pour les QR codes dans les PDFs)
+      # Exemple : http://192.168.1.50:8080  ou  https://boldesang.monasso.fr
+      BolDeSang__UrlExterne: ""
+
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  boldesang-data:
+    driver: local

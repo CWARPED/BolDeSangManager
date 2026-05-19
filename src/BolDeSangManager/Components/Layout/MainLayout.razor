@@ -1,0 +1,101 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="@_theme" IsDarkMode="true" />
+<MudProviders />
+
+<MudLayout>
+    <MudAppBar Elevation="2" Color="Color.Default" Dense="true">
+        <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                       Color="Color.Inherit"
+                       Edge="Edge.Start"
+                       OnClick="@ToggleDrawer" />
+        <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="ml-1 text-transform-none px-2">
+            <MudText Typo="Typo.h6"><b>BolDeSang Manager</b></MudText>
+        </MudButton>
+        <MudSpacer />
+        <AuthorizeView>
+            <Authorized>
+                <MudText Typo="Typo.body2" Class="mr-2 d-none d-sm-flex">
+                    @context.User.Identity?.Name
+                </MudText>
+                <AuthorizeView Roles="Admin" Context="adminCtx">
+                    <Authorized>
+                        <MudIconButton Icon="@Icons.Material.Filled.AdminPanelSettings"
+                                       Color="Color.Inherit" Href="/admin"
+                                       title="Administration" />
+                    </Authorized>
+                </AuthorizeView>
+                <MudIconButton Icon="@Icons.Material.Filled.AccountCircle"
+                               Color="Color.Inherit" Href="/profil"
+                               title="Mon profil" />
+                <form action="/Account/Logout" method="post">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="ReturnUrl" value="/" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Logout"
+                                   Color="Color.Inherit"
+                                   ButtonType="ButtonType.Submit"
+                                   title="Déconnexion" />
+                </form>
+            </Authorized>
+        </AuthorizeView>
+    </MudAppBar>
+
+    <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always" Variant="DrawerVariant.Temporary">
+        <MudDrawerHeader>
+            <MudText Typo="Typo.subtitle1"><b>Navigation</b></MudText>
+        </MudDrawerHeader>
+        <NavMenu />
+    </MudDrawer>
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="mt-4 px-2 px-sm-4">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<div id="blazor-error-ui" data-nosnippet>
+    Une erreur inattendue s'est produite.
+    <a href="." class="reload">Recharger</a>
+    <span class="dismiss">&#x2715;</span>
+</div>
+
+@code {
+    bool _drawerOpen = false;
+
+    void ToggleDrawer() => _drawerOpen = !_drawerOpen;
+
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#c62828",
+            PrimaryDarken = "#8e0000",
+            PrimaryLighten = "#ef5350",
+            Secondary = "#37474f",
+            AppbarBackground = "#c62828",
+            Background = "#f5f5f5",
+        },
+        PaletteDark = new PaletteDark
+        {
+            Primary = "#e53935",
+            PrimaryDarken = "#b71c1c",
+            PrimaryLighten = "#ef5350",
+            Secondary = "#78909c",
+            AppbarBackground = "#1c1c1c",
+            AppbarText = "rgba(255,255,255,0.87)",
+            Background = "#111111",
+            BackgroundGray = "#1a1a1a",
+            Surface = "#1e1e1e",
+            DrawerBackground = "#161616",
+            DrawerText = "rgba(255,255,255,0.7)",
+            DrawerIcon = "rgba(255,255,255,0.7)",
+            TextPrimary = "rgba(255,255,255,0.87)",
+            TextSecondary = "rgba(255,255,255,0.6)",
+            ActionDefault = "rgba(255,255,255,0.54)",
+            LinesDefault = "rgba(255,255,255,0.09)",
+            TableLines = "rgba(255,255,255,0.09)",
+            Divider = "rgba(255,255,255,0.09)",
+        }
+    };
+}

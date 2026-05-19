@@ -1,0 +1,223 @@
+@page "/ligues/creer"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin,GrandCommissaire")]
+@inject LeagueService LeagueService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Créer une ligue — BolDeSang Manager</PageTitle>
+
+<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
+    <b>Créer une nouvelle ligue</b>
+</MudText>
+
+<MudGrid>
+    <MudItem xs="12" md="7">
+        <MudCard Elevation="2">
+            <MudCardContent>
+
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Informations générales</b></MudText>
+
+                <MudTextField @bind-Value="_nom" Label="Nom de la ligue *"
+                              Variant="Variant.Outlined" Class="mb-3"
+                              HelperText="Ex : Ligue de Nanterre Saison 3"
+                              Error="@_nomError" ErrorText="Le nom est obligatoire" />
+
+                <MudTextField @bind-Value="_description" Label="Description (optionnelle)"
+                              Variant="Variant.Outlined" Lines="2" Class="mb-3" />
+
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Jeu et règles</b></MudText>
+
+                <MudSelect T="string" Value="@_selectedGameNom" Label="Jeu"
+                           Variant="Variant.Outlined" Class="mb-3"
+                           ValueChanged="OnGameNameChanged">
+                    @foreach (var game in _games)
+                    {
+                        <MudSelectItem T="string" Value="@game.Nom">@game.Nom</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudSelect T="string" @bind-Value="_selectedVersionNom" Label="Version des règles"
+                           Variant="Variant.Outlined" Class="mb-3"
+                           Disabled="@(_versions.Count == 0)">
+                    @foreach (var v in _versions)
+                    {
+                        <MudSelectItem T="string" Value="@v.Nom">@v.Nom</MudSelectItem>
+                    }
+                </MudSelect>
+
+                <MudDivider Class="my-4" />
+                <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Format et règlement</b></MudText>
+
+                <MudSelect T="string" @bind-Value="_formatLabel" Label="Format de la ligue"
+                           Variant="Variant.Outlined" Class="mb-3">
+                    <MudSelectItem T="string" Value="@FormatPlayoffs">@FormatPlayoffs</MudSelectItem>
+                    <MudSelectItem T="string" Value="@FormatRoundRobin">@FormatRoundRobin</MudSelectItem>
+                </MudSelect>
+
+                <MudNumericField T="int" @bind-Value="_budget" Label="Budget de départ (po)"
+                                 Variant="Variant.Outlined" Class="mb-3"
+                                 Min="500000" Max="2000000" Step="50000"
+                                 HelperText="Standard : 1 000 000 po" />
+
+                @if (_formatLabel == FormatPlayoffs)
+                {
+                    <MudSelect T="string" @bind-Value="_nbEquipesLabel"
+                               Label="Équipes qualifiées en play-offs"
+                               Variant="Variant.Outlined" Class="mb-3">
+                        <MudSelectItem T="string" Value="@Playoff2">@Playoff2</MudSelectItem>
+                        <MudSelectItem T="string" Value="@Playoff4">@Playoff4</MudSelectItem>
+                        <MudSelectItem T="string" Value="@Playoff8">@Playoff8</MudSelectItem>
+                    </MudSelect>
+                }
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4" Spacing="2">
+                    <MudButton Href="/ligues" Variant="Variant.Text" Disabled="@_saving">
+                        Annuler
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.Save"
+                               OnClick="HandleSubmit"
+                               Disabled="@_saving">
+                        @(_saving ? "Création..." : "Créer la ligue")
+                    </MudButton>
+                </MudStack>
+
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+
+    <MudItem xs="12" md="5">
+        <MudCard Elevation="1">
+            <MudCardHeader>
+                <CardHeaderContent>
+                    <MudText Typo="Typo.subtitle1"><b>Guide de création</b></MudText>
+                </CardHeaderContent>
+            </MudCardHeader>
+            <MudCardContent>
+                <MudList T="string" Dense="true">
+                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                        Choisissez Blood Bowl ou Dungeon Bowl
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                        Sélectionnez la version des règles (ex : Saison 3)
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                        Le format Round Robin + Play-offs est le plus joué
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                        Budget standard : 1 000 000 po par équipe
+                    </MudListItem>
+                    <MudListItem Icon="@Icons.Material.Filled.Info" IconColor="Color.Info">
+                        Après création, passez en "Inscriptions" pour que les coaches rejoignent
+                    </MudListItem>
+                </MudList>
+            </MudCardContent>
+        </MudCard>
+    </MudItem>
+</MudGrid>
+
+@code {
+    const string FormatPlayoffs   = "Round Robin + Play-offs (recommandé)";
+    const string FormatRoundRobin = "Round Robin seul (classement final)";
+    const string Playoff2 = "2 équipes";
+    const string Playoff4 = "4 équipes (recommandé)";
+    const string Playoff8 = "8 équipes";
+
+    List<Game> _games = [];
+    List<RulesVersion> _versions = [];
+    string _selectedGameNom = "";
+    string _selectedVersionNom = "";
+    string _nom = "";
+    string _description = "";
+    string _formatLabel = FormatPlayoffs;
+    string _nbEquipesLabel = Playoff4;
+    int _budget = 1_000_000;
+    bool _saving;
+    bool _nomError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _games = await LeagueService.GetGamesAsync();
+        if (_games.Count > 0)
+        {
+            _selectedGameNom = _games[0].Nom;
+            _versions = await LeagueService.GetVersionsAsync(_games[0].Id);
+            var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
+            _selectedVersionNom = active?.Nom ?? "";
+        }
+    }
+
+    async Task OnGameNameChanged(string nom)
+    {
+        _selectedGameNom = nom;
+        _versions = [];
+        _selectedVersionNom = "";
+        StateHasChanged();
+
+        var game = _games.FirstOrDefault(g => g.Nom == nom);
+        if (game is not null)
+        {
+            _versions = await LeagueService.GetVersionsAsync(game.Id);
+            var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
+            _selectedVersionNom = active?.Nom ?? "";
+        }
+        StateHasChanged();
+    }
+
+    async Task HandleSubmit()
+    {
+        _nomError = string.IsNullOrWhiteSpace(_nom);
+        if (_nomError)
+        {
+            Snackbar.Add("Le nom de la ligue est obligatoire.", Severity.Warning);
+            return;
+        }
+
+        var game    = _games.FirstOrDefault(g => g.Nom == _selectedGameNom);
+        var version = _versions.FirstOrDefault(v => v.Nom == _selectedVersionNom);
+
+        if (game is null || version is null)
+        {
+            Snackbar.Add("Veuillez sélectionner un jeu et une version des règles.", Severity.Warning);
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+            var nbPlayoff = _nbEquipesLabel switch { Playoff2 => 2, Playoff8 => 8, _ => 4 };
+
+            var ligue = new League
+            {
+                Nom                    = _nom.Trim(),
+                Description            = _description.Trim(),
+                GameId                 = game.Id,
+                RulesVersionId         = version.Id,
+                Format                 = _formatLabel == FormatPlayoffs
+                                             ? LeagueFormat.RoundRobinAvecPlayoffs
+                                             : LeagueFormat.RoundRobin,
+                BudgetDepart           = _budget,
+                NombreEquipesPlayoff   = nbPlayoff,
+            };
+
+            await LeagueService.CreerLigueAsync(ligue, userId);
+            Snackbar.Add("Ligue créée avec succès !", Severity.Success);
+            Nav.NavigateTo("/ligues");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

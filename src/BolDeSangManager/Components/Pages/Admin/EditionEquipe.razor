@@ -1,0 +1,247 @@
+@page "/admin/donnees/equipes/{IdParam}"
+@rendermode InteractiveServer
+@attribute [Authorize(Roles = "Admin,GrandCommissaire")]
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Data.Enums
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Édition équipe</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+        <MudText Typo="Typo.h4">@(IsNew ? "Nouvelle équipe" : "Édition équipe")</MudText>
+        <MudButton OnClick="Retour">Retour</MudButton>
+    </MudStack>
+
+    @if (_team is null)
+    {
+        <MudProgressCircular Indeterminate="true" />
+    }
+    else
+    {
+        <MudPaper Class="pa-4 mb-3" Elevation="1">
+            <MudGrid>
+                <MudItem xs="12" sm="6"><MudTextField @bind-Value="_team.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudSelect T="TeamCategory" @bind-Value="_team.Categorie" Label="Catégorie" Variant="Variant.Outlined">
+                        @foreach (var c in Enum.GetValues<TeamCategory>())
+                        {
+                            <MudSelectItem Value="@c">@c</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="6" sm="3"><MudNumericField @bind-Value="_team.CoutRelance" Label="Coût relance" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12"><MudTextField @bind-Value="_team.ReglesSpeciales" Label="Règles spéciales (texte libre)" Variant="Variant.Outlined" Lines="2" /></MudItem>
+                <MudItem xs="12"><MudTextField @bind-Value="_team.ReglesSpecialesLigue" Label="Règles ligues thématiques (CSV)" Variant="Variant.Outlined" /></MudItem>
+                <MudItem xs="12">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SauvegarderEquipe">
+                        Sauvegarder
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        @if (!IsNew)
+        {
+            <MudPaper Class="pa-4 mb-3" Elevation="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                    <MudText Typo="Typo.h6">Postes</MudText>
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small"
+                               OnClick="AjouterPoste">Ajouter poste</MudButton>
+                </MudStack>
+                <MudTable Items="@_team.Postes" Dense="true" Hover="true" Style="font-size:12px">
+                    <HeaderContent>
+                        <MudTh Style="width:30%">Poste</MudTh>
+                        <MudTh Style="width:8%; text-align:center">Q.</MudTh>
+                        <MudTh Style="width:10%; text-align:right">Coût</MudTh>
+                        <MudTh Style="width:18%; text-align:center">M / F / AG / CP / AR</MudTh>
+                        <MudTh Style="width:14%">P / S</MudTh>
+                        <MudTh Style="width:14%">Skills départ</MudTh>
+                        <MudTh Style="width:6%">Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>
+                            <div style="font-weight:600">
+                                @context.Nom
+                            </div>
+                            @if (!string.IsNullOrEmpty(context.MotsCles))
+                            {
+                                <div style="font-size:10px; color:#9e9e9e; font-style:italic">
+                                    @context.MotsCles.Replace(",", ", ")
+                                </div>
+                            }
+                        </MudTd>
+                        <MudTd Style="text-align:center">@context.QuantiteMax</MudTd>
+                        <MudTd Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
+                        <MudTd Style="text-align:center; font-family:monospace; font-size:11px">
+                            @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
+                        </MudTd>
+                        <MudTd>
+                            <div style="font-size:11px"><span style="color:#90caf9">P:</span> @(string.IsNullOrEmpty(context.CompetencesPrincipales) ? "—" : context.CompetencesPrincipales)</div>
+                            <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @(string.IsNullOrEmpty(context.CompetencesSecondaires) ? "—" : context.CompetencesSecondaires)</div>
+                        </MudTd>
+                        <MudTd>
+                            @if (context.CompetencesDepart?.Any() == true)
+                            {
+                                <div style="display:flex; flex-wrap:wrap; gap:2px">
+                                    @foreach (var c in context.CompetencesDepart)
+                                    {
+                                        <span style="font-size:10px; padding:1px 4px; background:rgba(229,57,53,0.15); border-radius:3px; white-space:nowrap">
+                                            @c.Skill?.Nom
+                                        </span>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <span style="font-size:10px; color:#666">—</span>
+                            }
+                        </MudTd>
+                        <MudTd>
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           OnClick="@(() => EditerPoste(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           OnClick="@(() => SupprimerPoste(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+
+            <MudPaper Class="pa-4 mb-3" Elevation="1">
+                <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                    <MudText Typo="Typo.h6">Limites par mot-clé</MudText>
+                    <MudStack Row="true" Spacing="1">
+                        <MudTextField @bind-Value="_nouveauMotCle" Label="Mot-clé" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        <MudNumericField @bind-Value="_nouveauMax" Label="Max" Variant="Variant.Outlined" Margin="Margin.Dense" Style="width:100px" />
+                        <MudButton OnClick="AjouterLimite" Color="Color.Primary">+ Ajouter</MudButton>
+                    </MudStack>
+                </MudStack>
+                <MudTable Items="@_team.LimitesMotsCles" Dense="true">
+                    <HeaderContent>
+                        <MudTh>Mot-clé</MudTh>
+                        <MudTh>Max</MudTh>
+                        <MudTh></MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd>@context.MotCle</MudTd>
+                        <MudTd>@context.Max</MudTd>
+                        <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerLimite(context.Id))" /></MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        }
+    }
+</MudContainer>
+
+@code {
+    [Parameter] public string IdParam { get; set; } = "";
+    [SupplyParameterFromQuery] public int VersionId { get; set; }
+
+    bool IsNew => IdParam == "new";
+    TeamType? _team;
+    string _nouveauMotCle = "";
+    int _nouveauMax = 1;
+
+    protected override async Task OnInitializedAsync() => await ChargerAsync();
+
+    async Task ChargerAsync()
+    {
+        if (IsNew)
+        {
+            _team = new TeamType { Nom = "", Categorie = TeamCategory.Specialist, CoutRelance = 50_000 };
+        }
+        else if (int.TryParse(IdParam, out var id))
+        {
+            _team = await DataEditService.GetTeamTypeAsync(id);
+            if (_team is null) { Nav.NavigateTo("/admin/donnees"); return; }
+        }
+    }
+
+    async Task SauvegarderEquipe()
+    {
+        if (_team is null) return;
+        try
+        {
+            if (IsNew)
+            {
+                var created = await DataEditService.CreerTeamTypeAsync(VersionId, _team);
+                Snackbar.Add("Équipe créée", Severity.Success);
+                Nav.NavigateTo($"/admin/donnees/equipes/{created.Id}", forceLoad: true);
+            }
+            else
+            {
+                await DataEditService.ModifierTeamTypeAsync(_team.Id, _team.Nom, _team.Categorie, _team.CoutRelance, _team.ReglesSpeciales, _team.ReglesSpecialesLigue);
+                Snackbar.Add("Équipe modifiée", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    async Task AjouterPoste()
+    {
+        if (_team is null) return;
+        var parameters = new DialogParameters<EditionPosteDialog>
+        {
+            { x => x.TeamTypeId, _team.Id },
+            { x => x.VersionId, _team.RulesVersionId },
+            { x => x.Existant, null }
+        };
+        var dialog = await DialogService.ShowAsync<EditionPosteDialog>("Nouveau poste", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerAsync();
+    }
+
+    async Task EditerPoste(PlayerPosition p)
+    {
+        if (_team is null) return;
+        var parameters = new DialogParameters<EditionPosteDialog>
+        {
+            { x => x.TeamTypeId, _team.Id },
+            { x => x.VersionId, _team.RulesVersionId },
+            { x => x.Existant, p }
+        };
+        var dialog = await DialogService.ShowAsync<EditionPosteDialog>("Éditer poste", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerAsync();
+    }
+
+    async Task SupprimerPoste(PlayerPosition p)
+    {
+        var ok = await DialogService.ShowMessageBox("Confirmer", $"Supprimer « {p.Nom} » ?", "Supprimer", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.SupprimerPosteAsync(p.Id);
+            Snackbar.Add("Poste supprimé", Severity.Success);
+            await ChargerAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    async Task AjouterLimite()
+    {
+        if (_team is null || string.IsNullOrWhiteSpace(_nouveauMotCle)) return;
+        await DataEditService.AjouterLimiteAsync(_team.Id, _nouveauMotCle, _nouveauMax);
+        _nouveauMotCle = "";
+        _nouveauMax = 1;
+        await ChargerAsync();
+    }
+
+    async Task SupprimerLimite(int id)
+    {
+        await DataEditService.SupprimerLimiteAsync(id);
+        await ChargerAsync();
+    }
+
+    void Retour() => Nav.NavigateTo("/admin/donnees");
+}

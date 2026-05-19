@@ -1,0 +1,222 @@
+@page "/"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject LeagueService LeagueService
+@inject TeamService TeamService
+@inject MatchService MatchService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>BolDeSang Manager</PageTitle>
+
+<!-- Bandeau Blood Bowl -->
+<div style="margin:-16px -16px 24px -16px; overflow:hidden; border-radius:0 0 8px 8px; max-height:220px;">
+    <img src="/images/bandeau.webp" alt="BolDeSang Manager" style="width:100%; display:block; object-fit:cover; object-position:center top;" />
+</div>
+
+<AuthorizeView>
+    <Authorized>
+        <MudGrid>
+            <!-- Mes matchs -->
+            <MudItem xs="12">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.SportsSoccer" Class="mr-2" />
+                                Mes Matchs
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_mesMatchs is null)
+                        {
+                            <MudProgressCircular Color="Color.Error" Indeterminate="true" Size="Size.Small" />
+                        }
+                        else if (!_mesMatchs.Any())
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Aucun match à venir.
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudGrid>
+                                @foreach (var match in _mesMatchs)
+                                {
+                                    <MudItem xs="12" sm="6" md="4">
+                                        <MudPaper Outlined="true" Class="pa-3"
+                                                  Style="@($"cursor:pointer;{MatchBorderStyle(match.Statut)}")"
+                                                  @onclick="@(() => Nav.NavigateTo($"/matchs/{match.Id}/detail"))">
+                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">
+                                                @match.Division?.League?.Nom —
+                                                @(match.Ronde >= 100 ? $"Play-off T{match.Ronde - 99}" : $"Ronde {match.Ronde}")
+                                            </MudText>
+                                            <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                                                <MudText Typo="Typo.body2" Align="Align.Center">
+                                                    <b>@match.EquipeDomicile?.Nom</b>
+                                                </MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">vs</MudText>
+                                                <MudText Typo="Typo.body2" Align="Align.Center">
+                                                    <b>@match.EquipeExterieur?.Nom</b>
+                                                </MudText>
+                                            </MudStack>
+                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
+                                                <MudChip T="string" Color="@MatchColor(match.Statut)" Size="Size.Small">
+                                                    @MatchLabel(match.Statut)
+                                                </MudChip>
+                                                @if (match.Statut == MatchStatus.AJouer || match.Statut == MatchStatus.Programme || match.Statut == MatchStatus.FeuilleEnSaisie)
+                                                {
+                                                    <div @onclick:stopPropagation="true">
+                                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
+                                                                   Href="@($"/matchs/{match.Id}/feuille")">
+                                                            Saisir
+                                                        </MudButton>
+                                                    </div>
+                                                }
+                                            </MudStack>
+                                        </MudPaper>
+                                    </MudItem>
+                                }
+                            </MudGrid>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <!-- Ligues en cours -->
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" />
+                                Ligues en cours
+                            </MudText>
+                        </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                          Color="Color.Primary" Href="/ligues" />
+                        </CardHeaderActions>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_ligues is null)
+                        {
+                            <MudProgressCircular Color="Color.Error" Indeterminate="true" Size="Size.Small" />
+                        }
+                        else if (!_ligues.Any())
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Aucune ligue en cours.
+                            </MudText>
+                        }
+                        else
+                        {
+                            <MudList T="League" Dense="true">
+                                @foreach (var ligue in _ligues.Take(5))
+                                {
+                                    <MudListItem OnClick="@(() => Nav.NavigateTo($"/ligues/{ligue.Id}"))">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                            <div>
+                                                <MudText Typo="Typo.body1"><b>@ligue.Nom</b></MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @ligue.Game?.Nom — @ligue.RulesVersion?.Nom
+                                                </MudText>
+                                            </div>
+                                            <MudChip T="string" Color="LeagueColor(ligue.Statut)" Size="Size.Small">
+                                                @ligue.Statut.ToString()
+                                            </MudChip>
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+
+            <!-- Mes équipes -->
+            <MudItem xs="12" md="6">
+                <MudCard Elevation="2">
+                    <MudCardHeader>
+                        <CardHeaderContent>
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.Group" Class="mr-2" />
+                                Mes Équipes
+                            </MudText>
+                        </CardHeaderContent>
+                    </MudCardHeader>
+                    <MudCardContent>
+                        @if (_mesEquipes is null)
+                        {
+                            <MudProgressCircular Color="Color.Error" Indeterminate="true" Size="Size.Small" />
+                        }
+                        else if (!_mesEquipes.Any())
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                Pas encore d'équipe — rejoignez une ligue pour en créer une.
+                            </MudText>
+                            <MudButton Href="/ligues" Variant="Variant.Filled"
+                                      Color="Color.Error" Class="mt-2" Size="Size.Small">
+                                Voir les ligues
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudList T="Team" Dense="true">
+                                @foreach (var equipe in _mesEquipes)
+                                {
+                                    <MudListItem OnClick="@(() => Nav.NavigateTo($"/equipes/{equipe.Id}"))">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                                            <div>
+                                                <MudText Typo="Typo.body1"><b>@equipe.Nom</b></MudText>
+                                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                                    @equipe.TeamType?.Nom — @equipe.League?.Nom
+                                                </MudText>
+                                            </div>
+                                            <MudChip T="string" Color="Color.Error" Size="Size.Small">
+                                                @equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite) joueurs
+                                            </MudChip>
+                                        </MudStack>
+                                    </MudListItem>
+                                }
+                            </MudList>
+                        }
+                    </MudCardContent>
+                </MudCard>
+            </MudItem>
+        </MudGrid>
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    List<Team>? _mesEquipes;
+    List<League>? _ligues;
+    List<Match>? _mesMatchs;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        _ligues = await LeagueService.GetAllLiguesAsync();
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            var userId = user.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+            _mesEquipes = await TeamService.GetEquipesCoachAsync(userId);
+
+            var statuts = new[] { MatchStatus.Programme, MatchStatus.AJouer, MatchStatus.FeuilleEnSaisie, MatchStatus.ValidationCompetences };
+            var tousMatchs = new Dictionary<int, Match>();
+            foreach (var eq in _mesEquipes)
+            {
+                var matchs = await MatchService.GetMatchsEquipeAsync(eq.Id);
+                foreach (var m in matchs.Where(m => statuts.Contains(m.Statut)))
+                    tousMatchs.TryAdd(m.Id, m);
+            }
+            _mesMatchs = [.. tousMatchs.Values.OrderBy(m => m.Division?.LeagueId).ThenBy(m => m.Ronde)];
+        }
+    }
+
+}

@@ -1,0 +1,139 @@
+@page "/Account/ConfirmEmail"
+
+@using System.Text
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using BolDeSangManager.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Confirmation email — BolDeSang Manager</PageTitle>
+
+<div class="account-page-wrap">
+    <MudCard Elevation="6" Style="width:100%;max-width:460px">
+        <MudCardContent Class="pa-8">
+
+            @if (_success)
+            {
+                <div class="d-flex flex-column align-center mb-6">
+                    <MudIcon Icon="@Icons.Material.Filled.CheckCircle"
+                             Style="font-size:4rem;color:var(--mud-palette-success)" Class="mb-3" />
+                    <MudText Typo="Typo.h5" Align="Align.Center"><b>Email confirmé !</b></MudText>
+                    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
+                        Votre compte est maintenant actif. Vous pouvez vous connecter.
+                    </MudText>
+                </div>
+
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mb-3">
+                    Redirection vers l'accueil dans <b><span id="bds-countdown">10</span> s</b>…
+                </MudText>
+
+                <div class="bds-progress-track mb-5">
+                    <div class="bds-progress-bar"></div>
+                </div>
+
+                <MudButton Href="/"
+                           Variant="Variant.Filled"
+                           Color="Color.Error"
+                           FullWidth="true"
+                           Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.Home">
+                    Aller à l'accueil maintenant
+                </MudButton>
+            }
+            else
+            {
+                <div class="d-flex flex-column align-center mb-6">
+                    <MudIcon Icon="@Icons.Material.Filled.ErrorOutline"
+                             Style="font-size:4rem;color:var(--mud-palette-error)" Class="mb-3" />
+                    <MudText Typo="Typo.h5" Align="Align.Center"><b>Lien invalide</b></MudText>
+                    <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-2">
+                        @_errorMessage
+                    </MudText>
+                </div>
+
+                <MudButton Href="Account/Login"
+                           Variant="Variant.Outlined"
+                           Color="Color.Error"
+                           FullWidth="true"
+                           StartIcon="@Icons.Material.Filled.Login">
+                    Retour à la connexion
+                </MudButton>
+            }
+
+        </MudCardContent>
+    </MudCard>
+</div>
+
+@if (_success)
+{
+    <style>
+        .bds-progress-track {
+            width: 100%;
+            height: 6px;
+            background: rgba(255,255,255,0.12);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .bds-progress-bar {
+            height: 100%;
+            width: 100%;
+            background: var(--mud-palette-error);
+            border-radius: 3px;
+            animation: bds-shrink 10s linear forwards;
+        }
+        @@keyframes bds-shrink {
+            from { width: 100%; }
+            to   { width: 0%;   }
+        }
+    </style>
+    <script>
+        (function () {
+            var n = 10;
+            var el = document.getElementById('bds-countdown');
+            var iv = setInterval(function () {
+                n--;
+                if (el) el.textContent = n;
+                if (n <= 0) { clearInterval(iv); window.location.href = '/'; }
+            }, 1000);
+        })();
+    </script>
+}
+
+@code {
+    private bool _success;
+    private string _errorMessage = "Ce lien de confirmation est invalide ou a déjà été utilisé.";
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? UserId { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Code { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (UserId is null || Code is null)
+        {
+            RedirectManager.RedirectTo("");
+            return;
+        }
+
+        var user = await UserManager.FindByIdAsync(UserId);
+        if (user is null)
+        {
+            HttpContext.Response.StatusCode = StatusCodes.Status404NotFound;
+            _errorMessage = "Utilisateur introuvable.";
+            return;
+        }
+
+        var code = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(Code));
+        var result = await UserManager.ConfirmEmailAsync(user, code);
+        _success = result.Succeeded;
+        if (!result.Succeeded)
+            _errorMessage = "Ce lien de confirmation est invalide ou a déjà été utilisé.";
+    }
+}

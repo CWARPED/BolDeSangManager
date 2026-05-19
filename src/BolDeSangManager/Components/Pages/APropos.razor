@@ -1,0 +1,70 @@
+@page "/a-propos"
+@rendermode InteractiveServer
+
+<PageTitle>À propos — BolDeSang Manager</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-4">
+    <MudText Typo="Typo.h4" Color="Color.Error" Class="mb-4"><b>À propos</b></MudText>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">BolDeSang Manager</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Gestionnaire de ligues Blood Bowl &amp; Dungeon Bowl — projet de fan développé bénévolement.
+        </MudText>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1">
+        <MudText Typo="Typo.h6" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.Gavel" Class="mr-1" Size="Size.Small" />
+            Licence
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Ce logiciel est distribué sous licence <b>GNU Affero General Public License v3.0</b> (AGPL-3.0).
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            Cela signifie que vous pouvez librement consulter, modifier et redistribuer le code, à condition
+            que toute version modifiée — y compris déployée comme service réseau — soit également publiée
+            sous la même licence.
+        </MudText>
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Href="https://github.com/cottedavid38-hue/BolDeSangManager"
+                       Target="_blank" Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Custom.Brands.GitHub">
+                Code source
+            </MudButton>
+            <MudButton Href="https://www.gnu.org/licenses/agpl-3.0.html"
+                       Target="_blank" Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.OpenInNew">
+                Texte de la licence
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Class="pa-4 mb-4" Elevation="1" Style="border-left:3px solid #ff9800">
+        <MudText Typo="Typo.h6" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-1" Size="Size.Small" />
+            Avis légal — Propriété intellectuelle
+        </MudText>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Ce projet est un outil non-officiel développé par des fans. Il n'est ni affilié à,
+            ni approuvé par, ni sponsorisé par Games Workshop Ltd.
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-2">
+            <b>Blood Bowl</b>, <b>Dungeon Bowl</b>, ainsi que tous les noms, races, marques,
+            logos, illustrations et univers associés sont la propriété exclusive de
+            <b>Games Workshop Ltd.</b>
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Seul le code source de l'application est couvert par la licence AGPL-3.0 mentionnée
+            ci-dessus. Les règles et l'univers du jeu restent la propriété intellectuelle de
+            leurs détenteurs respectifs.
+        </MudText>
+        <MudStack Row="true" Spacing="2" Class="mt-3">
+            <MudButton Href="https://www.games-workshop.com"
+                       Target="_blank" Variant="Variant.Outlined" Color="Color.Default"
+                       StartIcon="@Icons.Material.Filled.OpenInNew">
+                games-workshop.com
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+</MudContainer>

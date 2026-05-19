@@ -1,0 +1,595 @@
+@page "/matchs/{Id:int}/feuille"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject MatchService MatchService
+@inject TeamService TeamService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+<PageTitle>Feuille de match — BolDeSang Manager</PageTitle>
+
+<style>
+    .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px }
+    @@media (min-width:960px) { .stat-grid { grid-template-columns:repeat(4,1fr) } }
+    .stat-block { text-align:center; background:rgba(255,255,255,0.04); border-radius:8px; padding:8px 4px }
+</style>
+
+@if (_match is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-3" Wrap="Wrap.Wrap">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Error"><b>Feuille de match</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @_match.Division?.League?.Nom —
+                @(_match.Ronde >= 100 ? $"Play-off T{_match.Ronde - 99}" : $"Ronde {_match.Ronde}")
+            </MudText>
+        </div>
+        <MudChip T="string" Color="@MatchColor(_match.Statut)">@MatchLabel(_match.Statut)</MudChip>
+    </MudStack>
+
+    @if (_match.Feuille is not null)
+    {
+        @if (_match.Statut == MatchStatus.FeuilleEnSaisie)
+        {
+            @if (_match.Feuille.SaisiParId == _userId)
+            {
+                <MudAlert Severity="Severity.Info" Icon="@Icons.Material.Filled.HourglassEmpty" Class="mb-4">
+                    Feuille enregistrée le @_match.Feuille.SaisiLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm").
+                    <b> En attente de confirmation de l'adversaire.</b>
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Icon="@Icons.Material.Filled.MarkEmailUnread" Class="mb-4">
+                    L'adversaire a saisi la feuille le @_match.Feuille.SaisiLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm").
+                    Vérifiez les statistiques ci-dessous et confirmez si tout est correct.
+                </MudAlert>
+            }
+        }
+        else if (_match.Statut == MatchStatus.ValidationCompetences)
+        {
+            <MudAlert Severity="Severity.Success" Class="mb-4">
+                Match confirmé.
+                <MudLink Href="@($"/matchs/{Id}/apres-match")" Class="ml-2">Faire mon après-match →</MudLink>
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-4">
+                Feuille saisie le @_match.Feuille.SaisiLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm").
+            </MudAlert>
+        }
+
+        <MudPaper Elevation="2" Class="pa-3 mb-4">
+            <MudStack AlignItems="AlignItems.Center" Spacing="0">
+                <MudText Typo="Typo.subtitle2"><b>@_match.EquipeDomicile?.Nom</b></MudText>
+                <MudText Typo="Typo.h4" Color="Color.Error">
+                    <b>@_match.Feuille.TouchdownsDomicile – @_match.Feuille.TouchdownsExterieur</b>
+                </MudText>
+                <MudText Typo="Typo.subtitle2"><b>@_match.EquipeExterieur?.Nom</b></MudText>
+            </MudStack>
+        </MudPaper>
+
+        <MudGrid>
+            <MudItem xs="6">
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary"><b>@_match.EquipeDomicile?.Nom</b></MudText>
+                    <MudText>TDs : <b>@_match.Feuille.TouchdownsDomicile</b></MudText>
+                    <MudText>Élim : <b>@_match.Feuille.EliminationsDomicile</b></MudText>
+                    <MudText>Gains : <b>@_match.Feuille.GainsDomicile.ToString("N0") po</b></MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6">
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary"><b>@_match.EquipeExterieur?.Nom</b></MudText>
+                    <MudText>TDs : <b>@_match.Feuille.TouchdownsExterieur</b></MudText>
+                    <MudText>Élim : <b>@_match.Feuille.EliminationsExterieur</b></MudText>
+                    <MudText>Gains : <b>@_match.Feuille.GainsExterieur.ToString("N0") po</b></MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @if (_match.Feuille.RecordsJoueurs.Any())
+        {
+            <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><b>Performances individuelles</b></MudText>
+            <MudTable Items="@_match.Feuille.RecordsJoueurs.Where(r => r.PspGagnes > 0).OrderByDescending(r => r.PspGagnes)"
+                     Dense="true" Elevation="1">
+                <HeaderContent>
+                    <MudTh>Joueur</MudTh>
+                    <MudTh Style="text-align:center">TDs</MudTh>
+                    <MudTh Style="text-align:center">Comp</MudTh>
+                    <MudTh Style="text-align:center">Int</MudTh>
+                    <MudTh Style="text-align:center">Élim</MudTh>
+                    <MudTh Style="text-align:center">MVP</MudTh>
+                    <MudTh Style="text-align:center">PSP</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="r">
+                    <MudTd>@r.TeamPlayer?.Nom</MudTd>
+                    <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
+                    <MudTd Style="text-align:center">@r.Completions</MudTd>
+                    <MudTd Style="text-align:center">@r.Interceptions</MudTd>
+                    <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
+                    <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
+                    <MudTd Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        @if (_match.Statut == MatchStatus.FeuilleEnSaisie && _match.Feuille.SaisiParId != _userId)
+        {
+            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-4">
+                <MudButton Href="/matchs" Variant="Variant.Text">Retour aux matchs</MudButton>
+                <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                          StartIcon="@Icons.Material.Filled.CheckCircle"
+                          Disabled="@_confirming"
+                          OnClick="Confirmer">
+                    @(_confirming ? "Confirmation..." : "Confirmer le match")
+                </MudButton>
+            </MudStack>
+        }
+    }
+    else if (_equipeDomicile is not null && _equipeExterieur is not null)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3" Icon="@Icons.Material.Filled.Info">
+            TD=3 pts · Comp=1 · Int=2 · Élim=2 · MVP=4 — n'ajoutez que les joueurs ayant marqué des stats.
+        </MudAlert>
+
+        <!-- Score en direct — sticky -->
+        <div style="position:sticky;top:0;z-index:5;background:var(--mud-palette-background-dark,#1e1e1e);padding:8px 4px;margin:0 -4px 16px;border-bottom:1px solid rgba(255,255,255,0.08)">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center" Spacing="1">
+                <MudText Typo="Typo.body2" Style="flex:1;text-align:right;opacity:0.75;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
+                    @_match.EquipeDomicile?.Nom
+                </MudText>
+                <MudText Typo="Typo.h4" Color="Color.Error" Style="white-space:nowrap;font-variant-numeric:tabular-nums">
+                    <b>@_tdDomicile&nbsp;–&nbsp;@_tdExterieur</b>
+                </MudText>
+                <MudText Typo="Typo.body2" Style="flex:1;opacity:0.75;overflow:hidden;white-space:nowrap;text-overflow:ellipsis">
+                    @_match.EquipeExterieur?.Nom
+                </MudText>
+            </MudStack>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="text-align:center;display:block;margin-top:2px">
+                Élim : @_elimDomicile – @_elimExterieur
+            </MudText>
+        </div>
+
+        <MudGrid Spacing="3">
+
+            <!-- ─── Équipe domicile ─── -->
+            <MudItem xs="12" md="6">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                    <MudIcon Icon="@Icons.Material.Filled.Home" Color="Color.Primary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>@_match.EquipeDomicile?.Nom</b></MudText>
+                </div>
+
+                <!-- Sélecteur joueur domicile -->
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-3">
+                    <MudSelect T="PlayerInfo?" @bind-Value="_selDomicile" Label="Ajouter un joueur…"
+                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Style="flex:1" Disabled="@(!_availableDomicile.Any())">
+                        @foreach (var p in _availableDomicile)
+                        {
+                            <MudSelectItem T="PlayerInfo?" Value="@p">#@p.Numero @p.Nom</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
+                                   Variant="Variant.Filled" Size="Size.Medium"
+                                   Disabled="@(_selDomicile is null)"
+                                   OnClick="AjouterDomicile" title="Ajouter" />
+                </MudStack>
+
+                @foreach (var r in _recordsDomicile)
+                {
+                    <MudPaper Elevation="1" Class="mb-2" Style="border-left:3px solid var(--mud-palette-primary)">
+                        <div class="pa-3">
+                            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-2">
+                                <div>
+                                    <MudText Style="line-height:1.3">
+                                        <span style="color:var(--mud-palette-text-secondary);font-size:0.8rem">#@r.Numero</span>
+                                        <b style="margin-left:5px">@r.NomJoueur</b>
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@r.PositionNom</MudText>
+                                </div>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                    <MudIconButton Icon="@(r.EstMVP ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                                   Color="@(r.EstMVP ? Color.Warning : Color.Default)"
+                                                   Size="Size.Medium" title="MVP"
+                                                   OnClick="@(() => ToggleMvp(_recordsDomicile, r))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   title="Retirer" OnClick="@(() => RetirerDomicile(r))" />
+                                </MudStack>
+                            </MudStack>
+                            <div class="stat-grid">
+                                @StatBlock("TOUCHDOWNS", r.Touchdowns, v => r.Touchdowns = Math.Max(0, r.Touchdowns + v))
+                                @StatBlock("COMPLÉTIONS", r.Completions, v => r.Completions = Math.Max(0, r.Completions + v))
+                                @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
+                                @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
+                            </div>
+                            @InjurySection(r)
+                        </div>
+                    </MudPaper>
+                }
+
+                @if (!_recordsDomicile.Any())
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="opacity:0.5;font-style:italic">
+                        Aucun joueur ajouté — ajoutez ceux qui ont des stats à saisir.
+                    </MudText>
+                }
+            </MudItem>
+
+            <!-- ─── Équipe extérieur ─── -->
+            <MudItem xs="12" md="6">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+                    <MudIcon Icon="@Icons.Material.Filled.DirectionsBus" Color="Color.Secondary" Size="Size.Small" />
+                    <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
+                </div>
+
+                <!-- Sélecteur joueur extérieur -->
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-3">
+                    <MudSelect T="PlayerInfo?" @bind-Value="_selExterieur" Label="Ajouter un joueur…"
+                               Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Style="flex:1" Disabled="@(!_availableExterieur.Any())">
+                        @foreach (var p in _availableExterieur)
+                        {
+                            <MudSelectItem T="PlayerInfo?" Value="@p">#@p.Numero @p.Nom</MudSelectItem>
+                        }
+                    </MudSelect>
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
+                                   Variant="Variant.Filled" Size="Size.Medium"
+                                   Disabled="@(_selExterieur is null)"
+                                   OnClick="AjouterExterieur" title="Ajouter" />
+                </MudStack>
+
+                @foreach (var r in _recordsExterieur)
+                {
+                    <MudPaper Elevation="1" Class="mb-2" Style="border-left:3px solid var(--mud-palette-text-secondary)">
+                        <div class="pa-3">
+                            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-2">
+                                <div>
+                                    <MudText Style="line-height:1.3">
+                                        <span style="color:var(--mud-palette-text-secondary);font-size:0.8rem">#@r.Numero</span>
+                                        <b style="margin-left:5px">@r.NomJoueur</b>
+                                    </MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@r.PositionNom</MudText>
+                                </div>
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                                    <MudIconButton Icon="@(r.EstMVP ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                                   Color="@(r.EstMVP ? Color.Warning : Color.Default)"
+                                                   Size="Size.Medium" title="MVP"
+                                                   OnClick="@(() => ToggleMvp(_recordsExterieur, r))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   title="Retirer" OnClick="@(() => RetirerExterieur(r))" />
+                                </MudStack>
+                            </MudStack>
+                            <div class="stat-grid">
+                                @StatBlock("TOUCHDOWNS", r.Touchdowns, v => r.Touchdowns = Math.Max(0, r.Touchdowns + v))
+                                @StatBlock("COMPLÉTIONS", r.Completions, v => r.Completions = Math.Max(0, r.Completions + v))
+                                @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
+                                @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
+                            </div>
+                            @InjurySection(r)
+                        </div>
+                    </MudPaper>
+                }
+
+                @if (!_recordsExterieur.Any())
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="opacity:0.5;font-style:italic">
+                        Aucun joueur ajouté — ajoutez ceux qui ont des stats à saisir.
+                    </MudText>
+                }
+            </MudItem>
+
+        </MudGrid>
+
+        <!-- ─── Gains post-match ─── -->
+        <MudPaper Elevation="1" Class="pa-4 mt-4 mb-4">
+            <MudText Typo="Typo.subtitle2" Class="mb-3"><b>Gains post-match</b></MudText>
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1 d-block">
+                        <b>@_match.EquipeDomicile?.Nom</b> — TDs:@_tdDomicile Élim:@_elimDomicile
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Estimation : @_gainsDomicile.ToString("N0") po</MudText>
+                    <MudNumericField @bind-Value="_gainsDomicileSaisis" Label="Gains (po)"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-1" Min="0" Max="1000000" />
+                    <MudNumericField @bind-Value="_varFansDom" Label="Variation fans dévoués"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" Min="-3" Max="3"
+                                   HelperText="Jet de dés post-match" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1 d-block">
+                        <b>@_match.EquipeExterieur?.Nom</b> — TDs:@_tdExterieur Élim:@_elimExterieur
+                    </MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Estimation : @_gainsExterieur.ToString("N0") po</MudText>
+                    <MudNumericField @bind-Value="_gainsExterieurSaisis" Label="Gains (po)"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-1" Min="0" Max="1000000" />
+                    <MudNumericField @bind-Value="_varFansExt" Label="Variation fans dévoués"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-2" Min="-3" Max="3"
+                                   HelperText="Jet de dés post-match" />
+                </MudItem>
+            </MudGrid>
+        </MudPaper>
+
+        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mb-4">
+            <MudButton Href="/matchs" Variant="Variant.Text">Annuler</MudButton>
+            <MudButton Variant="Variant.Filled" Color="Color.Error"
+                      StartIcon="@Icons.Material.Filled.Save"
+                      Disabled="@_saving"
+                      OnClick="Soumettre">
+                @(_saving ? "Enregistrement..." : "Enregistrer la feuille")
+            </MudButton>
+        </MudStack>
+    }
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    Match? _match;
+    Team? _equipeDomicile;
+    Team? _equipeExterieur;
+
+    List<PlayerInfo> _availableDomicile  = [];
+    List<PlayerInfo> _availableExterieur = [];
+    List<PlayerMatchData> _recordsDomicile  = [];
+    List<PlayerMatchData> _recordsExterieur = [];
+
+    PlayerInfo? _selDomicile;
+    PlayerInfo? _selExterieur;
+
+    int _varFansDom;
+    int _varFansExt;
+    int _gainsDomicileSaisis;
+    int _gainsExterieurSaisis;
+    bool _saving;
+    bool _confirming;
+    string _userId = "";
+    HashSet<int> _blessuresOuvertes = [];
+
+    int _tdDomicile    => _recordsDomicile.Sum(r => r.Touchdowns);
+    int _tdExterieur   => _recordsExterieur.Sum(r => r.Touchdowns);
+    int _elimDomicile  => _recordsDomicile.Sum(r => r.EliminationsInfligees);
+    int _elimExterieur => _recordsExterieur.Sum(r => r.EliminationsInfligees);
+    int _gainsDomicile  => MatchService.CalculerGains(_tdDomicile, _tdExterieur,
+        _match?.EquipeDomicile?.FansDevoues ?? 0, _match?.EquipeExterieur?.FansDevoues ?? 0).gainsDomicile;
+    int _gainsExterieur => MatchService.CalculerGains(_tdDomicile, _tdExterieur,
+        _match?.EquipeDomicile?.FansDevoues ?? 0, _match?.EquipeExterieur?.FansDevoues ?? 0).gainsExterieur;
+
+    // ─── Sélection / retrait joueurs ─────────────────────────────────────────
+
+    void AjouterDomicile()
+    {
+        if (_selDomicile is null) return;
+        var p = _selDomicile;
+        _availableDomicile.Remove(p);
+        _recordsDomicile.Add(new PlayerMatchData
+        {
+            TeamPlayerId = p.Id, Numero = p.Numero,
+            NomJoueur = p.Nom, PositionNom = p.Position, EstCoteDomicile = true
+        });
+        _selDomicile = null;
+    }
+
+    void RetirerDomicile(PlayerMatchData r)
+    {
+        _recordsDomicile.Remove(r);
+        _blessuresOuvertes.Remove(r.TeamPlayerId);
+        _availableDomicile.Add(new PlayerInfo(r.TeamPlayerId, r.Numero, r.NomJoueur, r.PositionNom));
+        _availableDomicile = [.. _availableDomicile.OrderBy(p => p.Numero)];
+    }
+
+    void AjouterExterieur()
+    {
+        if (_selExterieur is null) return;
+        var p = _selExterieur;
+        _availableExterieur.Remove(p);
+        _recordsExterieur.Add(new PlayerMatchData
+        {
+            TeamPlayerId = p.Id, Numero = p.Numero,
+            NomJoueur = p.Nom, PositionNom = p.Position, EstCoteDomicile = false
+        });
+        _selExterieur = null;
+    }
+
+    void RetirerExterieur(PlayerMatchData r)
+    {
+        _recordsExterieur.Remove(r);
+        _blessuresOuvertes.Remove(r.TeamPlayerId);
+        _availableExterieur.Add(new PlayerInfo(r.TeamPlayerId, r.Numero, r.NomJoueur, r.PositionNom));
+        _availableExterieur = [.. _availableExterieur.OrderBy(p => p.Numero)];
+    }
+
+    static void ToggleMvp(List<PlayerMatchData> equipe, PlayerMatchData r)
+    {
+        bool val = !r.EstMVP;
+        foreach (var x in equipe) x.EstMVP = false;
+        r.EstMVP = val;
+    }
+
+    // ─── Helpers de rendu ─────────────────────────────────────────────────────
+
+    RenderFragment StatBlock(string label, int value, Action<int> delta) =>
+        @<div class="stat-block">
+            <div style="font-size:0.62rem;letter-spacing:0.07em;color:var(--mud-palette-text-secondary);margin-bottom:6px">@label</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:2px">
+                <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               OnClick="@(() => delta(-1))" />
+                <span style="min-width:32px;text-align:center;font-size:1.6rem;font-weight:bold;line-height:1">@value</span>
+                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                               Variant="Variant.Outlined" Color="Color.Success"
+                               OnClick="@(() => delta(1))" />
+            </div>
+        </div>;
+
+    RenderFragment InjurySection(PlayerMatchData r)
+    {
+        bool ouvert = _blessuresOuvertes.Contains(r.TeamPlayerId) || r.Blessure.HasValue;
+        return ouvert
+            ? @<div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:8px">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+                    <MudText Typo="Typo.caption" Color="Color.Error">
+                        <MudIcon Icon="@Icons.Material.Outlined.LocalHospital" Size="Size.Small" Class="mr-1" />Blessure
+                    </MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                   OnClick="@(() => { r.Blessure = null; r.StatAffectee = null; _blessuresOuvertes.Remove(r.TeamPlayerId); })"
+                                   title="Effacer" />
+                </MudStack>
+                <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Outlined"
+                           Margin="Margin.Dense" Placeholder="— aucune —">
+                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">— aucune —</MudSelectItem>
+                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate le prochain match</MudSelectItem>
+                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.BlessurePersistante)">Blessure persistante (séquelle)</MudSelectItem>
+                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.RetraiteTemporaire)">Retraite temporaire</MudSelectItem>
+                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort au combat</MudSelectItem>
+                </MudSelect>
+                @if (r.Blessure == InjuryType.BlessurePersistante)
+                {
+                    <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Class="mt-2" Placeholder="Stat affectée">
+                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Mouvement)">Mouvement</MudSelectItem>
+                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Force)">Force</MudSelectItem>
+                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Agilite)">Agilité</MudSelectItem>
+                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.CapacitePasse)">Capacité de passe</MudSelectItem>
+                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
+                    </MudSelect>
+                }
+              </div>
+            : @<MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true" Size="Size.Small"
+                          StartIcon="@Icons.Material.Outlined.LocalHospital"
+                          Style="margin-top:4px;opacity:0.6"
+                          OnClick="@(() => _blessuresOuvertes.Add(r.TeamPlayerId))">
+                  Déclarer une blessure
+              </MudButton>;
+    }
+
+    // ─── Cycle de vie ─────────────────────────────────────────────────────────
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        _match = await MatchService.GetMatchAsync(Id);
+        if (_match is null) return;
+
+        var estCoach = _match.EquipeDomicile?.CoachId == _userId || _match.EquipeExterieur?.CoachId == _userId;
+        if (!estCoach)
+        {
+            Snackbar.Add("Vous n'êtes pas coach de ce match.", Severity.Error);
+            Nav.NavigateTo("/");
+            return;
+        }
+
+        if (_match.Feuille is not null) return;
+
+        _equipeDomicile  = await TeamService.GetEquipeAsync(_match.EquipeDomicileId);
+        _equipeExterieur = await TeamService.GetEquipeAsync(_match.EquipeExterieurId);
+
+        if (_equipeDomicile is not null)
+            _availableDomicile = _equipeDomicile.Joueurs
+                .Where(j => !j.EstMort && !j.EstRetraite)
+                .OrderBy(j => j.Numero)
+                .Select(j => new PlayerInfo(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
+                .ToList();
+
+        if (_equipeExterieur is not null)
+            _availableExterieur = _equipeExterieur.Joueurs
+                .Where(j => !j.EstMort && !j.EstRetraite)
+                .OrderBy(j => j.Numero)
+                .Select(j => new PlayerInfo(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
+                .ToList();
+    }
+
+    async Task Soumettre()
+    {
+        if (_match is null) return;
+        _saving = true;
+        try
+        {
+            var feuille = new MatchSheet
+            {
+                TouchdownsDomicile    = _tdDomicile,
+                TouchdownsExterieur   = _tdExterieur,
+                EliminationsDomicile  = _elimDomicile,
+                EliminationsExterieur = _elimExterieur,
+                GainsDomicile         = _gainsDomicileSaisis,
+                GainsExterieur        = _gainsExterieurSaisis,
+                VariationFansDomicile  = _varFansDom,
+                VariationFansExterieur = _varFansExt
+            };
+
+            var records = _recordsDomicile.Concat(_recordsExterieur)
+                .Select(r => new MatchPlayerRecord
+                {
+                    TeamPlayerId          = r.TeamPlayerId,
+                    EstCoteDomicile       = r.EstCoteDomicile,
+                    Touchdowns            = r.Touchdowns,
+                    Completions           = r.Completions,
+                    Interceptions         = r.Interceptions,
+                    EliminationsInfligees = r.EliminationsInfligees,
+                    EstMVP                = r.EstMVP,
+                    Blessure              = r.Blessure,
+                    StatAffectee          = r.Blessure == InjuryType.BlessurePersistante ? r.StatAffectee : null
+                }).ToList();
+
+            await MatchService.SaisirFeuilleMatchAsync(_match.Id, feuille, records, _userId);
+            Snackbar.Add("Feuille enregistrée — l'adversaire doit confirmer.", Severity.Info);
+            Nav.NavigateTo("/matchs");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    async Task Confirmer()
+    {
+        if (_match is null) return;
+        _confirming = true;
+        try
+        {
+            await MatchService.ConfirmerFeuilleCoachAsync(_match.Id, _userId);
+            Snackbar.Add("Match confirmé — passez à votre après-match !", Severity.Success);
+            Nav.NavigateTo($"/matchs/{_match.Id}/apres-match");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _confirming = false;
+        }
+    }
+
+    // ─── Modèles locaux ───────────────────────────────────────────────────────
+
+    sealed record PlayerInfo(int Id, int Numero, string Nom, string Position);
+
+    sealed class PlayerMatchData
+    {
+        public int           TeamPlayerId          { get; set; }
+        public int           Numero                { get; set; }
+        public string        NomJoueur             { get; set; } = "";
+        public string        PositionNom           { get; set; } = "";
+        public bool          EstCoteDomicile       { get; set; }
+        public bool          EstMVP                { get; set; }
+        public int           Touchdowns            { get; set; }
+        public int           Completions           { get; set; }
+        public int           Interceptions         { get; set; }
+        public int           EliminationsInfligees { get; set; }
+        public InjuryType?   Blessure              { get; set; }
+        public AffectedStat? StatAffectee          { get; set; }
+    }
+}

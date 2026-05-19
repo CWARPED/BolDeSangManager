@@ -1,0 +1,145 @@
+@page "/Account/RegisterConfirmation"
+
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.WebUtilities
+@using BolDeSangManager.Data
+@using BolDeSangManager.Services
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IEmailSender<ApplicationUser> EmailSender
+@inject EmailResendCooldownService CooldownSvc
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Confirmez votre email — BolDeSang Manager</PageTitle>
+
+<div class="account-page-wrap">
+    <MudCard Elevation="6" Style="width:100%;max-width:460px">
+        <MudCardContent Class="pa-8">
+
+            <div class="d-flex flex-column align-center mb-6">
+                <MudIcon Icon="@Icons.Material.Filled.MarkEmailUnread"
+                         Style="font-size:3.5rem;color:var(--mud-palette-primary)" Class="mb-2" />
+                <MudText Typo="Typo.h5" Align="Align.Center"><b>Vérifiez votre email</b></MudText>
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Secondary" Class="mt-1">
+                    Un email de confirmation a été envoyé à<br /><b>@Email</b>
+                </MudText>
+            </div>
+
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                Cliquez sur le lien dans l'email pour activer votre compte.
+                Vérifiez aussi vos spams.
+            </MudAlert>
+
+            @if (_sent)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mb-4">
+                    Email renvoyé. Vérifiez votre boîte de réception.
+                </MudAlert>
+            }
+
+            @if (_cooldownRestant.HasValue)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+                    Prochain renvoi possible dans @_cooldownRestant.Value.Minutes min @_cooldownRestant.Value.Seconds s.
+                </MudAlert>
+            }
+
+            @if (!_sent && !_cooldownRestant.HasValue)
+            {
+                <form method="post" @formname="resend">
+                    <AntiforgeryToken />
+                    <input type="hidden" name="ResendInput.Email" value="@Email" />
+                    <MudButton ButtonType="ButtonType.Submit"
+                               Variant="Variant.Outlined"
+                               Color="Color.Error"
+                               FullWidth="true"
+                               StartIcon="@Icons.Material.Filled.Send">
+                        Renvoyer l'email de confirmation
+                    </MudButton>
+                </form>
+            }
+
+            <hr class="account-divider" />
+
+            <div class="d-flex justify-center">
+                <MudLink Href="Account/Login" Color="Color.Secondary" Typo="Typo.body2">
+                    Retour à la connexion
+                </MudLink>
+            </div>
+
+        </MudCardContent>
+    </MudCard>
+</div>
+
+@code {
+    private bool _sent;
+    private TimeSpan? _cooldownRestant;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "resend")]
+    private ResendModel ResendInput { get; set; } = new();
+
+    private sealed class ResendModel
+    {
+        public string Email { get; set; } = "";
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Email))
+        {
+            RedirectManager.RedirectTo("Account/Login");
+            return;
+        }
+
+        // Traitement du POST de renvoi
+        if (HttpMethods.IsPost(HttpContext.Request.Method) && !string.IsNullOrWhiteSpace(ResendInput.Email))
+        {
+            await TraiterRenvoi(ResendInput.Email);
+            return;
+        }
+
+        // Afficher le cooldown restant s'il est actif
+        _cooldownRestant = CooldownSvc.TempsRestant(Email);
+    }
+
+    private async Task TraiterRenvoi(string email)
+    {
+        if (!CooldownSvc.PeutEnvoyer(email))
+        {
+            _cooldownRestant = CooldownSvc.TempsRestant(email);
+            return;
+        }
+
+        var user = await UserManager.FindByEmailAsync(email);
+        if (user is null || user.EmailConfirmed)
+        {
+            // Ne pas révéler si l'email existe, juste rediriger
+            RedirectManager.RedirectTo("Account/Login");
+            return;
+        }
+
+        var userId = await UserManager.GetUserIdAsync(user);
+        var code = await UserManager.GenerateEmailConfirmationTokenAsync(user);
+        code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+        var callbackUrl = NavigationManager.GetUriWithQueryParameters(
+            NavigationManager.ToAbsoluteUri("Account/ConfirmEmail").AbsoluteUri,
+            new Dictionary<string, object?> { ["userId"] = userId, ["code"] = code, ["returnUrl"] = ReturnUrl });
+
+        await EmailSender.SendConfirmationLinkAsync(user, email, HtmlEncoder.Default.Encode(callbackUrl));
+        CooldownSvc.Enregistrer(email);
+
+        _sent = true;
+    }
+}

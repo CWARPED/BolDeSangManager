@@ -1,0 +1,352 @@
+@page "/matchs/{Id:int}/apres-match"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject MatchService MatchService
+@inject TeamService TeamService
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Après-match — BolDeSang Manager</PageTitle>
+
+@if (_match is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else if (_equipe is null)
+{
+    <MudAlert Severity="Severity.Error">
+        Vous ne participez pas à ce match ou il n'est pas en phase d'après-match.
+    </MudAlert>
+}
+else if (DejaValide())
+{
+    <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.CheckCircle">
+        Vous avez déjà validé votre après-match.
+        @if (_match.Statut == MatchStatus.Termine)
+        {
+            <span> Le match est maintenant <b>terminé</b>.</span>
+        }
+        else
+        {
+            <span> En attente de l'autre coach.</span>
+        }
+    </MudAlert>
+    <MudButton Href="/matchs" Variant="Variant.Text" Class="mt-3">← Retour aux matchs</MudButton>
+}
+else
+{
+    <MudText Typo="Typo.h5" Color="Color.Error" Class="mb-1"><b>Après-match</b></MudText>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        @(_match.Ronde >= 100 ? $"Play-off T{_match.Ronde - 99}" : $"Ronde {_match.Ronde}") —
+        @_match.Division?.League?.Nom
+    </MudText>
+
+    <!-- Résultat + gains -->
+    <MudPaper Elevation="2" Class="pa-3 mb-4">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+            <div>
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Résultat</MudText>
+                <MudText Typo="Typo.h6">
+                    <b>@_match.EquipeDomicile?.Nom</b>
+                    <span style="color:var(--mud-palette-error)"> @_match.Feuille?.TouchdownsDomicile – @_match.Feuille?.TouchdownsExterieur </span>
+                    <b>@_match.EquipeExterieur?.Nom</b>
+                </MudText>
+            </div>
+            <div>
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary">Votre équipe</MudText>
+                <MudText Typo="Typo.h6"><b>@_equipe.Nom</b></MudText>
+                <MudText Typo="Typo.body2">
+                    Trésorerie : <b style="color:var(--mud-palette-success)">@_equipe.Tresorerie.ToString("N0") po</b>
+                    <span class="ml-3">Relances : <b>@_equipe.NombreRelances/8</b></span>
+                </MudText>
+            </div>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Section 1 : Compétences -->
+    @if (_ameliorations.Any())
+    {
+        <MudPaper Elevation="2" Class="pa-4 mb-4" Style="border-left:4px solid #ff9800">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Warning" Class="mr-1" />
+                <b>Améliorations disponibles</b>
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                Chaque joueur avec ≥ 6 PSP peut recevoir une compétence. Principale +20 000 po de valeur, secondaire +40 000 po.
+            </MudText>
+            @foreach (var a in _ameliorations)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mb-2">
+                    <MudGrid>
+                        <MudItem xs="12" sm="4">
+                            <MudText><b>@a.NomJoueur</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @a.NomPoste — @a.PspTotal PSP
+                            </MudText>
+                        </MudItem>
+                        <MudItem xs="12" sm="5">
+                            <MudSelect @bind-Value="a.SkillId" T="int?" Label="Compétence"
+                                       Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
+                                <MudSelectItem T="int?" Value="@((int?)null)">— Aucune —</MudSelectItem>
+                                @foreach (var cat in _skills.GroupBy(s => s.Categorie).OrderBy(g => g.Key.ToString()))
+                                {
+                                    <MudListSubheader>@CategorieLabel(cat.Key)</MudListSubheader>
+                                    @foreach (var skill in cat.OrderBy(s => s.Nom))
+                                    {
+                                        <MudSelectItem T="int?" Value="@((int?)skill.Id)">
+                                            @skill.Nom @(skill.EstElite ? "⭐" : "")
+                                        </MudSelectItem>
+                                    }
+                                }
+                            </MudSelect>
+                        </MudItem>
+                        <MudItem xs="12" sm="3">
+                            <MudCheckBox @bind-Value="a.EstPrincipale" Color="Color.Warning"
+                                         Label="Principale (+20k)" />
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            }
+        </MudPaper>
+    }
+
+    <!-- Section 2 : Recruter un joueur -->
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-1">
+            <MudIcon Icon="@Icons.Material.Filled.PersonAdd" Color="Color.Primary" Class="mr-1" />
+            <b>Recruter un joueur</b>
+        </MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            Trésorerie disponible : <b>@_equipe.Tresorerie.ToString("N0") po</b>
+        </MudText>
+        @foreach (var pos in _postesDisponibles)
+        {
+            var count = _equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite && j.PlayerPositionId == pos.Id);
+            var complet = count >= pos.QuantiteMax;
+            var insuffisant = _equipe.Tresorerie < pos.Cout;
+            <MudPaper Outlined="true" Class="pa-2 mb-2"
+                     Style="@($"opacity:{(complet || insuffisant ? "0.5" : "1")}")">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                    <div style="flex:1; min-width:100px">
+                        <MudText Typo="Typo.body2"><b>@pos.Nom</b></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @pos.Cout.ToString("N0") po &nbsp;·&nbsp; @count/@pos.QuantiteMax
+                        </MudText>
+                    </div>
+                    <MudTextField @bind-Value="@_nomsRecruté[pos.Id]" Placeholder="Nom (optionnel)"
+                                 Variant="Variant.Text" Margin="Margin.Dense" Style="min-width:120px; flex:1"
+                                 Disabled="@(complet || insuffisant)" />
+                    <MudNumericField @bind-Value="@_numerosRecruté[pos.Id]" Min="1" Max="99"
+                                   Label="#" Variant="Variant.Text" Margin="Margin.Dense" Style="width:56px"
+                                   Disabled="@(complet || insuffisant)" />
+                    <MudIconButton Icon="@Icons.Material.Filled.AddCircleOutline"
+                                 Size="Size.Small"
+                                 Color="@(!complet && !insuffisant ? Color.Primary : Color.Default)"
+                                 Disabled="@(complet || insuffisant)"
+                                 OnClick="@(() => AjouterRecrue(pos))"
+                                 title="@(insuffisant ? "Fonds insuffisants" : complet ? "Limite atteinte" : "Recruter")" />
+                </MudStack>
+            </MudPaper>
+        }
+        @if (_recrutesEnAttente.Any())
+        {
+            <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-2 d-block">
+                <b>En attente de confirmation :</b>
+                @foreach (var r in _recrutesEnAttente)
+                {
+                    <span> @r.Nom (@r.PositionNom, @r.Cout.ToString("N0") po)</span>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                 Color="Color.Error" OnClick="@(() => _recrutesEnAttente.Remove(r))" />
+                }
+            </MudText>
+        }
+    </MudPaper>
+
+    <!-- Section 3 : Relances -->
+    @if (_equipe.NombreRelances < 8)
+    {
+        var coutRelance = (_equipe.TeamType?.CoutRelance ?? 50_000) * 2;
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-1">
+                <MudIcon Icon="@Icons.Material.Filled.Refresh" Color="Color.Secondary" Class="mr-1" />
+                <b>Acheter des relances</b>
+            </MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                Coût en ligue : @coutRelance.ToString("N0") po chacune (double du tarif normal) &nbsp;·&nbsp;
+                Actuellement @_equipe.NombreRelances relance(s), max 8
+            </MudText>
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+                <MudNumericField @bind-Value="_nouvellesRelances" Min="0"
+                               Max="@(Math.Min(8 - _equipe.NombreRelances, (int)(_equipe.Tresorerie / coutRelance)))"
+                               Label="Relances à acheter" Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Style="width:160px" />
+                @if (_nouvellesRelances > 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Warning">
+                        Coût total : <b>@((_nouvellesRelances * coutRelance).ToString("N0")) po</b>
+                    </MudText>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
+    <!-- Bouton de validation -->
+    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2" Class="mt-2">
+        <MudButton Href="/matchs" Variant="Variant.Text">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Success"
+                  StartIcon="@Icons.Material.Filled.CheckCircle"
+                  Disabled="@_saving" OnClick="Valider">
+            @(_saving ? "Validation..." : "Valider mon après-match")
+        </MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    Match? _match;
+    Team? _equipe;
+    bool _estDomicile;
+    List<Skill> _skills = [];
+    List<PlayerPosition> _postesDisponibles = [];
+    List<AmeliorationData> _ameliorations = [];
+    List<RecrueData> _recrutesEnAttente = [];
+    Dictionary<int, string> _nomsRecruté = [];
+    Dictionary<int, int> _numerosRecruté = [];
+    int _nouvellesRelances;
+    bool _saving;
+    string _userId = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        _match = await MatchService.GetMatchAsync(Id);
+        if (_match is null || _match.Statut != MatchStatus.ValidationCompetences) return;
+
+        bool estDom = _match.EquipeDomicile?.CoachId == _userId;
+        bool estExt = _match.EquipeExterieur?.CoachId == _userId;
+        bool estCommissaire = authState.User.IsInRole("Commissaire");
+
+        if (!estDom && !estExt && !estCommissaire) return;
+
+        _estDomicile = estDom || (!estExt && estCommissaire);
+        var teamId = _estDomicile ? _match.EquipeDomicileId : _match.EquipeExterieurId;
+        _equipe = await TeamService.GetEquipeAsync(teamId);
+        if (_equipe is null) return;
+
+        _skills = await TeamService.GetCompetencesAsync();
+        _postesDisponibles = await TeamService.GetPostesDisponiblesAsync(_equipe.TeamTypeId);
+
+        _ameliorations = _match.Feuille?.RecordsJoueurs
+            .Where(r => r.TeamPlayer is not null
+                     && r.EstCoteDomicile == _estDomicile
+                     && r.TeamPlayer.PointsStarPlayer >= 6)
+            .OrderByDescending(r => r.TeamPlayer!.PointsStarPlayer)
+            .Select(r => new AmeliorationData
+            {
+                TeamPlayerId = r.TeamPlayerId,
+                NomJoueur    = r.TeamPlayer!.Nom,
+                NomPoste     = r.TeamPlayer.PlayerPosition?.Nom ?? "",
+                PspTotal     = r.TeamPlayer.PointsStarPlayer,
+            })
+            .ToList() ?? [];
+
+        foreach (var pos in _postesDisponibles)
+        {
+            _nomsRecruté[pos.Id] = "";
+            var nextNum = _equipe.Joueurs.Any(j => !j.EstMort && !j.EstRetraite)
+                ? _equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).Max(j => j.Numero) + 1
+                : 1;
+            _numerosRecruté[pos.Id] = Math.Min(nextNum, 99);
+        }
+    }
+
+    bool DejaValide() => _match?.Feuille is { } f
+        && (_estDomicile ? f.ApresMatchDomicileValide : f.ApresMatchExterieurValide);
+
+    void AjouterRecrue(PlayerPosition pos)
+    {
+        if (_equipe is null) return;
+        var nom = _nomsRecruté.GetValueOrDefault(pos.Id, "");
+        var numero = _numerosRecruté.GetValueOrDefault(pos.Id, 1);
+        _recrutesEnAttente.Add(new RecrueData
+        {
+            PositionId  = pos.Id,
+            PositionNom = pos.Nom,
+            Cout        = pos.Cout,
+            Nom         = string.IsNullOrWhiteSpace(nom) ? $"#{numero}" : nom,
+            Numero      = numero
+        });
+        // Mise à jour du prochain numéro
+        _numerosRecruté[pos.Id] = Math.Min(numero + 1, 99);
+        _nomsRecruté[pos.Id] = "";
+    }
+
+    async Task Valider()
+    {
+        if (_equipe is null || _match is null) return;
+        _saving = true;
+        try
+        {
+            var competences = _ameliorations
+                .Where(a => a.SkillId.HasValue)
+                .Select(a => (a.TeamPlayerId, a.SkillId!.Value, a.EstPrincipale))
+                .ToList();
+
+            var nouveauxJoueurs = _recrutesEnAttente
+                .Select(r => (r.PositionId, r.Nom, r.Numero))
+                .ToList();
+
+            await MatchService.ValiderApresMatchCoachAsync(
+                Id, _equipe.Id,
+                competences,
+                nouveauxJoueurs,
+                _nouvellesRelances,
+                TeamService);
+
+            Snackbar.Add("Après-match validé !", Severity.Success);
+            Nav.NavigateTo("/matchs");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    static string CategorieLabel(SkillCategory c) => c switch
+    {
+        SkillCategory.Agilite   => "Agilité (A)",
+        SkillCategory.Force     => "Force (F)",
+        SkillCategory.Generale  => "Générale (G)",
+        SkillCategory.Mutation  => "Mutation (M)",
+        SkillCategory.Passe     => "Passe (P)",
+        SkillCategory.Scelerate => "Scélérate (S)",
+        _                       => c.ToString()
+    };
+
+    sealed class AmeliorationData
+    {
+        public int    TeamPlayerId { get; set; }
+        public string NomJoueur   { get; set; } = "";
+        public string NomPoste    { get; set; } = "";
+        public int    PspTotal    { get; set; }
+        public int?   SkillId     { get; set; }
+        public bool   EstPrincipale { get; set; } = true;
+    }
+
+    sealed class RecrueData
+    {
+        public int    PositionId  { get; set; }
+        public string PositionNom { get; set; } = "";
+        public int    Cout        { get; set; }
+        public string Nom         { get; set; } = "";
+        public int    Numero      { get; set; }
+    }
+}

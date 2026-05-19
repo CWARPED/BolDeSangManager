@@ -1,0 +1,225 @@
+@page "/matchs/{Id:int}/validation"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject MatchService MatchService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject BolDeSangManager.Services.IAuthorizationService Auth
+@inject AuthenticationStateProvider AuthProvider
+
+<PageTitle>Validation du match — BolDeSang Manager</PageTitle>
+
+@if (_match is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Error"><b>Validation du match</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @_match.Division?.League?.Nom —
+                @(_match.Ronde >= 100 ? $"Play-off T{_match.Ronde - 99}" : $"Ronde {_match.Ronde}")
+            </MudText>
+        </div>
+        <MudChip T="string" Color="@MatchColor(_match.Statut)">@MatchLabel(_match.Statut)</MudChip>
+    </MudStack>
+
+    @if (_match.Feuille is null)
+    {
+        <MudAlert Severity="Severity.Warning">Aucune feuille n'a encore été saisie pour ce match.</MudAlert>
+    }
+    else
+    {
+        <!-- Résultat -->
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudStack AlignItems="AlignItems.Center" Spacing="1">
+                <MudText Typo="Typo.h6"><b>@_match.EquipeDomicile?.Nom</b></MudText>
+                <MudText Typo="Typo.h4" Color="Color.Error">
+                    <b>@_match.Feuille.TouchdownsDomicile – @_match.Feuille.TouchdownsExterieur</b>
+                </MudText>
+                <MudText Typo="Typo.h6"><b>@_match.EquipeExterieur?.Nom</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    Saisi le @_match.Feuille.SaisiLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+                </MudText>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Gains + fans -->
+        <MudGrid Class="mb-4">
+            <MudItem xs="12" sm="6">
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">@_match.EquipeDomicile?.Nom</MudText>
+                    <MudText>Éliminations : <b>@_match.Feuille.EliminationsDomicile</b></MudText>
+                    <MudText>Gains : <b>@_match.Feuille.GainsDomicile.ToString("N0") po</b></MudText>
+                    <MudText>Variation fans : <b>@(_match.Feuille.VariationFansDomicile >= 0 ? "+" : "")@_match.Feuille.VariationFansDomicile</b></MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudPaper Elevation="1" Class="pa-3">
+                    <MudText Typo="Typo.subtitle2" Color="Color.Secondary">@_match.EquipeExterieur?.Nom</MudText>
+                    <MudText>Éliminations : <b>@_match.Feuille.EliminationsExterieur</b></MudText>
+                    <MudText>Gains : <b>@_match.Feuille.GainsExterieur.ToString("N0") po</b></MudText>
+                    <MudText>Variation fans : <b>@(_match.Feuille.VariationFansExterieur >= 0 ? "+" : "")@_match.Feuille.VariationFansExterieur</b></MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <!-- Statut après-match par équipe -->
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle2" Class="mb-3"><b>Statut de l'après-match</b></MudText>
+            <MudStack Row="true" Spacing="3" Wrap="Wrap.Wrap">
+                <MudChip T="string"
+                         Color="@(_match.Feuille.ApresMatchDomicileValide ? Color.Success : Color.Warning)"
+                         Icon="@(_match.Feuille.ApresMatchDomicileValide ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.HourglassEmpty)">
+                    @_match.EquipeDomicile?.Nom
+                    @(_match.Feuille.ApresMatchDomicileValide ? " — validé" : " — en attente")
+                </MudChip>
+                <MudChip T="string"
+                         Color="@(_match.Feuille.ApresMatchExterieurValide ? Color.Success : Color.Warning)"
+                         Icon="@(_match.Feuille.ApresMatchExterieurValide ? Icons.Material.Filled.CheckCircle : Icons.Material.Filled.HourglassEmpty)">
+                    @_match.EquipeExterieur?.Nom
+                    @(_match.Feuille.ApresMatchExterieurValide ? " — validé" : " — en attente")
+                </MudChip>
+            </MudStack>
+        </MudPaper>
+
+        <!-- PSP joueurs -->
+        @if (_match.Feuille.RecordsJoueurs.Any())
+        {
+            <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Points Star Player (PSP)</b></MudText>
+            <MudTable Items="@_match.Feuille.RecordsJoueurs.Where(r => r.PspGagnes > 0).OrderByDescending(r => r.PspGagnes)"
+                     Dense="true" Elevation="1" Class="mb-4">
+                <HeaderContent>
+                    <MudTh>Joueur</MudTh>
+                    <MudTh>Équipe</MudTh>
+                    <MudTh Style="text-align:center">TDs</MudTh>
+                    <MudTh Style="text-align:center">Comp</MudTh>
+                    <MudTh Style="text-align:center">Int</MudTh>
+                    <MudTh Style="text-align:center">Élim</MudTh>
+                    <MudTh Style="text-align:center">MVP</MudTh>
+                    <MudTh Style="text-align:center">PSP match</MudTh>
+                    <MudTh Style="text-align:center">PSP total</MudTh>
+                    <MudTh>Blessure</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="r">
+                    <MudTd><b>@r.TeamPlayer?.Nom</b></MudTd>
+                    <MudTd>
+                        <MudChip T="string" Size="Size.Small"
+                                Color="@(r.EstCoteDomicile ? Color.Primary : Color.Secondary)">
+                            @(r.EstCoteDomicile ? _match.EquipeDomicile?.Nom : _match.EquipeExterieur?.Nom)
+                        </MudChip>
+                    </MudTd>
+                    <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
+                    <MudTd Style="text-align:center">@r.Completions</MudTd>
+                    <MudTd Style="text-align:center">@r.Interceptions</MudTd>
+                    <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
+                    <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "—")</MudTd>
+                    <MudTd Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
+                    <MudTd Style="text-align:center">
+                        <b>@(r.TeamPlayer?.PointsStarPlayer ?? 0)</b>
+                        @if ((r.TeamPlayer?.PointsStarPlayer ?? 0) >= 6)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.TrendingUp" Color="Color.Success"
+                                     Size="Size.Small" title="Amélioration disponible !" />
+                        }
+                    </MudTd>
+                    <MudTd>
+                        @if (r.Blessure.HasValue)
+                        {
+                            <MudChip T="string" Color="Color.Error" Size="Size.Small">
+                                @BlessureLabel(r.Blessure.Value)
+                            </MudChip>
+                        }
+                        else { <span>—</span> }
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+
+        @if (_match.Statut != MatchStatus.Termine)
+        {
+            <!-- Clôture forcée par le commissaire (fallback si un coach ne répond pas) -->
+            <MudExpansionPanels Class="mb-4">
+                <MudExpansionPanel Text="Forcer la clôture du match (commissaire)">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                        Utilisez cette option uniquement si un coach ne peut pas effectuer son après-match.
+                        Le match sera marqué terminé sans passer par les étapes d'après-match restantes.
+                    </MudText>
+                    <MudTextField @bind-Value="_notes" Label="Notes (obligatoire pour forcer)"
+                                 Variant="Variant.Outlined" Lines="2" Class="mb-3" />
+                    <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                              StartIcon="@Icons.Material.Filled.LockClock"
+                              Disabled="@(_saving || string.IsNullOrWhiteSpace(_notes))"
+                              OnClick="ForcerCloture">
+                        @(_saving ? "En cours..." : "Forcer la clôture")
+                    </MudButton>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.CheckCircle">
+                Match terminé.
+                @if (!string.IsNullOrEmpty(_match.Feuille.NotesCommissaire))
+                {
+                    <br /><span>Notes : @_match.Feuille.NotesCommissaire</span>
+                }
+            </MudAlert>
+        }
+    }
+
+    <MudButton Href="/" Variant="Variant.Text" Class="mt-3">← Retour</MudButton>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    Match? _match;
+    string _notes = "";
+    bool _saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        _match = await MatchService.GetMatchAsync(Id);
+
+        if (_match?.Division is null
+            || !await Auth.PeutGererLigueAsync(userId, _match.Division.LeagueId))
+        {
+            Nav.NavigateTo("/", forceLoad: true);
+            return;
+        }
+    }
+
+    async Task ForcerCloture()
+    {
+        _saving = true;
+        try
+        {
+            await MatchService.ValiderFeuilleAsync(Id, _notes);
+            Snackbar.Add("Match clôturé par le commissaire.", Severity.Success);
+            _match = await MatchService.GetMatchAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    static string BlessureLabel(InjuryType t) => t switch
+    {
+        InjuryType.ManqueSuivant       => "Rate le prochain",
+        InjuryType.BlessurePersistante => "Séquelle",
+        InjuryType.RetraiteTemporaire  => "Retraite temporaire",
+        InjuryType.Mort                => "Mort",
+        _                              => t.ToString()
+    };
+}

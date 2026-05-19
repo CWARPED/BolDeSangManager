@@ -1,0 +1,67 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Data.Enums
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="8"><MudTextField @bind-Value="_data.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="4">
+                <MudSelect T="SkillCategory" @bind-Value="_data.Categorie" Label="Catégorie" Variant="Variant.Outlined">
+                    @foreach (var c in Enum.GetValues<SkillCategory>())
+                    {
+                        <MudSelectItem Value="@c">@c</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12"><MudTextField @bind-Value="_data.Description" Label="Description" Lines="3" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="6"><MudCheckBox @bind-Value="_data.EstElite" Label="Élite" /></MudItem>
+            <MudItem xs="6"><MudCheckBox @bind-Value="_data.EstTrait" Label="Trait" /></MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Sauvegarder">Sauvegarder</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int VersionId { get; set; }
+    [Parameter] public Skill? Existant { get; set; }
+
+    Skill _data = new() { Nom = "", Description = "", Categorie = SkillCategory.Generale };
+
+    protected override void OnInitialized()
+    {
+        if (Existant is not null)
+        {
+            _data = new Skill
+            {
+                Id = Existant.Id, Nom = Existant.Nom, Categorie = Existant.Categorie,
+                Description = Existant.Description, EstElite = Existant.EstElite, EstTrait = Existant.EstTrait
+            };
+        }
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Sauvegarder()
+    {
+        try
+        {
+            if (Existant is null)
+                await DataEditService.CreerSkillAsync(VersionId, _data);
+            else
+                await DataEditService.ModifierSkillAsync(Existant.Id, _data.Nom, _data.Categorie, _data.Description, _data.EstElite, _data.EstTrait);
+            Snackbar.Add("Compétence sauvegardée", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+}

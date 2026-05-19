@@ -1,0 +1,65 @@
+<MudNavMenu>
+
+    <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Home">
+        Accueil
+    </MudNavLink>
+
+    <AuthorizeView>
+        <Authorized>
+            <MudDivider Class="my-1" />
+
+            <MudNavLink Href="/matchs" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.SportsSoccer">
+                Mes matchs
+            </MudNavLink>
+            <MudNavLink Href="/equipes/ma-feuille" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.TableChart">
+                Ma feuille d'équipe
+            </MudNavLink>
+
+            <MudDivider Class="my-1" />
+
+            <MudNavLink Href="/ligues" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.EmojiEvents">
+                Toutes les ligues
+            </MudNavLink>
+
+            <MudDivider Class="my-1" />
+
+            <MudNavLink Href="/profil" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.ManageAccounts">
+                Mon profil
+            </MudNavLink>
+        </Authorized>
+
+        <NotAuthorized>
+            <MudDivider Class="my-1" />
+            <MudNavLink Href="/ligues" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.EmojiEvents">
+                Toutes les ligues
+            </MudNavLink>
+        </NotAuthorized>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="Admin">
+        <Authorized>
+            <MudDivider Class="my-1" />
+            <MudNavLink Href="/ligues/creer" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Add">
+                Créer une ligue
+            </MudNavLink>
+            <MudNavLink Href="/admin" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.People">
+                Gestion des utilisateurs
+            </MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+
+    <AuthorizeView Roles="Admin,GrandCommissaire">
+        <Authorized>
+            <MudNavLink Href="/admin/donnees" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.DataObject">
+                Édition des données
+            </MudNavLink>
+        </Authorized>
+    </AuthorizeView>
+
+    <MudDivider Class="my-1" />
+
+    <MudNavLink Href="/a-propos" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Info">
+        À propos
+    </MudNavLink>
+
+</MudNavMenu>

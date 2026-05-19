@@ -1,0 +1,307 @@
+@page "/equipes/{Id:int}"
+@rendermode InteractiveServer
+@inject TeamService TeamService
+
+<PageTitle>@(_equipe?.Nom ?? "Équipe") — BolDeSang Manager</PageTitle>
+
+@if (_equipe is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap">
+        <div>
+            <MudText Typo="Typo.h5" Color="Color.Error"><b>@_equipe.Nom</b></MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @_equipe.TeamType?.Nom — @_equipe.TeamType?.Game?.Nom
+                | Coach : @(_equipe.Coach?.PseudoCoach ?? _equipe.Coach?.UserName)
+                | Ligue : @_equipe.League?.Nom
+            </MudText>
+        </div>
+        <MudButton Href="@($"/equipes/ma-feuille?teamId={_equipe.Id}")" Variant="Variant.Outlined" Color="Color.Error"
+                  StartIcon="@Icons.Material.Filled.TableChart" Size="Size.Small">
+            Feuille PDF
+        </MudButton>
+    </MudStack>
+
+    <!-- Statistiques d'équipe -->
+    <MudGrid Class="mb-4">
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="1" Class="pa-3 text-center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Trésorerie</MudText>
+                <MudText Typo="Typo.h6" Color="Color.Success"><b>@_equipe.Tresorerie.ToString("N0") po</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="1" Class="pa-3 text-center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">VEA</MudText>
+                <MudText Typo="Typo.h6"><b>@_vea.ToString("N0") po</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="1" Class="pa-3 text-center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Bilan</MudText>
+                <MudText Typo="Typo.h6"><b>@_equipe.NombreVictoires V / @_equipe.NombreNuls N / @_equipe.NombreDefaites D</b></MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" sm="3">
+            <MudPaper Elevation="1" Class="pa-3 text-center">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">Points ligue</MudText>
+                <MudText Typo="Typo.h6" Color="Color.Error"><b>@_equipe.PointsLigue</b></MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-4">
+        <!-- Effectif -->
+        <MudTabPanel Text="@($"Effectif ({_equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite)})")" Icon="@Icons.Material.Filled.Group">
+            <div style="overflow-x:auto">
+                <MudTable Items="@_equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).OrderBy(j => j.Numero)" Dense="true" Hover="true" Elevation="0">
+                    <HeaderContent>
+                        <MudTh>#</MudTh>
+                        <MudTh>Nom</MudTh>
+                        <MudTh>Poste</MudTh>
+                        <MudTh Style="text-align:center">M</MudTh>
+                        <MudTh Style="text-align:center">F</MudTh>
+                        <MudTh Style="text-align:center">AG</MudTh>
+                        <MudTh Style="text-align:center">CP</MudTh>
+                        <MudTh Style="text-align:center">AV</MudTh>
+                        <MudTh>Compétences</MudTh>
+                        <MudTh Style="text-align:center">PSP</MudTh>
+                        <MudTh Style="text-align:center">Amél.</MudTh>
+                        <MudTh Style="text-align:center">Valeur</MudTh>
+                        <MudTh>Statut</MudTh>
+                    </HeaderContent>
+                    <RowTemplate Context="j">
+                        <MudTd>@j.Numero</MudTd>
+                        <MudTd><b>@j.Nom</b></MudTd>
+                        <MudTd>
+                            <div>@j.PlayerPosition?.Nom</div>
+                            @if (!string.IsNullOrEmpty(j.PlayerPosition?.MotsCles))
+                            {
+                                <div style="font-size:10px; color:#9e9e9e; font-style:italic">
+                                    @j.PlayerPosition.MotsCles.Replace(",", ", ")
+                                </div>
+                            }
+                        </MudTd>
+                        <MudTd Style="@InjuryCellStyle(j.ModMouvement)">@StatInt(j.PlayerPosition?.Mouvement ?? 0, j.ModMouvement)</MudTd>
+                        <MudTd Style="@InjuryCellStyle(j.ModForce)">@StatInt(j.PlayerPosition?.Force ?? 0, j.ModForce)</MudTd>
+                        <MudTd Style="@InjuryCellStyle(j.ModAgilite)">@StatStr(j.PlayerPosition?.Agilite ?? "-", j.ModAgilite, false)</MudTd>
+                        <MudTd Style="@InjuryCellStyle(j.ModCapacitePasse)">@StatStr(j.PlayerPosition?.CapacitePasse ?? "-", j.ModCapacitePasse, false)</MudTd>
+                        <MudTd Style="@InjuryCellStyle(j.ModArmure)">@StatStr(j.PlayerPosition?.Armure ?? "-", j.ModArmure, true)</MudTd>
+                        <MudTd>
+                            <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
+                            @if (!string.IsNullOrEmpty(j.PlayerPosition?.CompetencesPrincipales))
+                            {
+                                <div style="font-size:10px; margin-top:2px">
+                                    <span style="color:#90caf9">P:</span> @j.PlayerPosition.CompetencesPrincipales
+                                    @if (!string.IsNullOrEmpty(j.PlayerPosition.CompetencesSecondaires))
+                                    {
+                                        <span style="color:#ce93d8; margin-left:8px">S:</span> @j.PlayerPosition.CompetencesSecondaires
+                                    }
+                                </div>
+                            }
+                        </MudTd>
+                        <MudTd Style="text-align:center">@j.PointsStarPlayer</MudTd>
+                        <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
+                        <MudTd Style="text-align:center">@j.ValeurActuelle.ToString("N0")</MudTd>
+                        <MudTd>
+                            @if (j.ManqueSuivantMatch)
+                            {
+                                <MudChip T="string" Color="Color.Warning" Size="Size.Small">Rate prochain</MudChip>
+                            }
+                            @if (j.Blessures.Any(b => b.Type == InjuryType.BlessurePersistante))
+                            {
+                                <MudChip T="string" Color="Color.Error" Size="Size.Small">
+                                    Séquelles @SeqquellesSummary(j)
+                                </MudChip>
+                            }
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </div>
+
+            @{
+                var absents = _equipe.Joueurs.Where(j => j.EstMort || j.EstRetraite).OrderBy(j => j.Numero).ToList();
+            }
+            @if (absents.Any())
+            {
+                <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mt-4 mb-2">
+                    <MudIcon Icon="@Icons.Material.Filled.PersonOff" Size="Size.Small" Class="mr-1" />
+                    Morts &amp; Retraités (@absents.Count)
+                </MudText>
+                <div style="overflow-x:auto">
+                    <MudTable Items="@absents" Dense="true" Elevation="0"
+                              Style="opacity:0.55">
+                        <HeaderContent>
+                            <MudTh>#</MudTh>
+                            <MudTh>Nom</MudTh>
+                            <MudTh>Poste</MudTh>
+                            <MudTh>Statut</MudTh>
+                            <MudTh>Compétences</MudTh>
+                            <MudTh Style="text-align:center">Amél.</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="j">
+                            <MudTd>@j.Numero</MudTd>
+                            <MudTd>
+                                <span style="text-decoration:line-through">@j.Nom</span>
+                                @if (j.EstMort)
+                                {
+                                    <MudIcon Icon="@Icons.Material.Filled.Dangerous" Color="Color.Error"
+                                             Size="Size.Small" Class="ml-1" title="Mort" />
+                                }
+                            </MudTd>
+                            <MudTd>@j.PlayerPosition?.Nom</MudTd>
+                            <MudTd>
+                                @if (j.EstMort)
+                                {
+                                    <MudChip T="string" Color="Color.Error" Size="Size.Small">Mort</MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Color="Color.Default" Size="Size.Small">Retraité</MudChip>
+                                }
+                            </MudTd>
+                            <MudTd><MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText></MudTd>
+                            <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </div>
+            }
+        </MudTabPanel>
+
+        <!-- Staff -->
+        <MudTabPanel Text="Staff" Icon="@Icons.Material.Filled.ManageAccounts">
+            <MudGrid>
+                @foreach (var (label, valeur) in StaffItems())
+                {
+                    <MudItem xs="6" sm="4" md="2">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText>
+                            <MudText Typo="Typo.h5"><b>@valeur</b></MudText>
+                        </MudPaper>
+                    </MudItem>
+                }
+            </MudGrid>
+        </MudTabPanel>
+
+        <!-- Statistiques -->
+        <MudTabPanel Text="Stats" Icon="@Icons.Material.Filled.QueryStats">
+            <MudGrid>
+                <MudItem xs="12" md="6">
+                    <MudPaper Elevation="1" Class="pa-4">
+                        <MudText Typo="Typo.subtitle2" Class="mb-3"><b>Performances d'équipe</b></MudText>
+                        @foreach (var (label, valeur, color) in TeamStats())
+                        {
+                            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-1">
+                                <MudText>@label</MudText>
+                                <MudText Color="@color"><b>@valeur</b></MudText>
+                            </MudStack>
+                        }
+                    </MudPaper>
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    <MudTable Items="@_equipe.Joueurs.OrderByDescending(j => j.PointsStarPlayer)"
+                             Dense="true" Elevation="1">
+                        <ToolBarContent>
+                            <MudText Typo="Typo.subtitle2"><b>PSP par joueur</b></MudText>
+                        </ToolBarContent>
+                        <HeaderContent>
+                            <MudTh>#</MudTh>
+                            <MudTh>Joueur</MudTh>
+                            <MudTh Style="text-align:center">PSP</MudTh>
+                            <MudTh Style="text-align:center">Amél.</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="j">
+                            <MudTd>@j.Numero</MudTd>
+                            <MudTd>@j.Nom</MudTd>
+                            <MudTd Style="text-align:center"><b>@j.PointsStarPlayer</b></MudTd>
+                            <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                </MudItem>
+            </MudGrid>
+        </MudTabPanel>
+    </MudTabs>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    Team? _equipe;
+    int _vea;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _equipe = await TeamService.GetEquipeAsync(Id);
+        if (_equipe is not null)
+            _vea = TeamService.CalculerVEA(_equipe);
+    }
+
+    static string InjuryCellStyle(int mod) =>
+        mod < 0 ? "text-align:center; background-color:rgba(229,57,53,0.18); border-radius:4px" : "text-align:center";
+
+    static string StatInt(int baseVal, int mod) =>
+        mod == 0 ? baseVal.ToString() : $"{baseVal + mod} ({(mod > 0 ? "+" : "")}{mod})";
+
+    static string StatStr(string baseVal, int mod, bool plusEstMieux)
+    {
+        if (baseVal == "-" || mod == 0) return baseVal;
+        if (!int.TryParse(baseVal.TrimEnd('+'), out var n)) return baseVal;
+        var effective = plusEstMieux ? n + mod : n - mod;
+        var sign = (plusEstMieux ? mod : -mod) > 0 ? "+" : "";
+        var delta = plusEstMieux ? mod : -mod;
+        return $"{effective}+ ({sign}{delta})";
+    }
+
+    static string SeqquellesSummary(TeamPlayer j)
+    {
+        var parts = new List<string>();
+        if (j.ModMouvement < 0)     parts.Add($"MA{j.ModMouvement}");
+        if (j.ModForce < 0)         parts.Add($"F{j.ModForce}");
+        if (j.ModAgilite < 0)       parts.Add($"AG{j.ModAgilite}");
+        if (j.ModCapacitePasse < 0) parts.Add($"CP{j.ModCapacitePasse}");
+        if (j.ModArmure < 0)        parts.Add($"AV{j.ModArmure}");
+        return parts.Count > 0 ? $"({string.Join(", ", parts)})" : "";
+    }
+
+    static RenderFragment CompetencesJoueur(TeamPlayer j) => builder =>
+    {
+        var skills = (j.PlayerPosition?.CompetencesDepart.Select(c => c.Skill) ?? [])
+            .Concat(j.Competences.Where(c => !c.EstCompetenceDepart).Select(c => c.Skill))
+            .Where(s => s is not null)
+            .Cast<Skill>()
+            .ToList();
+        for (int i = 0; i < skills.Count; i++)
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "title", skills[i].Description ?? "");
+            builder.AddAttribute(2, "style", "cursor:help; border-bottom:1px dotted #aaa");
+            builder.AddContent(3, skills[i].Nom);
+            builder.CloseElement();
+            if (i < skills.Count - 1)
+                builder.AddMarkupContent(4, ", ");
+        }
+    };
+
+    IEnumerable<(string, string)> StaffItems()
+    {
+        if (_equipe is null) yield break;
+        yield return ("Relances", _equipe.NombreRelances.ToString());
+        yield return ("Fans dévoués", _equipe.FansDevoues.ToString());
+        yield return ("Coachs ass.", _equipe.NombreCoachsAssistants.ToString());
+        yield return ("Cheerleaders", _equipe.NombreCheerleaders.ToString());
+        yield return ("Apothicaire", _equipe.Apothicaire ? "Oui" : "Non");
+    }
+
+    IEnumerable<(string, string, Color)> TeamStats()
+    {
+        if (_equipe is null) yield break;
+        yield return ("Matchs joués", _equipe.NombreMatchsJoues.ToString(), Color.Default);
+        yield return ("Touchdowns marqués", _equipe.TouchdownsMarques.ToString(), Color.Success);
+        yield return ("Touchdowns concédés", _equipe.TouchdownsConcedes.ToString(), Color.Error);
+        yield return ("Éliminations infligées", _equipe.EliminationsInfligees.ToString(), Color.Warning);
+        yield return ("Points de ligue", _equipe.PointsLigue.ToString(), Color.Primary);
+    }
+}

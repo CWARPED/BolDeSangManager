@@ -1,0 +1,306 @@
+@page "/equipes/ma-feuille"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject TeamService TeamService
+@inject MatchService MatchService
+@inject PdfService PdfService
+@inject SettingsService SettingsService
+@inject AuthenticationStateProvider AuthProvider
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+<PageTitle>Feuille d'équipe — BolDeSang Manager</PageTitle>
+
+<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4"><b>Feuille d'équipe</b></MudText>
+
+@if (_equipesSelect is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else if (!_equipesSelect.Any())
+{
+    <MudAlert Severity="Severity.Info">
+        Aucune équipe disponible.
+        <MudLink Href="/ligues">Rejoignez une ligue</MudLink> pour créer votre équipe.
+    </MudAlert>
+}
+else
+{
+    <MudSelect T="string" Value="@_selectedTeamNom" Label="Équipe"
+               Variant="Variant.Outlined" Class="mb-4" Style="max-width:480px"
+               ValueChanged="OnTeamNameChanged">
+        @foreach (var eq in _equipesSelect)
+        {
+            <MudSelectItem T="string" Value="@NomSelect(eq)">@NomSelect(eq)</MudSelectItem>
+        }
+    </MudSelect>
+
+    @if (_equipeDetail is not null)
+    {
+        <!-- Barre sticky trésorerie / VEA -->
+        <MudPaper Elevation="2" Class="pa-2 mb-3 d-flex align-center gap-3" Outlined="false"
+                  Style="position:sticky; top:0; z-index:100; background:var(--mud-palette-background-grey)">
+            <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Size="Size.Small" Color="Color.Success" />
+            <MudText Typo="Typo.body2">
+                Trésorerie : <b style="color:var(--mud-palette-success)">@_equipeDetail.Tresorerie.ToString("N0") po</b>
+            </MudText>
+            <MudDivider Vertical="true" FlexItem="true" />
+            <MudText Typo="Typo.body2">
+                VEA : <b>@TeamService.CalculerVEA(_equipeDetail).ToString("N0") po</b>
+            </MudText>
+        </MudPaper>
+    }
+
+    @if (_equipeDetail is null)
+    {
+        <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+    }
+    else
+    {
+        <!-- Boutons d'export -->
+        <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
+            <MudButton Variant="Variant.Filled" Color="Color.Error"
+                      StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                      OnClick="@(() => ExporterPdf(false))"
+                      Disabled="@_exporting">
+                @(_exporting ? "Génération..." : "Exporter PDF")
+            </MudButton>
+            <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                      StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                      OnClick="@(() => ExporterPdf(true))"
+                      Disabled="@_exporting">
+                PDF avec descriptions des compétences
+            </MudButton>
+        </MudStack>
+
+        @if (_matchProchain is not null)
+        {
+            <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.QrCode">
+                Le PDF inclura un QR code pour saisir la feuille du prochain match
+                (@(_matchProchain.Ronde >= 100 ? $"Play-off T{_matchProchain.Ronde - 99}" : $"Ronde {_matchProchain.Ronde}")).
+                @if (string.IsNullOrWhiteSpace(_urlExterne))
+                {
+                    <MudLink Href="/admin" Class="ml-1">Configurez l'URL externe dans l'admin.</MudLink>
+                }
+            </MudAlert>
+        }
+
+        <!-- En-tête équipe -->
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                <div>
+                    <MudText Typo="Typo.h5"><b>@_equipeDetail.Nom</b></MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        @_equipeDetail.TeamType?.Nom — @_equipeDetail.TeamType?.Game?.Nom
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        Coach : <b>@(_equipeDetail.Coach?.PseudoCoach ?? _equipeDetail.Coach?.UserName)</b>
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        Ligue : <b>@_equipeDetail.League?.Nom</b>
+                    </MudText>
+                </div>
+                <div>
+                    <MudText Typo="Typo.body2">
+                        Trésorerie : <b>@_equipeDetail.Tresorerie.ToString("N0") po</b>
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        VEA : <b>@TeamService.CalculerVEA(_equipeDetail).ToString("N0") po</b>
+                    </MudText>
+                    <MudText Typo="Typo.body2">Relances : <b>@_equipeDetail.NombreRelances</b></MudText>
+                    <MudText Typo="Typo.body2">Fans dévoués : <b>@_equipeDetail.FansDevoues</b></MudText>
+                    @if (_equipeDetail.Apothicaire)
+                    {
+                        <MudText Typo="Typo.body2">Apothicaire : <b>Oui</b></MudText>
+                    }
+                    @if (_equipeDetail.NombreCoachsAssistants > 0)
+                    {
+                        <MudText Typo="Typo.body2">Coachs assistants : <b>@_equipeDetail.NombreCoachsAssistants</b></MudText>
+                    }
+                    @if (_equipeDetail.NombreCheerleaders > 0)
+                    {
+                        <MudText Typo="Typo.body2">Cheerleaders : <b>@_equipeDetail.NombreCheerleaders</b></MudText>
+                    }
+                </div>
+            </MudStack>
+        </MudPaper>
+
+        <!-- Tableau des joueurs -->
+        <div style="overflow-x:auto">
+            <MudTable Items="@_equipeDetail.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).OrderBy(j => j.Numero)" Dense="true" Hover="true" Elevation="2">
+                <HeaderContent>
+                    <MudTh>#</MudTh>
+                    <MudTh>Nom</MudTh>
+                    <MudTh>Poste</MudTh>
+                    <MudTh Style="text-align:center">M</MudTh>
+                    <MudTh Style="text-align:center">F</MudTh>
+                    <MudTh Style="text-align:center">AG</MudTh>
+                    <MudTh Style="text-align:center">CP</MudTh>
+                    <MudTh Style="text-align:center">AV</MudTh>
+                    <MudTh>Compétences</MudTh>
+                    <MudTh Style="text-align:center">PSP</MudTh>
+                    <MudTh Style="text-align:center">Valeur</MudTh>
+                </HeaderContent>
+                <RowTemplate Context="j">
+                    <MudTd>@j.Numero</MudTd>
+                    <MudTd>
+                        <b>@j.Nom</b>
+                        @if (j.ManqueSuivantMatch)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning"
+                                    Size="Size.Small" title="Rate le prochain match" Class="ml-1" />
+                        }
+                    </MudTd>
+                    <MudTd>
+                        <div>@j.PlayerPosition?.Nom</div>
+                        @if (!string.IsNullOrEmpty(j.PlayerPosition?.MotsCles))
+                        {
+                            <div style="font-size:10px; color:#9e9e9e; font-style:italic">
+                                @j.PlayerPosition.MotsCles.Replace(",", ", ")
+                            </div>
+                        }
+                    </MudTd>
+                    <MudTd Style="text-align:center">@((j.PlayerPosition?.Mouvement ?? 0) + j.ModMouvement)</MudTd>
+                    <MudTd Style="text-align:center">@((j.PlayerPosition?.Force ?? 0) + j.ModForce)</MudTd>
+                    <MudTd Style="text-align:center">@j.PlayerPosition?.Agilite</MudTd>
+                    <MudTd Style="text-align:center">@j.PlayerPosition?.CapacitePasse</MudTd>
+                    <MudTd Style="text-align:center">@j.PlayerPosition?.Armure</MudTd>
+                    <MudTd>
+                        <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
+                        @if (!string.IsNullOrEmpty(j.PlayerPosition?.CompetencesPrincipales))
+                        {
+                            <div style="font-size:10px; margin-top:2px">
+                                <span style="color:#90caf9">P:</span> @j.PlayerPosition.CompetencesPrincipales
+                                @if (!string.IsNullOrEmpty(j.PlayerPosition.CompetencesSecondaires))
+                                {
+                                    <span style="color:#ce93d8; margin-left:8px">S:</span> @j.PlayerPosition.CompetencesSecondaires
+                                }
+                            </div>
+                        }
+                    </MudTd>
+                    <MudTd Style="text-align:center">@j.PointsStarPlayer</MudTd>
+                    <MudTd Style="text-align:center">@j.ValeurActuelle.ToString("N0")</MudTd>
+                </RowTemplate>
+            </MudTable>
+        </div>
+    }
+}
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "teamId")]
+    public int? TeamId { get; set; }
+
+    List<Team>? _equipesSelect;
+    string _selectedTeamNom = "";
+    Team? _equipeDetail;
+    Match? _matchProchain;
+    string? _urlExterne;
+    bool _exporting;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        _urlExterne = await SettingsService.GetAsync(SettingsService.CleUrlExterne);
+
+        Team? equipeDepart = null;
+        if (TeamId.HasValue)
+            equipeDepart = await TeamService.GetEquipeAsync(TeamId.Value);
+
+        if (equipeDepart is null)
+        {
+            var mesEquipes = await TeamService.GetEquipesCoachAsync(userId);
+            equipeDepart = mesEquipes.FirstOrDefault();
+        }
+
+        if (equipeDepart is null)
+        {
+            _equipesSelect = [];
+            return;
+        }
+
+        if (equipeDepart.LeagueId > 0)
+            _equipesSelect = await TeamService.GetEquipesLigueAsync(equipeDepart.LeagueId);
+        else
+        {
+            var mesEquipes = await TeamService.GetEquipesCoachAsync(userId);
+            _equipesSelect = mesEquipes;
+        }
+
+        _selectedTeamNom = NomSelect(equipeDepart);
+        _equipeDetail = await TeamService.GetEquipeAsync(equipeDepart.Id);
+
+        await ChargerMatchProchain();
+    }
+
+    async Task OnTeamNameChanged(string nom)
+    {
+        _selectedTeamNom = nom;
+        var eq = _equipesSelect?.FirstOrDefault(e => NomSelect(e) == nom);
+        if (eq is not null)
+        {
+            _equipeDetail = null;
+            _matchProchain = null;
+            StateHasChanged();
+            _equipeDetail = await TeamService.GetEquipeAsync(eq.Id);
+            await ChargerMatchProchain();
+        }
+    }
+
+    async Task ChargerMatchProchain()
+    {
+        if (_equipeDetail is null) return;
+        var matchs = await MatchService.GetMatchsEquipeAsync(_equipeDetail.Id);
+        _matchProchain = matchs
+            .Where(m => m.Statut == MatchStatus.Programme || m.Statut == MatchStatus.AJouer)
+            .OrderBy(m => m.Ronde)
+            .FirstOrDefault();
+    }
+
+    async Task ExporterPdf(bool inclureDescriptions)
+    {
+        if (_equipeDetail is null) return;
+        _exporting = true;
+        try
+        {
+            var bytes = PdfService.GenererFeuilleEquipe(
+                _equipeDetail, inclureDescriptions,
+                _matchProchain, _urlExterne);
+            var nom = $"feuille-{_equipeDetail.Nom.ToLower().Replace(" ", "-")}.pdf";
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("blazorDownloadBase64File", nom, "application/pdf", base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur PDF : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _exporting = false;
+        }
+    }
+
+    static string NomSelect(Team eq) =>
+        $"{eq.Nom} ({eq.Coach?.PseudoCoach ?? eq.Coach?.UserName ?? "?"})";
+
+    static RenderFragment CompetencesJoueur(TeamPlayer j) => builder =>
+    {
+        var skills = (j.PlayerPosition?.CompetencesDepart.Select(c => c.Skill) ?? [])
+            .Concat(j.Competences.Where(c => !c.EstCompetenceDepart).Select(c => c.Skill))
+            .Where(s => s is not null)
+            .Cast<Skill>()
+            .ToList();
+        for (int i = 0; i < skills.Count; i++)
+        {
+            builder.OpenElement(0, "span");
+            builder.AddAttribute(1, "title", skills[i].Description ?? "");
+            builder.AddAttribute(2, "style", "cursor:help; border-bottom:1px dotted #aaa");
+            builder.AddContent(3, skills[i].Nom);
+            builder.CloseElement();
+            if (i < skills.Count - 1)
+                builder.AddMarkupContent(4, ", ");
+        }
+    };
+}

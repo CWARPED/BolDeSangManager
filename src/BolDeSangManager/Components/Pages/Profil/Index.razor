@@ -1,0 +1,350 @@
+@page "/profil"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@using Microsoft.AspNetCore.Identity
+@inject AuthenticationStateProvider AuthProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject TeamService TeamService
+@inject LeagueService LeagueService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Mon Profil — BolDeSang Manager</PageTitle>
+
+<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4">
+    <MudIcon Icon="@Icons.Material.Filled.ManageAccounts" Class="mr-2" />
+    <b>Mon Profil</b>
+</MudText>
+
+@if (_user is null)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else
+{
+    <MudGrid Spacing="3">
+
+        <!-- Carte identité -->
+        <MudItem xs="12" sm="5" md="4">
+            <MudCard Elevation="2">
+                <MudCardContent Class="d-flex flex-column align-center pa-6">
+                    <MudAvatar Style="width:80px;height:80px;font-size:2.5rem;background:#e53935;color:#fff" Class="mb-3">
+                        @((_user.PseudoCoach?.Length > 0 ? _user.PseudoCoach : (_user.UserName ?? "?"))[0])
+                    </MudAvatar>
+                    <MudText Typo="Typo.h6" Class="mb-1"><b>@(_user.PseudoCoach?.Length > 0 ? _user.PseudoCoach : _user.UserName)</b></MudText>
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">@_user.Email</MudText>
+                    @if (_estCommissaire)
+                    {
+                        <MudChip T="string" Color="Color.Error" Size="Size.Small" Icon="@Icons.Material.Filled.Star">
+                            Commissaire
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Color="Color.Default" Size="Size.Small" Icon="@Icons.Material.Filled.SportsScore">
+                            Coach
+                        </MudChip>
+                    }
+                </MudCardContent>
+            </MudCard>
+
+            <!-- Modifier le pseudo -->
+            <MudCard Elevation="2" Class="mt-3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Badge" Class="mr-1" Size="Size.Small" />
+                        <b>Pseudo</b>
+                    </MudText>
+                    <MudTextField @bind-Value="_pseudoEdit"
+                                  Label="Pseudo affiché"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Disabled="@_savingPseudo" />
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error" FullWidth="true"
+                               OnClick="ChangerPseudo" Disabled="@_savingPseudo"
+                               StartIcon="@Icons.Material.Filled.Save">
+                        @(_savingPseudo ? "Enregistrement…" : "Enregistrer")
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <!-- Colonne droite -->
+        <MudItem xs="12" sm="7" md="8">
+
+            <!-- Statistiques -->
+            <MudCard Elevation="2" Class="mb-3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.BarChart" Class="mr-1" Size="Size.Small" />
+                        <b>Statistiques</b>
+                    </MudText>
+                    <MudGrid Spacing="2">
+                        <MudItem xs="6" sm="3">
+                            <div class="text-center">
+                                <MudText Typo="Typo.h4" Color="Color.Error"><b>@(_equipes?.Count ?? 0)</b></MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Équipes</MudText>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <div class="text-center">
+                                <MudText Typo="Typo.h4" Color="Color.Error">
+                                    <b>@(_equipes?.Sum(e => e.NombreMatchsJoues) ?? 0)</b>
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Matchs joués</MudText>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <div class="text-center">
+                                <MudText Typo="Typo.h4" Color="Color.Success">
+                                    <b>@(_equipes?.Sum(e => e.NombreVictoires) ?? 0)</b>
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Victoires</MudText>
+                            </div>
+                        </MudItem>
+                        <MudItem xs="6" sm="3">
+                            <div class="text-center">
+                                <MudText Typo="Typo.h4" Color="Color.Error">
+                                    <b>@(_equipes?.Sum(e => e.TouchdownsMarques) ?? 0)</b>
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">Touchdowns</MudText>
+                            </div>
+                        </MudItem>
+                    </MudGrid>
+                </MudCardContent>
+            </MudCard>
+
+            <!-- Changer le mot de passe -->
+            <MudCard Elevation="2" Class="mb-3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.Lock" Class="mr-1" Size="Size.Small" />
+                        <b>Changer le mot de passe</b>
+                    </MudText>
+                    <MudTextField @bind-Value="_ancienMdp"
+                                  Label="Mot de passe actuel"
+                                  InputType="InputType.Password"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Class="mb-2"
+                                  Disabled="@_changingPassword" />
+                    <MudTextField @bind-Value="_nouveauMdp"
+                                  Label="Nouveau mot de passe"
+                                  InputType="InputType.Password"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Class="mb-2"
+                                  HelperText="8 caractères minimum, au moins un chiffre"
+                                  Disabled="@_changingPassword" />
+                    <MudTextField @bind-Value="_confirmMdp"
+                                  Label="Confirmer le nouveau mot de passe"
+                                  InputType="InputType.Password"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Disabled="@_changingPassword" />
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error"
+                               OnClick="ChangerMotDePasse" Disabled="@_changingPassword"
+                               StartIcon="@Icons.Material.Filled.Key">
+                        @(_changingPassword ? "Modification…" : "Changer le mot de passe")
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+
+            <!-- Ligues gérées (commissaire uniquement) -->
+            @if (_estCommissaire && _ligues?.Count > 0)
+            {
+                <MudCard Elevation="2" Class="mb-3">
+                    <MudCardContent>
+                        <MudText Typo="Typo.subtitle1" Class="mb-2">
+                            <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-1" Size="Size.Small" />
+                            <b>Ligues gérées</b>
+                        </MudText>
+                        @foreach (var ligue in _ligues)
+                        {
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween"
+                                      Class="py-1" Style="border-bottom:1px solid rgba(255,255,255,0.06)">
+                                <div>
+                                    <MudText Typo="Typo.body2"><b>@ligue.Nom</b></MudText>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        @ligue.Game?.Nom — @ligue.Equipes.Count équipe(s)
+                                    </MudText>
+                                </div>
+                                <MudChip T="string" Color="@LeagueColor(ligue.Statut)" Size="Size.Small">
+                                    @LeagueLabel(ligue.Statut)
+                                </MudChip>
+                            </MudStack>
+                        }
+                    </MudCardContent>
+                    <MudCardActions>
+                        <MudButton Href="/ligues" Size="Size.Small" StartIcon="@Icons.Material.Filled.OpenInNew">
+                            Toutes les ligues
+                        </MudButton>
+                    </MudCardActions>
+                </MudCard>
+            }
+        </MudItem>
+
+        <!-- Mes équipes -->
+        <MudItem xs="12">
+            <MudText Typo="Typo.h6" Class="mb-2">
+                <MudIcon Icon="@Icons.Material.Filled.Group" Class="mr-1" />
+                <b>Mes équipes</b>
+            </MudText>
+            @if (_equipes is null)
+            {
+                <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+            }
+            else if (!_equipes.Any())
+            {
+                <MudAlert Severity="Severity.Info">
+                    Aucune équipe pour le moment. Rejoignez une ligue pour en créer une.
+                    <MudLink Href="/ligues" Class="ml-2">Voir les ligues</MudLink>
+                </MudAlert>
+            }
+            else
+            {
+                <MudGrid>
+                    @foreach (var equipe in _equipes)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudCard Elevation="1" Style="cursor:pointer"
+                                     @onclick="@(() => Nav.NavigateTo($"/equipes/{equipe.Id}"))">
+                                <MudCardContent>
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1">
+                                        <MudText Typo="Typo.h6"><b>@equipe.Nom</b></MudText>
+                                        <MudText Typo="Typo.body2" Color="Color.Secondary">
+                                            @equipe.TeamType?.Nom
+                                        </MudText>
+                                    </MudStack>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                                        @(equipe.League?.Nom ?? "Hors ligue")
+                                    </MudText>
+                                    <MudStack Row="true" Spacing="3">
+                                        <div>
+                                            <MudText Typo="Typo.caption">Matchs</MudText>
+                                            <MudText Typo="Typo.body2"><b>@equipe.NombreMatchsJoues</b></MudText>
+                                        </div>
+                                        <div>
+                                            <MudText Typo="Typo.caption">V/N/D</MudText>
+                                            <MudText Typo="Typo.body2">
+                                                <b>@equipe.NombreVictoires/@equipe.NombreNuls/@equipe.NombreDefaites</b>
+                                            </MudText>
+                                        </div>
+                                        <div>
+                                            <MudText Typo="Typo.caption">Points</MudText>
+                                            <MudText Typo="Typo.body2" Color="Color.Error"><b>@equipe.PointsLigue</b></MudText>
+                                        </div>
+                                        <div>
+                                            <MudText Typo="Typo.caption">Joueurs</MudText>
+                                            <MudText Typo="Typo.body2">
+                                                <b>@equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite)</b>
+                                            </MudText>
+                                        </div>
+                                    </MudStack>
+                                </MudCardContent>
+                            </MudCard>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
+        </MudItem>
+
+    </MudGrid>
+}
+
+@code {
+    ApplicationUser? _user;
+    List<Team>? _equipes;
+    List<League>? _ligues;
+    bool _estCommissaire;
+
+    string _pseudoEdit = "";
+    bool _savingPseudo;
+
+    string _ancienMdp = "";
+    string _nouveauMdp = "";
+    string _confirmMdp = "";
+    bool _changingPassword;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value;
+        if (userId is null) { Nav.NavigateTo("/Account/Login"); return; }
+
+        _user = await UserManager.FindByIdAsync(userId);
+        if (_user is null) { Nav.NavigateTo("/Account/Login"); return; }
+
+        _estCommissaire = await UserManager.IsInRoleAsync(_user, "Commissaire");
+        _pseudoEdit = _user.PseudoCoach ?? "";
+
+        _equipes = await TeamService.GetEquipesCoachAsync(userId);
+
+        if (_estCommissaire)
+        {
+            var toutes = await LeagueService.GetAllLiguesAsync();
+            _ligues = toutes.Where(l => l.CommissaireId == userId).ToList();
+        }
+    }
+
+    async Task ChangerPseudo()
+    {
+        if (_user is null) return;
+        _savingPseudo = true;
+        try
+        {
+            _user.PseudoCoach = _pseudoEdit.Trim();
+            var result = await UserManager.UpdateAsync(_user);
+            if (result.Succeeded)
+                Snackbar.Add("Pseudo mis à jour.", Severity.Success);
+            else
+                Snackbar.Add($"Erreur : {string.Join(", ", result.Errors.Select(e => e.Description))}", Severity.Error);
+        }
+        finally { _savingPseudo = false; }
+    }
+
+    async Task ChangerMotDePasse()
+    {
+        if (_user is null) return;
+
+        if (string.IsNullOrWhiteSpace(_ancienMdp) || string.IsNullOrWhiteSpace(_nouveauMdp))
+        {
+            Snackbar.Add("Veuillez remplir tous les champs.", Severity.Warning);
+            return;
+        }
+        if (_nouveauMdp != _confirmMdp)
+        {
+            Snackbar.Add("Les mots de passe ne correspondent pas.", Severity.Warning);
+            return;
+        }
+        if (_nouveauMdp.Length < 8)
+        {
+            Snackbar.Add("Le mot de passe doit contenir au moins 8 caractères.", Severity.Warning);
+            return;
+        }
+
+        _changingPassword = true;
+        try
+        {
+            var result = await UserManager.ChangePasswordAsync(_user, _ancienMdp, _nouveauMdp);
+            if (result.Succeeded)
+            {
+                _ancienMdp = "";
+                _nouveauMdp = "";
+                _confirmMdp = "";
+                Snackbar.Add("Mot de passe modifié avec succès.", Severity.Success);
+            }
+            else
+            {
+                var erreurs = result.Errors.Select(e => e.Description);
+                Snackbar.Add($"Erreur : {string.Join(", ", erreurs)}", Severity.Error);
+            }
+        }
+        finally { _changingPassword = false; }
+    }
+
+}

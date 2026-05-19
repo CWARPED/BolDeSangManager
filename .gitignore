@@ -1,0 +1,15 @@
+
+src/BolDeSangManager/obj/
+src/BolDeSangManager/bin/
+src/BolDeSangManager/Data/*.db
+src/BolDeSangManager/Data/*.db-shm
+src/BolDeSangManager/Data/*.db-wal
+
+tests/**/bin/
+tests/**/obj/
+
+.claude/
+# Fichiers secrets locaux
+.env
+.env.*
+!.env.example

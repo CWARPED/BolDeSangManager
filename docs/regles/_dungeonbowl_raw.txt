@@ -1,0 +1,482 @@
+         Document non officiel                              par Chroniques d’un Empire Oublié
+
+Dungeon Bowl
+
+Note de Rédaction : Ce document vous propose une compilation des règles du Dungeon Bowl, le jeu de Blood
+Bowl en souterrain. Une boîte du jeu vous est nécessaire pour utiliser ce document qui ne se substitue pas à la
+possession des règles officielles. Les divers paragraphes ne présentent ici que les différences avec le jeu
+classique et les spécificités propres au jeu au sein d’un donjon.
+
+                                                                                                                                        Ace.
+
+Le Donjon
+
+Le donjon est déployé par concertation entre les deux joueurs en veillant à ne pas avantager l’un ou l’autre. Il
+comporte au moins 4 couloirs, au moins 3 petites salles, au moins 1 grande salle et deux Zones d’En-but.
+
+Les cases doivent être adjacentes les unes aux autres et un minimum de deux cases doivent être connectées
+entre les différents couloirs et salles. Il est possible (mais pas obligatoire) de placer une tuile « Porte » sur ces
+deux cases de connexion.
+
+     • Les coffres : Ils renferment soit le ballon du match, soit sont piégés par des explosifs. Le ballon est placé
+          aléatoirement dans l’un des coffres avant la mise en place du donjon puis ils sont mélangés. Chaque coach
+          jette 1D6 (relance en cas d’égalité), celui qui obtient le meilleur résultat place un coffre en premier, puis à
+          tour de rôle. Un coffre peut être placé dans n’importe quelle salle ou Zone d’En-but, mais chacune ne peut
+          comporter qu’un seul coffre. Il n’est pas possible de déplacer 1 joueur sur 1 case où se trouve 1 coffre et
+          ces derniers ne gênent pas les Lignes de Vue. 1 joueur qui finit son mouvement (pas lors d’1 Blitz) sur 1
+          case adjacente à 1 coffre et qui est « Démarqué » peut l’ouvrir. Si le ballon s’y trouve, le joueur s’en saisit,
+          le coffre est supprimé du donjon, la case devient normale. Si le coffre est vide, il explose et tous les joueurs
+          adjacents au coffre sont « Plaqués ». Après résolution des jets d’AR, le coffre est supprimé du donjon, la
+          case devient normale.
+
+     • Les portails téléporteurs : Ils permettent aux coachs de faire entrer des joueurs supplémentaires dans le
+          donjon mais aussi aux joueurs déjà présents de se téléporter d’un endroit à l’autre. Ils sont numérotés de 1
+          à 6 et doivent être déployés dans l’ordre. Le coach qui a placé un premier coffre en second, place un portail
+          en premier selon les mêmes restrictions. Un portail doit être placé à plus de 2 cases d’un coffre. Lorsqu’un
+          joueur emprunte (ou est « Poussé » dans) un portail, jetez 1D6. Le joueur est automatiquement déplacé
+          sur le portail portant ce numéro. Lors d’une action de mouvement, l’utilisation du portail coûte 1 pt de M et
+          permet au joueur de continuer à se déplacer si son score de M le lui permet. Si 1 joueur est téléporté plus
+          d’une fois dans le même tour, il subit un jet de Blessures. Si 1 joueur est « Repoussé et Plaqué » dans un
+          portail, il est Plaqué et subit le jet d’AR avant d’être téléporté. Le ballon Rebondit à la normale (et peut être
+          Réceptionné) même si la case contient un portail. Si un joueur est téléporté sur un portail déjà occupé,
+          l’occupant est alors téléporté vers un autre portail. Le joueur qui, au moment du jet de téléportation, obtient
+          sur le D6 un résultat égal au numéro du portail sur lequel il se trouve déjà, est définitivement retiré du jeu
+          sans TO (le ballon Rebondit éventuellement). Une fois par tour (sauf au premier tour), un coach peut
+          décider de téléporter 1 joueur depuis sa Fosse dans le donjon vers 1 des portails tiré au hasard mais sans
+          qu’il puisse se mouvoir par la suite.
+
+     • Les Zones d’En-but : Un Toss est organisé, le gagnant choisit sa Zone d’En-but. Les coachs placent alors
+          leur fosse respective.
+
+     • Armurerie : Ajoutez +1 aux jets d’AR réalisés dans cette salle.
+
+     • Fosse aux Os : Ajoutez -1 aux jets pour Passer, Réceptionner ou Transmettre dans cette salle.
+
+     • Salle maudite : Les Relances d’Équipe ou de compétences ne peuvent être utilisées dans cette salle.
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –  Page 1
+• Salle inondée : Les joueurs chutent sur un résultat 1-2 quand ils tentent de Foncer dans cette salle.
+
+• Oubliettes : Les joueurs qui commencent leur tour dans cette salle jettent 1D6. Sur un résultat 1-2, ils ont
+     -1M durant leur activation.
+
+• Cuisines : Un joueur qui commence son tour dans cette salle peut choisir un adversaire se trouvant à 4
+     cases ou moins de distance et jette 1D6. Sur 5+, l’adversaire est Plaqué.
+
+• Égouts : Les joueurs qui pénètrent dans cette salle, gagnent Présence Perturbante jusqu’au début de leur
+     prochaine activation.
+
+• Salle au trésor : Un joueur qui commence son tour dans cette salle peut mettre fin à son activation
+     immédiatement pour récolter des fonds. À la fin du match, si 1 ou 2 joueurs de l’équipe ont récolté des
+     fonds, le coach gagnera +10 000 po. +20 000 po pour 3 ou 4 joueurs et +30 000 po pour 5 joueurs ou +.
+
+• Idole Chaotique : Cette statue est traitée comme un mur de 2 × 2 cases. Si 1 joueur est activé dans cette
+     salle, il jette 1D6. Sur 6, il obtient +1F durant son activation.
+
+• Crypte : Les deux sarcophages sont traités comme des murs de 2 × 1 cases mais qui ne gênent pas les
+     Lignes de Vue. Les joueurs qui sont « Poussés » sont automatiquement « Plaqués » et subissent +1 sur le
+     jet d’AR.
+
+• Antre du Dragonnet : Le dragonnet est traité comme un mur de 2 × 2 cases mais qui ne gêne pas la Ligne
+     de Vue. Si 1 joueur est activé dans cette salle, il jette 1D6. Sur 5+, il est automatiquement « Plaqué » avec
+     TO s’il portait le ballon.
+
+• Abîme Ardent : L’Abîme est traité comme un mur de 4 × 1 cases (sauf pour l’une des cases où se trouve
+     un pont) mais qui ne gênent pas les Lignes de Vue. Un joueur « Poussé » sur l’une des 3 cases de l’Abîme
+     subit un jet de Blessures. Le ballon Rebondit également sur ces 3 cases.
+
+Les Collèges
+
+                               COLLÈGE DES CIEUX
+
+          POSTE     COÛT M F AG CP AR                       COMPÉTENCES & TRAITS               PS
+    Linemen (0-16)
+Skink Runner        60 000 8   2 3+ 4+ 8+ Esquive, Minus                                       A GPF
+Norse               60 000 6   3 3+ 4+ 8+ Blocage, Poivrot, Crâne Épais                        G AF
+Eagle Warrior       50 000 6   3 3+ 4+ 8+ Dodge                                                G AF
+    Blitzers (0-4)
+Noble               105 000 7  3 3+ 4+ 9+ Blocage, Réception                                  AG PF
+Norse Berzeker      90 000 6   3 3+ 5+ 8+ Blocage, Frénésie, Rétablissement                   GF AP
+Piranaha Warrior    90 000 7   3 3+ 5+ 8+ Esquive, Frappe et Cours, Rétablissement             G AFP
+    Throwers (0-2)
+Human               80 000 6   3 3+ 2+ 9+ Passe, Prise Sûre                                   GP AF
+Python Warrior      75 000 6   3 3+ 3+ 8+ Esquive, Sur le Ballon, Passe, Passe Assurée        GA F
+    Blockers (0-6)
+Saurus              85 000 6   4 5+ 6+ 10+                                                    GF A
+Jaguar Warrior      110 000 6  4 3+ 5+ 9+ Défenseur, Esquive                                  GF A
+    Spécial (0-2)
+Chameleon Skink     70 000 7   2 3+ 3+ 8+ Esquive, Sur le ballon, Poursuite, Minus             A GPF
+Valkyrie            95 000 7   3 3+ 3+ 8+ Réception, Intrépide, Passe, Arracher le Ballon    AGP F
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –  Page 2
+                                       COLLÈGE DU FEU
+
+          POSTE       COÛT M    F AG CP AR                  COMPÉTENCES & TRAITS                                   PS
+    Linemen (0-16)   70 000 4                                                                                     GF A
+Dwarf Blocker        15 000 5   3 4+ 5+ 10+ Blocage, Tacle, Crâne Épais                                            AG
+                     50 000 6                                                                                     GM AF
+Gnoblar              70 000 4   1  3+  5+  6+               Esquive, Poids Plume, Glissade Contrôlée, Minus,      FG AM
+                     85 000 6                               Microbe                                               GP AF
+Bloodborn Marauder   80 000 5                                                                                     GF AP
+    Blockers (0-4)   95 000 5   3 3+ 4+ 8+ Frénésie                                                               GF A
+                     80 000 5                                                                                     FG AM
+Chaos Dwarf Blocker             3 4+ 6+ 10+ Blocage, Crâne Épais, Peau de Fer
+    Runners (0-2)    140 000 5                                                                                     F AGP
+                     145 000 5  3 3+ 4+ 9+ Prise Sûre, Crâne Épais                                                PF AG
+Dwarf Runner
+    Blitzers (0-2)              3 3+ 4+ 10+ Blocage, Crâne Épais
+
+Dwarf Blitzer                   3 4+ - 9+ Blocage, Intrépide, Frénésie, Crâne Épais
+    Spécial (0-2)
+                                3  4+  6+  10+              Bagarreur, Crachat de Feu, Crâne Épais,
+Troll Slayer                                                Présence Perturbante
+
+Breath Fire                     5  4+  5+  10+              Cerveau Lent, Châtaigne (+1), Crâne Épais, Lancer de
+                                                            Coéquipier
+    Big Guys (0-3)
+                                5  4+  4+  10+              Cerveau Lent, Châtaigne (+1), Crâne Épais, Botter de
+Ogre Blocker                                                Coéquipier
+
+Ogre Runt Punter
+
+                                       COLLÈGE DE L’OMBRE
+
+          POSTE       COÛT M    F AG CP AR                  COMPÉTENCES & TRAITS                                  PS
+    Linemen (0-16)
+Dark Elf             70 000 6   3 2+ 4+ 9+                                                                        AG F
+Skaven               50 000 7   3 3+ 4+ 8+                                                                         G AMF
+Goblin               40 000 6   2 3+ 4+ 8+ Esquive, Poids Plume, Minus                                             A GPF
+Gnome                40 000 5   2 3+ 4+ 7+ Lutte, Minus, Poids Plume, Rétablissement                               A FG
+Hobgoblin Lineman    40 000 6   3 3+ 4+ 8+                                                                         G AF
+    Runners (0-4)
+Dark Elf             80 000 7   3 2+ 3+ 8+ Délestage                                                              AGP F
+Gutter               85 000 9   2 2+ 4+ 8+ Esquive
+Woodland Fox         50 000 7   2 2+ - 6+ Mon Ballon1, Esquive, Glissade Contrôlée, Minus                         AG MPF
+    Blitzers (0-2)
+Dark Elf             100 000 7                                                                                    -2      A
+Skaven               90 000 7
+    Throwers (0-2)              3 2+ 4+ 9+ Blocage                                                                AG PF
+Skaven               85 000 7   3 3+ 5+ 9+ Blocage                                                                GF AMP
+Gnome Illusionist    50 000 5
+    Spécial (0-2)               3 3+ 2+ 8+ Passe, Prise Sûre                                                      GP AMF
+Witch Elf            110 000 7  2 3+ 3+ 7+ Lutte, Minus, Rétablissement, Farceur                                  AP G
+Assassin             85 000 7
+Gnome Beastmaster    55 000 5   3 2+ 5+ 8+ Esquive, Frénésie, Rétablissement                                      AG PF
+Hobgobelin Sneaky    70 000 6   3 2+ 5+ 8+ Poursuite, Poignard                                                    AG PF
+Stabba                          2 3+ 4+ 8+ Garde, Lutte, Minus, Rétablissement                                     A FG
+
+                                3 3+ 5+ 8+ Poignard, Poursuite                                                     G AF
+
+1 NdT : My Ball en VO. Barbarus trouve « A Moi la Baballe » plus mignon que la traduction littérale « mon ballon ». Même si je suis d’accord, je me réfère à
+      la traduction de GW fournie dans la boite d’équipe.
+
+2 NdT : non, ce n’est pas une erreur, le Renard n’a accès à aucune compétence principale...
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –                       Page 3
+                                       COLLÈGE DE LA LUMIÈRE
+
+          POSTE       COÛT M    F AG CP AR                  COMPÉTENCES & TRAITS                                           PS
+    Linemen (0-16)
+Elven Union          60 000 6   3 2+ 4+ 8+                                                                                AG F
+Imperial Retainer    45 000 6   3 4+ 4+ 8+ Parade                                                                          G AF
+    Runners (0-4)
+Elven Union Catcher  100 000 8  3 2+ 4+ 8+ Réception, Nerfs d’Acier                                                       AG F
+Human Catcher        65 000 8   2 3+ 5+ 8+ Réception, Esquive                                                             AG FP
+    Blitzers (0-2)
+Elven Union          115 000 7  3 2+ 3+ 9+ Blocage, Glissade Contrôlée                                                    AG PF
+    Throwers (0-4)
+Elven Union          75 000 6   3 2+ 2+ 8+ Passe                                                                         AGP F
+Impérial             75 000 6   3 3+ 3+ 9+ Passe, Passe dans la Course                                                    GP AF
+
+                                       COLLÈGE DE LA VIE
+
+          POSTE      COÛT M F AG CP AR                      COMPÉTENCES & TRAITS                                         PS
+    Linemen (0-16)
+Halfling Hopeful     30 000 5   2 3+ 4+ 7+ Esquive, Poids Plume, Minus                                                    A GF
+Rotter               35 000 5                                                                                            GM AF
+Snotling             15 000 5   3 4+ 6+ 9+ Décomposition, Contagieux                                                      AG
+Wooden Elf           70 000 7                                                                                            AG F
+    Runners (0-4)               1  3+  5+  6+               Esquive, Poids Plume, Minus, Glissade Contrôlée,
+Stilty Runna                                                Microbe
+Halfling Catcher
+Wood Elf Catcher                3 2+ 4+ 8+
+    Blitzers (0-2)
+Wardancer            20 000 6   1 3+ 5+ 6+ Esquive, Poids Plume, Minus, Glissade Contrôlée, Sprint A G
+    Throwers (0-2)   55 000 5
+Wood Elf             90 000 8   2 3+ 5+ 7+ Réception, Esquive, Poids Plume, Minus, Sprint                                A GF
+    Blockers (0-4)
+Halflling Hefty                 2 2+ 4+ 8+ Réception, Esquive                                                            AG F
+Bloater
+    Spécial (0-4)    125 000 8 3 2+ 4+ 8+ Blocage, Esquive, Saut                                                         AG PF
+Fungus Flinga
+                     95 000 7 3 2+ 2+ 8+ Passe                                                                           AGP F
+Fun-Hoppa
+    Big Guys (0-2)   50 000 5   2 3+ 3+ 8+ Esquive, parade, Minus                                                         AP GF
+                     115 000 4                                                                                           GMF A
+Treeman                         4  4+  6+  10+              Présence Perturbante, Répulsion, Contagieux,
+                                                            Régénération
+Trained Troll
+                     30 000 5   1  3+  4+  6+               Bombardier, Esquive, Poids Plume, Glissade Contrôlée,        AP      G
+Rotspawn             20 000 6                               Minus
+
+                                1  3+  5+  6+               Esquive, Échasse à Ressort, Poids Plume, Glissade            AG
+                                                            Contrôlée, Minus
+
+                     120 000 2  6  5+  5+  11+              Châtaigne (+1), Stabilité, Bras Musclé, Prendre Racine,      F AGP
+                     115 000 4                              Crâne Épais, Lancer de Coéquipier, Timmm-ber
+                     140 000 4
+                                                                 Toujours Affamé, Solitaire (3+), Châtaigne (+1), Gerbe  F AGP
+                                5 5+ 5+ 10+ de Vomi, Gros Débile, Régénération, Lancer de
+
+                                                                 Coéquipier
+
+                                                                 Présence Perturbante, Répulsion, Solitaire (4+),
+                                5 5+ - 10+ Châtaigne (+1), Contagieux, Gros Débile, Régénération, F AGP
+
+                                                                 Tentacules
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –                              Page 4
+                                      COLLÈGE DU MÉTAL
+
+          POSTE     COÛT M F AG CP AR                       COMPÉTENCES & TRAITS                                   PS
+    Linemen (0-16)
+Goblin Bruiser      45 000 6   2 3+ 4+ 8+ Esquive, Poids Plume, Minus, Crâne Épais                                 A GPF
+Orc                 50 000 5   3 3+ 4+ 10+                                                                         G AF
+Human               50 000 6   3 3+ 4+ 9+                                                                          G AF
+    Blitzers (0-4)
+Orc                 80 000 6   3 3+ 4+ 10+ Blocage                                                                GF AP
+Human               85 000 7   3 3+ 4+ 9+ Blocage                                                                 GF AP
+    Throwers (0-2)
+Orc                 65 000 5 3 3+ 3+ 9+ Passe, Prise Sûre                                                         GP AF
+    Blockers (0-6)
+Black Orc           90 000 4   4 4+ 5+ 10+ Bagarreur, Projection                                                  GF AP
+Big Un              90 000 5   4 4+ - 10+                                                                         GF A
+Bodyguard           90 000 6   3 3+ 5+ 9+ Stabilité, Lutte                                                        GF A
+Bloodseeker         110 000 5  4 4+ 6+ 10+ Frénésie                                                              GMF A
+
+          POSTE                       COLLÈGE DE LA MORT                                                           PS
+    Linemen (0-16)
+Skeleton            COÛT M F AG CP AR                       COMPÉTENCES & TRAITS                                   G AF
+Zombie                                                                                                             G AF
+Thrall              40 000 5   3 4+ 6+ 8+ Régénération, Crâne Épais                                                G AF
+    Runners (0-4)   40 000 4   3 4+ - 9+ Régénération
+Ghoul               40 000 6   3 3+ 4+ 8+                                                                         AG PF
+Vampire Runner                                                                                                    AG FP
+    Throwers (0-2)  75 000 7   3 3+ 4+ 8+ Esquive
+                    100 000 8  3 2+ 4+ 8+ Regard Hypnotique, Régénération, Soif de Sang (2+)                     AGP F
+Vampire Thrower
+                    110 000 6  4  2+  2+  9+                Passe, Regard Hypnotique, Régénération,               GF A
+    Blitzers (0-4)                                          Soif de Sang (2+)                                     GF AP
+                                                                                                                 AGS -3
+Wraith              95 000 6   3  3+  -   9+                Blocage, Répulsion, Sans les Mains, Régénération,
+                    90 000 6                                Glissade Contrôlée                                    GF A
+Wight               110 000 6
+                               3 3+ 5+ 9+ Blocage, Régénération                                                    F AG
+Vampire Blitzer                                                                                                    F AG
+                               4  2+  5+  9+                Juggernaut, Regard Hypnotique, Régénération,
+    Blockers (0-4)                                          Soif de Sang (3+)
+Flesh Golem
+                    115 000 4 4 4+ - 10+ Régénération, Stabilité, Crâne Épais
+    Big Guys (0-2)
+Mummy               125 000 3  5 5+   - 10+ Châtaigne (+1), Régénération
+                    150 000 5  5 4+
+Vargheist                             -   10+               Frénésie, Griffes, Régénération, Soif de Sang (3+),
+                                                            Solitaire (4+)
+
+3 NdT : Il est très étrange de voir que les Blitzer Vampire n’ont accès à aucune compétence « secondaire ».
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –                      Page 5
+                                       COLLÈGE DES BÊTES
+
+          POSTE       COÛT M F AG CP AR                     COMPÉTENCES & TRAITS                                      PS
+    Linemen (0-16)
+Beastman Runner       60 000 6 3 3+ 4+ 9+ Cornes                                                                      GMF AP
+    Runners (0-2)
+Werewolf              125 000 8 3 3+ 4+ 9+ Griffes, Frénésie, Régénération                                            AG PF
+    Blitzers (0-4)
+Pestigor              75 000 6   3 3+ 4+ 9+ Cornes, Contagieux, Régénération                                          GMF AP
+Khorngor              70 000 6   3 3+ 4+ 9+ Cornes, Juggernaut                                                        GMF AP
+Bull Centaur Blitzer  130 000 6  4 4+ 6+ 10+ Crâne Épais, Équilibre, Sprint                                            FG AM
+    Blockers (0-4)
+Chaos Chosen          100 000 5  4 3+ 5+ 10+                                                                          GMF A
+Ulfwerener            105 000 6  4 4+ - 9+ Frénésie                                                                    GF A
+    Spécial (0-2)
+Beer Boar             20 000 5 1 3+ - 6+ Equive, Sans les Mains, Minus, Microbe, Choppe-moi                           -       -
+    Big Guys (0-3)
+                      150 000 5  5 4+  -  9+                Solitaire (4+), Frénésie, Cornes, Châtaigne (+1),         MF AG
+Minotaur              140 000 6  5 5+                       Crâne Épais, Furie Débridée                                F AG
+                      150 000 6  5 4+                                                                                  F AGM
+Kroxigor              160 000 5  5 4+  -  10+               Cerveau Lent, Solitaire (4+), Châtaigne (+1),             MF AG
+                      140 000 5  5 4+                       Crâne Épais, Queue Préhensile                              F AG
+Rat Ogre
+                                       -  9+                Sauvagerie Animale, Frénésie, Solitaire (4+),
+Bloodspawn                                                  Châtaigne (+1), Queue Préhensile
+
+Yethee                                 -  9+                Griffes, Solitaire (4+), Frénésie, Châtaigne (+1),
+                                                            Fureur Débridée
+
+                                       -  9+                Griffes, Présence Perturbante, Solitaire (4+), Frénésie,
+                                                            Fureur Débridée,
+
+Les équipes payent toutes le même montant de 50 000 po pour l’achat de Relances d’Équipe lors de la création de
+la feuille d’équipe. Durant la Phase de Recrutement d’Après-Match, ce prix sera doublé pour acheter des Relances
+supplémentaires (le coût reste de 50 kpo pour le calcul de la Valeur d’Équipe) comme pour le jeu classique.
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –                           Page 6
+Préparation du match
+
+    • Coups de Pouces : Les règles pour sélectionner des Coups de Pouces sont les mèmes que pour un
+         match normal mais sont limités au tableau fourni ci-dessous.
+
+QTÉ                                                   EFFETS DES COUPS DE POUCE                                          COÛT
+0–8                                                                                                                      100 kpo
+0–3  Entraînement supplémentaire : offre une Relance d’Équipe utilisable à chaque mi-temps du match                      100 kpo
+
+0–1  Pots de vin : faites un jet D6>1 (si le coach n’a pas été Expulsé auparavant) pour corrompre l’arbitre s’il Ex-     100 kpo
+     pulse un de vos joueurs.
+
+     Magicien de Collège :
+     Dépend du Collègue de Magie de l’équipe et peut lancer 1 sort par match.
+
+        • Magicien d’Ambre (Collège des Bêtes) : Au début du tour d’un joueur, juste avant son activation,
+
+         choisissez un joueur. Lorsqu’il effectuera une action de Blocage, il aura 3D de Blocage sans comparer
+         les F.
+
+        • Magicien d’Améthyste (Collège de la Mort) : Au début de votre tour d’équipe, avant d’activer le
+
+         moindre joueur. Choisissez un joueur adverse marqué par l’un de vos joueurs, il fait un jet de Blessures.
+
+        • Magicien Brillant (Collège du Feu) : Au début du tour adverse, avant d’activer le moindre joueur.
+
+         Choisissez une case dans le donjon et jetez 1D6 pour chaque joueur sur cette case et sur les cases
+         adjacentes. Sur 4+, le joueur est percuté par une Boule de Feu, il est « Plaqué » avec un bonus de +1
+         sur le jet d’AR ou de Blessure (à choisir après le jet de dé).
+
+        • Magicien Céleste (Collège des Cieux) : Au début de votre tour d’équipe, avant d’activer le moindre
+
+         joueur. Choisissez un joueur adverse qui subit un jet d’AR puis jetez 1D6. Sur 3+, un autre joueur (de
+         n’importe quelle équipe) se trouvant dans les deux cases qui subit la même chose et ainsi de suite (une
+         seule fois par joueur).
+
+        • Magicien d’Or (Collège du Métal) : Au début de votre tour d’équipe, avant d’activer le moindre joueur.
+
+         Choisissez un joueur adverse et jetez 2D6. Si le résultat est inférieur ou égal à l’AR du joueur ciblé, il est
+         « Plaqué ».
+
+        • Magicien Gris (Collège de l’Ombre) : Au début de votre tour d’équipe, avant d’activer le moindre
+
+         joueur. Choisissez un joueur adverse qui ne porte pas le ballon et déplacez le de 5 cases.
+
+        • Magicien de Jade (Collège de la Vie) : Au début du tour adverse, avant d’activer le moindre joueur.
+
+         Choisissez un joueur adverse qui perd son activation et sa ZdT pour ce tour d’équipe.
+
+        • Magicien de Lumière (Collège de la Lumière) : Au début du tour adverse, avant d’activer le moindre
+
+         joueur. Durant son tour d’équipe, les joueurs du coach adverse ne peuvent pas faire de Passe, de
+         Transmission et ne peuvent assister les Blocages (offensifs, comme défensifs).
+
+Pendant le match
+
+Le gagnant du Toss jouera en premier.
+
+     • Coups d’Envoi : Il n’y en a tout simplement pas.
+
+     • Ligne de Vue : Un joueur est dans la ligne de Vue d’un autre, si et seulement si, une ligne peut être tracée
+          entre les deux joueurs et que cette dernière n’est pas coupée (touchée ne suffit pas) par l’un des murs du
+          donjon.
+
+     • Passer le ballon : Seules les Passes Rapides et Courtes sont possibles. Il
+          est tout fait possible de viser une case vide comme dans les règles normales,
+          mais également de viser une case où se trouve un mur pour faire rebondir le
+          ballon. Lorsqu’un joueur tente de faire rebondir le ballon contre un mur et
+          qu’il échoue, jetez 1D6. Sur 1-3, le ballon Ricoche de 1D6 cases vers la
+          droite et sur 4-6 vers la gauche. En cas de réussite le ballon Ricoche de 1D6
+          cases, soit de face (si le lanceur se trouve à la perpendiculaire du mur), soit
+          dans la diagonale opposée au lanceur (qu’elle que soit la case d’où provient
+          le ballon – flèches vertes -, ce dernier se déplacera dans la direction de la
+          diagonale opposée – flèche rouge-).
+
+          Si le ballon percute un mur, de manière involontaire, dans un angle, on utilise le gabarit de
+          Ricochet en le positionnant selon le schéma ci-contre.
+
+     • Heurter un mur : Un joueur qui percute un mur sur un Lancer de Coéquipier ne pourra
+          pas tenter d’atterrir sur ses pieds, il rebondira et subira +1 au jet d’AR. Lors d’un Blocage,
+          si un joueur est « Repoussé » contre un mur, le coach actif jette 1D6. Sur 1-3, le joueur
+          reste sur place et sur 4+, il chute sur la case où il se trouve et subit donc 1 jet d’AR.
+
+     • Éponge Magique : Une fois par tour, un coach peut, au lieu de téléporter un joueur de sa Réserve vers le
+          donjon, déplacer un joueur KO vers la Réserve.
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)  – http://empireoublie.free.fr –                              Page 7
+     • Gagner le match : L’équipe qui trouve le ballon dans un coffre (ou le récupère auprès de l’adversaire) et
+          qui franchit la première la Zone d’En-but adverse, pour marquer un Touchdown, gagne le match. Pour que
+          le match ne dure pas des jours et des jours, les coachs peuvent s’entendre sur une limite de temps. Une
+          fois le temps passé, faites en sorte que les deux coachs aient joué le même nombre de tours. L’équipe dont
+          le joueur a le plus court chemin à faire pour porter le ballon dans la Zone d’En-but adverse est déclarée
+          gagnante (à défaut tirage au sort).
+
+Après le match
+
+    • Gains : Le coach vainqueur jette 2D6. Le plus haut score x 10 000 po est donné au coach vainqueur. Le
+         plus bas résultat x 10 000 po est donné au coach perdant.
+
+     • Améliorations : Les Touchdowns offrent 5 PSP au lieu de 3. Le tableau des compétences est légèrement
+          différent.
+
+1er D6 2e D6                           TIRAGE AU HASARD DE COMPÉTENCES
+
+               Agilité            Générale                  Mutations                  Passe          Force
+
+     1 Réception           Blocage                          Main Démesurée  Précision                 Clé de Bras
+
+     2 Réception Plongeante Intrépide                       Griffes         Délestage                 Bagarreur
+
+1–3  3 Tacle Plongeant     Joueur Déloyal (+1)              Présence Perturbante Fumblerooskie        Esquive en Force
+     4 Esquive             Parade
+                                                            Bras Supplémentaire Transmission dans la Course Projection
+
+     5 Défenseur           Frénésie                         Répulsion       Chef                      Garde
+
+     6 Rétablissement      Navigateur de Portail Cornes                     Nerfs d’Acier             Juggernaut
+
+     1 Saut                Pro                              Peau de Fer     Sur le Ballon             Châtaigne (+1)
+
+     2 Libération Contrôlée Poursuite                       Grande Gueule   Passe                     Blocage Multiple
+
+4–6  3 Glissade Contrôlée  Arracher le Ballon               Queue Préhensile Passe par un Portail     Marteau-pilon
+                                                                                                      Stabilité
+     4 Sournois            Prise Sûre                       Tentacules      Passe dans la Course
+
+     5 Sprint              Tacle                            Deux Têtes      Passe Assurée             Bras Musclé
+
+     6 Équilibre           Lutte                            Très Longues Jambes Lancer contre un Mur  Crâne Épais
+
+Navigateur de Portail : Le joueur peut relancer le D6 lorsqu’il détermine le portail sur lequel il doit arriver.
+Transmission dans la Course : Le joueur peut continuer son mouvement après avoir fait une Transmission.
+Passe par un Portail : Le joueur peut déclarer 1 Passe après avoir utilisé un portail.
+Lancer contre un mur : Le joueur bénéficie d’un bonus de +1 quand il vise un mur.
+
+     • Points de Ligue : Une victoire offre 3 pts de ligue et un nul offre 1pt de ligue. Un bonus de +1 est accordé
+          pour les équipes causant 3 Éliminations ou plus, au cours du match.
+
+     • Ré-enrôlement : Spécifiquement pour le Dungeon Bowl, à la fin de la saison, le coach lance 1D6 pour
+          chaque joueur qui a gagné une ou plusieurs compétences. Sur 6, le joueur ne peut pas être ré-enrôlé et
+          l’équipe reçoit 20 000 po en compensation.
+
+NdR : Blood Bowl est une marque de Games Workshop Limited, utilisée sans autorisation, utilisée sans volonté de
+préjudice ou comme opposition à leur copyright. Ce document n’est en aucun cas officiel et n’est aucunement
+approuvé par Games Workshop Limited. Games Workshop, le logo Games Workshop, Blood Bowl, les logos et
+symboles Blood Bowl, ainsi que toutes les marques, noms, lieux, personnages, races, illustrations et images
+associés aux univers de Warhammer et au jeu Blood Bowl sont soit ®, TM et/ou © Copyright Games Workshop
+Ltd. Une boite de jeu vous est nécessaire pour utiliser ce document.
+
+                                                                                                                              Mise à jour : 27/10/24
+                                                                                     Source : Dungeon Bowl, les Spike ! et FaQ & Errata
+
+                                                                                                                                 Mise en page : Ace
+                                                                                                          Fourni par http://empireoublie.free.fr/
+
+Dungeon Bowl – Règles condensées (Mise à jour au 27/10/24)           – http://empireoublie.free.fr –  Page 8
+
