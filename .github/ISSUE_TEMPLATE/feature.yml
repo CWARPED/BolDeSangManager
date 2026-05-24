@@ -1,0 +1,28 @@
+name: Évolution
+description: Proposer une amélioration ou une nouvelle fonctionnalité
+title: "[Évolution] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: besoin
+    attributes:
+      label: Besoin
+      description: Quel problème cherchez-vous à résoudre ? Pourquoi ?
+      placeholder: "En tant que coach, j'aimerais pouvoir ... afin de ..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposition
+    attributes:
+      label: Solution envisagée
+      description: Comment imaginez-vous que ça fonctionne ?
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives envisagées (optionnel)
+    validations:
+      required: false

@@ -1,0 +1,40 @@
+name: Bug
+description: Signaler un dysfonctionnement
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Que s'est-il passé ? Qu'attendiez-vous à la place ?
+      placeholder: "Quand je clique sur X, l'app affiche Y au lieu de Z."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Étapes pour reproduire
+      placeholder: |
+        1. Aller sur la page ...
+        2. Cliquer sur ...
+        3. Observer ...
+    validations:
+      required: true
+
+  - type: input
+    id: contexte
+    attributes:
+      label: Contexte
+      description: Rôle (Admin / Commissaire / Coach), navigateur, version éventuelle
+      placeholder: "Coach, Firefox 124"
+    validations:
+      required: false
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Captures d'écran / logs (optionnel)
+    validations:
+      required: false
