@@ -21,6 +21,13 @@
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script>
         window.clickElement = id => { const el = document.getElementById(id); if (el) el.click(); };
+        window.getBrowserInfo = function () {
+            const ua = navigator.userAgent;
+            const m = ua.match(/(Edg|OPR|Chrome|Firefox|Safari)\/(\d+)/);
+            if (!m) return 'Inconnu';
+            const map = { Edg: 'Edge', OPR: 'Opera', Chrome: 'Chrome', Firefox: 'Firefox', Safari: 'Safari' };
+            return map[m[1]] + ' ' + m[2];
+        };
         window.blazorDownloadBase64File = function (filename, mimeType, base64) {
             const chars = atob(base64);
             const bytes = new Uint8Array(chars.length);

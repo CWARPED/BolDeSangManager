@@ -26,3 +26,11 @@ body:
       label: Alternatives envisagées (optionnel)
     validations:
       required: false
+
+  - type: input
+    id: contexte
+    attributes:
+      label: Contexte (rempli automatiquement)
+      description: Pseudo, rôle, navigateur, version de l'app
+    validations:
+      required: false

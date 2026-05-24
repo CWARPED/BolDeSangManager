@@ -23,6 +23,7 @@ RUN dotnet publish -c Release -o /app/publish -a $TARGETARCH --no-restore
 
 # ── Image finale (runtime uniquement, ~200 Mo) ─────────────────────────────────
 FROM mcr.microsoft.com/dotnet/aspnet:9.0
+ARG APP_VERSION=dev
 WORKDIR /app
 COPY --from=build /app/publish .
 
@@ -35,7 +36,8 @@ RUN apt-get update \
 VOLUME ["/data"]
 
 # Variables d'environnement par défaut — toutes surchargeable dans docker-compose ou via -e
-ENV ASPNETCORE_ENVIRONMENT=Production \
+ENV APP_VERSION=$APP_VERSION \
+    ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_URLS=http://+:8080 \
     ConnectionStrings__DefaultConnection="Data Source=/data/boldesang.db;Cache=Shared" \
     DataProtection__KeysPath=/data/DataProtection-Keys \

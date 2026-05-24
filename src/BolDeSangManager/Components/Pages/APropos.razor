@@ -1,5 +1,9 @@
 @page "/a-propos"
 @rendermode InteractiveServer
+@using Microsoft.AspNetCore.Identity
+@inject AuthenticationStateProvider AuthProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject IJSRuntime JS
 
 <PageTitle>À propos — BolDeSang Manager</PageTitle>
 
@@ -7,8 +11,13 @@
     <MudText Typo="Typo.h4" Color="Color.Error" Class="mb-4"><b>À propos</b></MudText>
 
     <MudPaper Class="pa-4 mb-4" Elevation="1">
-        <MudText Typo="Typo.h6" Class="mb-2">BolDeSang Manager</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">BolDeSang Manager</MudText>
+            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                @_version
+            </MudChip>
+        </MudStack>
+        <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2">
             Gestionnaire de ligues Blood Bowl &amp; Dungeon Bowl — projet de fan développé bénévolement.
         </MudText>
     </MudPaper>
@@ -52,12 +61,12 @@
             Aucun compte ? La création d'un compte GitHub est gratuite et rapide.
         </MudText>
         <MudStack Row="true" Spacing="2" Class="mt-3" Wrap="Wrap.Wrap">
-            <MudButton Href="https://github.com/cottedavid38-hue/BolDeSangManager/issues/new?template=bug.yml"
+            <MudButton Href="@_bugUrl"
                        Target="_blank" Variant="Variant.Filled" Color="Color.Error"
                        StartIcon="@Icons.Material.Filled.BugReport">
                 Signaler un bug
             </MudButton>
-            <MudButton Href="https://github.com/cottedavid38-hue/BolDeSangManager/issues/new?template=feature.yml"
+            <MudButton Href="@_featureUrl"
                        Target="_blank" Variant="Variant.Filled" Color="Color.Primary"
                        StartIcon="@Icons.Material.Filled.Lightbulb">
                 Proposer une amélioration
@@ -68,6 +77,9 @@
                 Voir toutes les issues
             </MudButton>
         </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-3 d-block">
+            Contexte joint automatiquement : <code>@_contexte</code>
+        </MudText>
     </MudPaper>
 
     <MudPaper Class="pa-4 mb-4" Elevation="1" Style="border-left:3px solid #ff9800">
@@ -98,3 +110,53 @@
         </MudStack>
     </MudPaper>
 </MudContainer>
+
+@code {
+    private const string IssuesBase = "https://github.com/cottedavid38-hue/BolDeSangManager/issues/new";
+
+    private string _version = Environment.GetEnvironmentVariable("APP_VERSION") ?? "dev";
+    private string _pseudo = "anonyme";
+    private string _role = "anonyme";
+    private string _browser = "inconnu";
+    private string _contexte = "";
+    private string _bugUrl = $"{IssuesBase}?template=bug.yml";
+    private string _featureUrl = $"{IssuesBase}?template=feature.yml";
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var principal = authState.User;
+        if (principal.Identity?.IsAuthenticated == true)
+        {
+            var user = await UserManager.GetUserAsync(principal);
+            if (user is not null)
+                _pseudo = !string.IsNullOrWhiteSpace(user.PseudoCoach) ? user.PseudoCoach! : (user.UserName ?? "anonyme");
+
+            foreach (var r in new[] { "Admin", "GrandCommissaire", "CommissaireDeLigue", "Coach" })
+            {
+                if (principal.IsInRole(r)) { _role = r; break; }
+            }
+        }
+        BuildUrls();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        try
+        {
+            _browser = await JS.InvokeAsync<string>("getBrowserInfo");
+            BuildUrls();
+            StateHasChanged();
+        }
+        catch { /* JS indispo — on garde "inconnu" */ }
+    }
+
+    private void BuildUrls()
+    {
+        _contexte = $"Pseudo: {_pseudo} | Rôle: {_role} | Navigateur: {_browser} | Version: {_version}";
+        var encoded = Uri.EscapeDataString(_contexte);
+        _bugUrl = $"{IssuesBase}?template=bug.yml&contexte={encoded}";
+        _featureUrl = $"{IssuesBase}?template=feature.yml&contexte={encoded}";
+    }
+}
