@@ -7,11 +7,11 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
 
-<PageTitle>Rejoindre la ligue — BolDeSang Manager</PageTitle>
+<PageTitle>@(_modeEdition ? "Modifier mon équipe" : "Rejoindre la ligue") — BolDeSang Manager</PageTitle>
 
-<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4"><b>Rejoindre la ligue</b></MudText>
+<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4"><b>@(_modeEdition ? "Modifier mon équipe" : "Rejoindre la ligue")</b></MudText>
 
-@if (_ligue is null && LigueId > 0)
+@if (_chargement)
 {
     <MudProgressLinear Color="Color.Error" Indeterminate="true" />
 }
@@ -60,10 +60,13 @@ else
     {
         <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-4" Spacing="2">
             <MudText Typo="Typo.subtitle1"><b>@_selectedType.Nom</b></MudText>
-            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
-                      OnClick="@(() => { _selectedType = null; _slots.Clear(); })">
-                ← Changer de race
-            </MudButton>
+            @if (!_modeEdition)
+            {
+                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Secondary"
+                          OnClick="@(() => { _selectedType = null; _slots.Clear(); })">
+                    ← Changer de race
+                </MudButton>
+            }
         </MudStack>
 
         <MudGrid>
@@ -148,12 +151,12 @@ else
                 </MudGrid>
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-6" Spacing="2">
-                    <MudButton Href="@($"/ligues/{LigueId}")" Variant="Variant.Text">Annuler</MudButton>
+                    <MudButton Href="@(_modeEdition ? $"/equipes/{TeamId}" : $"/ligues/{_ligue.Id}")" Variant="Variant.Text">Annuler</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Error"
                               StartIcon="@Icons.Material.Filled.Save"
                               Disabled="@(_saving || _budgetRestant < 0 || string.IsNullOrWhiteSpace(_nomEquipe) || _slots.Count == 0)"
                               OnClick="Soumettre">
-                        @(_saving ? "Création..." : "Créer l'équipe")
+                        @(_saving ? (_modeEdition ? "Enregistrement..." : "Création...") : (_modeEdition ? "Enregistrer" : "Créer l'équipe"))
                     </MudButton>
                 </MudStack>
             </MudItem>
@@ -254,6 +257,10 @@ else
     [SupplyParameterFromQuery]
     public int LigueId { get; set; }
 
+    [Parameter]
+    [SupplyParameterFromQuery]
+    public int TeamId { get; set; }
+
     League? _ligue;
     List<TeamType> _teamTypes = [];
     TeamType? _selectedType;
@@ -265,6 +272,9 @@ else
     int _cheerleaders;
     bool _apothicaire;
     bool _saving;
+    bool _chargement = true;
+    bool _modeEdition;
+    string _userId = "";
 
     bool _estDB => _ligue?.Game?.Type == GameType.DungeonBowl;
 
@@ -279,10 +289,51 @@ else
 
     protected override async Task OnInitializedAsync()
     {
-        if (LigueId <= 0) return;
-        _ligue = await LeagueService.GetLigueAsync(LigueId);
-        if (_ligue is not null && _ligue.RulesVersionId != 0)
-            _teamTypes = await TeamService.GetTypesEquipesParVersionAsync(_ligue.RulesVersionId);
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        if (TeamId > 0)
+        {
+            _modeEdition = true;
+            var equipe = await TeamService.GetEquipeAsync(TeamId);
+            if (equipe is null || equipe.CoachId != _userId || equipe.League?.Statut != LeagueStatus.Inscription)
+            {
+                Snackbar.Add("Édition impossible : équipe inaccessible ou phase verrouillée.", Severity.Error);
+                Nav.NavigateTo(equipe is null ? "/" : $"/equipes/{TeamId}");
+                _chargement = false;
+                return;
+            }
+
+            _ligue = equipe.League;
+            LigueId = _ligue!.Id;
+            _selectedType = await TeamService.GetTeamTypeAvecPostesAsync(equipe.TeamTypeId);
+            _nomEquipe = equipe.Nom;
+            _nombreRelances = equipe.NombreRelances;
+            _fansDevoues = equipe.FansDevoues;
+            _coachsAssistants = equipe.NombreCoachsAssistants;
+            _cheerleaders = equipe.NombreCheerleaders;
+            _apothicaire = equipe.Apothicaire;
+
+            foreach (var j in equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).OrderBy(j => j.Numero))
+            {
+                _slots.Add(new PlayerSlot
+                {
+                    PositionId = j.PlayerPositionId,
+                    PositionNom = j.PlayerPosition?.Nom ?? "",
+                    Cout = j.PlayerPosition?.Cout ?? j.ValeurActuelle,
+                    Nom = j.Nom,
+                    Numero = j.Numero
+                });
+            }
+        }
+        else if (LigueId > 0)
+        {
+            _ligue = await LeagueService.GetLigueAsync(LigueId);
+            if (_ligue is not null && _ligue.RulesVersionId != 0)
+                _teamTypes = await TeamService.GetTypesEquipesParVersionAsync(_ligue.RulesVersionId);
+        }
+
+        _chargement = false;
     }
 
     async Task SelectionnerType(TeamType type)
@@ -350,28 +401,36 @@ else
         _saving = true;
         try
         {
-            var authState = await AuthProvider.GetAuthenticationStateAsync();
-            var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
-
-            var equipe = new Team
-            {
-                Nom = _nomEquipe,
-                CoachId = userId,
-                LeagueId = LigueId,
-                TeamTypeId = _selectedType.Id,
-                Tresorerie = _budgetRestant,
-                NombreRelances = _nombreRelances,
-                FansDevoues = _fansDevoues,
-                NombreCoachsAssistants = _coachsAssistants,
-                NombreCheerleaders = _cheerleaders,
-                Apothicaire = _apothicaire
-            };
-
             var joueurs = _slots.Select(s => (s.PositionId, s.Nom, s.Numero)).ToList();
-            var created = await TeamService.CreerEquipeAsync(equipe, joueurs);
+            Team equipe;
 
-            Snackbar.Add("Équipe créée avec succès !", Severity.Success);
-            Nav.NavigateTo($"/equipes/{created.Id}");
+            if (_modeEdition)
+            {
+                equipe = await TeamService.ModifierEquipeAsync(
+                    TeamId, _userId, _nomEquipe, _budgetRestant,
+                    _nombreRelances, _fansDevoues, _coachsAssistants, _cheerleaders, _apothicaire,
+                    joueurs);
+                Snackbar.Add("Équipe modifiée avec succès !", Severity.Success);
+            }
+            else
+            {
+                equipe = await TeamService.CreerEquipeAsync(new Team
+                {
+                    Nom = _nomEquipe,
+                    CoachId = _userId,
+                    LeagueId = LigueId,
+                    TeamTypeId = _selectedType.Id,
+                    Tresorerie = _budgetRestant,
+                    NombreRelances = _nombreRelances,
+                    FansDevoues = _fansDevoues,
+                    NombreCoachsAssistants = _coachsAssistants,
+                    NombreCheerleaders = _cheerleaders,
+                    Apothicaire = _apothicaire
+                }, joueurs);
+                Snackbar.Add("Équipe créée avec succès !", Severity.Success);
+            }
+
+            Nav.NavigateTo($"/equipes/{equipe.Id}");
         }
         catch (Exception ex)
         {

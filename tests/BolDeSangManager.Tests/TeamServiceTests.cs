@@ -380,4 +380,187 @@ public class TeamServiceTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => service.CreerEquipeAsync(equipe, joueurs));
     }
+
+    // ─── Phase Inscription : guards + multi-équipes + édition + suppression ───
+
+    [Fact]
+    public async Task CreerEquipe_LigueEnCreation_ThrowsException()
+    {
+        await using var db = _factory.CreateContext();
+        var coach = DataSeeder.CreateUser("creation");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var (teamType, position) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id, LeagueStatus.Creation);
+
+        var svc = CreateService(db);
+        var equipe = new Team { Nom = "X", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]));
+    }
+
+    [Fact]
+    public async Task CreerEquipe_LigueEnCours_ThrowsException()
+    {
+        await using var db = _factory.CreateContext();
+        var coach = DataSeeder.CreateUser("encours");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var (teamType, position) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id, LeagueStatus.EnCours);
+
+        var svc = CreateService(db);
+        var equipe = new Team { Nom = "X", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]));
+    }
+
+    [Fact]
+    public async Task CreerEquipe_MultiEquipesMemeCoach_Succes()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        await svc.CreerEquipeAsync(
+            new Team { Nom = "Première", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id },
+            [(position.Id, "J1", 1)]);
+        await svc.CreerEquipeAsync(
+            new Team { Nom = "Seconde", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id },
+            [(position.Id, "J2", 1)]);
+
+        await using var db2 = _factory.CreateContext();
+        var count = await db2.Teams.CountAsync(t => t.CoachId == coach.Id && t.LeagueId == ligue.Id);
+        Assert.Equal(2, count);
+    }
+
+    [Fact]
+    public async Task ModifierEquipe_PhaseInscription_MetAJourNomEtRoster()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var equipe = new Team { Nom = "Avant", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await svc.CreerEquipeAsync(equipe, [(position.Id, "Vieux", 1)]);
+
+        await svc.ModifierEquipeAsync(
+            equipe.Id, coach.Id, "Après", tresorerie: 400_000,
+            nombreRelances: 2, fansDevoues: 3, coachsAssistants: 1, cheerleaders: 0, apothicaire: true,
+            joueurs: [(position.Id, "Nouveau1", 1), (position.Id, "Nouveau2", 2), (position.Id, "Nouveau3", 3)]);
+
+        await using var db2 = _factory.CreateContext();
+        var team = await db2.Teams.Include(t => t.Joueurs).FirstAsync(t => t.Id == equipe.Id);
+        Assert.Equal("Après", team.Nom);
+        Assert.Equal(400_000, team.Tresorerie);
+        Assert.Equal(2, team.NombreRelances);
+        Assert.Equal(3, team.FansDevoues);
+        Assert.True(team.Apothicaire);
+        Assert.Equal(3, team.Joueurs.Count);
+        Assert.DoesNotContain(team.Joueurs, j => j.Nom == "Vieux");
+    }
+
+    [Fact]
+    public async Task ModifierEquipe_HorsPhaseInscription_ThrowsException()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var equipe = new Team { Nom = "Test", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]);
+
+        // Faire passer la ligue en EnCours
+        await using (var dbUpdate = _factory.CreateContext())
+        {
+            var l = await dbUpdate.Leagues.FindAsync(ligue.Id);
+            l!.Statut = LeagueStatus.EnCours;
+            await dbUpdate.SaveChangesAsync();
+        }
+
+        await using var db3 = _factory.CreateContext();
+        var svc2 = CreateService(db3);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc2.ModifierEquipeAsync(equipe.Id, coach.Id, "Renommée", 0, 0, 0, 0, 0, false,
+                [(position.Id, "Z", 1)]));
+    }
+
+    [Fact]
+    public async Task ModifierEquipe_NonProprietaire_ThrowsException()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var autre = DataSeeder.CreateUser("intrus");
+        db.Users.Add(autre);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+        var equipe = new Team { Nom = "Test", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.ModifierEquipeAsync(equipe.Id, autre.Id, "Hack", 0, 0, 0, 0, 0, false,
+                [(position.Id, "Z", 1)]));
+    }
+
+    [Fact]
+    public async Task SupprimerEquipe_PhaseInscription_SupprimeEquipeEtJoueurs()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var equipe = new Team { Nom = "ASupprimer", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1), (position.Id, "J2", 2)]);
+
+        await svc.SupprimerEquipeAsync(equipe.Id, coach.Id);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.Null(await db2.Teams.FindAsync(equipe.Id));
+        Assert.Equal(0, await db2.TeamPlayers.CountAsync(j => j.TeamId == equipe.Id));
+    }
+
+    [Fact]
+    public async Task SupprimerEquipe_HorsPhaseInscription_ThrowsException()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var equipe = new Team { Nom = "T", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]);
+
+        await using (var dbUpdate = _factory.CreateContext())
+        {
+            var l = await dbUpdate.Leagues.FindAsync(ligue.Id);
+            l!.Statut = LeagueStatus.EnCours;
+            await dbUpdate.SaveChangesAsync();
+        }
+
+        await using var db3 = _factory.CreateContext();
+        var svc2 = CreateService(db3);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc2.SupprimerEquipeAsync(equipe.Id, coach.Id));
+    }
+
+    [Fact]
+    public async Task SupprimerEquipe_NonProprietaire_ThrowsException()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var autre = DataSeeder.CreateUser("intrusD");
+        db.Users.Add(autre);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+        var equipe = new Team { Nom = "T", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SupprimerEquipeAsync(equipe.Id, autre.Id));
+    }
 }

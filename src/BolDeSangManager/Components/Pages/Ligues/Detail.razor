@@ -58,11 +58,11 @@ else
                     </MudButton>
                 }
             }
-            @if (_ligue.Statut == LeagueStatus.Inscription && !_estInscrit)
+            @if (_ligue.Statut == LeagueStatus.Inscription)
             {
                 <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
                           Href="@($"/equipes/rejoindre?ligueId={_ligue.Id}")">
-                    Rejoindre la ligue
+                    @(_estInscrit ? "Inscrire une autre équipe" : "Rejoindre la ligue")
                 </MudButton>
             }
         </MudStack>

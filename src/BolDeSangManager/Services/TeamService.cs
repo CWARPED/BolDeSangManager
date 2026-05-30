@@ -66,48 +66,23 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
     public async Task<Team> CreerEquipeAsync(Team equipe, List<(int positionId, string nom, int numero)> joueurs)
     {
-        equipe.CreeLe = DateTime.UtcNow;
-        db.Teams.Add(equipe);
-        await db.SaveChangesAsync();
+        var ligue = await db.Leagues.FirstOrDefaultAsync(l => l.Id == equipe.LeagueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+        if (ligue.Statut != LeagueStatus.Inscription)
+            throw new InvalidOperationException("Création d'équipe possible uniquement en phase Inscription.");
 
         var teamType = await GetTeamTypeAvecPostesAsync(equipe.TeamTypeId)
             ?? throw new InvalidOperationException("Type d'équipe introuvable");
 
-        // Valider les limites par position et par rôle avant d'insérer quoi que ce soit
-        foreach (var (posId, _, _) in joueurs)
-        {
-            var pos = teamType.Postes.FirstOrDefault(p => p.Id == posId)
-                ?? throw new InvalidOperationException($"Poste {posId} introuvable");
-            var countPoste = joueurs.Count(j => j.positionId == posId);
-            if (countPoste > pos.QuantiteMax)
-                throw new InvalidOperationException($"Limite dépassée pour {pos.Nom} : maximum {pos.QuantiteMax} par équipe.");
+        ValiderRoster(teamType, joueurs);
 
-
-        }
-
-        // Validation des limites par mot-clé (ex: max 3 Gros Bras pour Renégats du Chaos)
-        if (teamType.LimitesMotsCles.Count > 0)
-        {
-            var keywordsParPosition = teamType.Postes.ToDictionary(
-                p => p.Id,
-                p => p.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                                .ToHashSet(StringComparer.OrdinalIgnoreCase));
-
-            foreach (var limite in teamType.LimitesMotsCles)
-            {
-                var count = joueurs.Count(j =>
-                    keywordsParPosition.TryGetValue(j.positionId, out var kws) && kws.Contains(limite.MotCle));
-                if (count > limite.Max)
-                    throw new InvalidOperationException(
-                        $"Limite « {limite.MotCle} » dépassée : maximum {limite.Max} joueurs avec ce mot-clé.");
-            }
-        }
+        equipe.CreeLe = DateTime.UtcNow;
+        db.Teams.Add(equipe);
+        await db.SaveChangesAsync();
 
         foreach (var (positionId, nom, numero) in joueurs)
         {
-            var position = teamType.Postes.FirstOrDefault(p => p.Id == positionId)
-                ?? throw new InvalidOperationException($"Poste {positionId} introuvable");
-
+            var position = teamType.Postes.First(p => p.Id == positionId);
             var joueur = new TeamPlayer
             {
                 TeamId = equipe.Id,
@@ -126,6 +101,130 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         await db.SaveChangesAsync();
         logger.LogInformation("Équipe créée : {NomEquipe} (id={Id}), {NbJoueurs} joueurs initiaux", equipe.Nom, equipe.Id, joueurs.Count);
         return equipe;
+    }
+
+    public async Task<Team> ModifierEquipeAsync(
+        int teamId,
+        string coachId,
+        string nouveauNom,
+        int tresorerie,
+        int nombreRelances,
+        int fansDevoues,
+        int coachsAssistants,
+        int cheerleaders,
+        bool apothicaire,
+        List<(int positionId, string nom, int numero)> joueurs)
+    {
+        var equipe = await db.Teams
+            .Include(t => t.League)
+            .Include(t => t.Joueurs).ThenInclude(j => j.Competences)
+            .FirstOrDefaultAsync(t => t.Id == teamId)
+            ?? throw new InvalidOperationException("Équipe introuvable");
+
+        if (equipe.CoachId != coachId)
+            throw new InvalidOperationException("Vous n'êtes pas le coach de cette équipe.");
+        if (equipe.League is null || equipe.League.Statut != LeagueStatus.Inscription)
+            throw new InvalidOperationException("Modification possible uniquement en phase Inscription.");
+
+        var teamType = await GetTeamTypeAvecPostesAsync(equipe.TeamTypeId)
+            ?? throw new InvalidOperationException("Type d'équipe introuvable");
+
+        ValiderRoster(teamType, joueurs);
+
+        // Supprimer l'ancien roster (compétences puis joueurs)
+        var anciennesCompetences = equipe.Joueurs.SelectMany(j => j.Competences).ToList();
+        if (anciennesCompetences.Count > 0)
+            db.TeamPlayerSkills.RemoveRange(anciennesCompetences);
+        if (equipe.Joueurs.Count > 0)
+            db.TeamPlayers.RemoveRange(equipe.Joueurs);
+
+        equipe.Nom = nouveauNom;
+        equipe.Tresorerie = tresorerie;
+        equipe.NombreRelances = nombreRelances;
+        equipe.FansDevoues = fansDevoues;
+        equipe.NombreCoachsAssistants = coachsAssistants;
+        equipe.NombreCheerleaders = cheerleaders;
+        equipe.Apothicaire = apothicaire;
+
+        await db.SaveChangesAsync();
+
+        // Recréer le roster
+        foreach (var (positionId, nom, numero) in joueurs)
+        {
+            var position = teamType.Postes.First(p => p.Id == positionId);
+            var joueur = new TeamPlayer
+            {
+                TeamId = equipe.Id,
+                PlayerPositionId = positionId,
+                Nom = string.IsNullOrWhiteSpace(nom) ? $"#{numero}" : nom,
+                Numero = numero,
+                ValeurActuelle = position.Cout,
+                RecruteLe = DateTime.UtcNow
+            };
+            db.TeamPlayers.Add(joueur);
+            await db.SaveChangesAsync();
+
+            AjouterCompetencesDepart(joueur.Id, position.CompetencesDepart);
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Équipe modifiée : {NomEquipe} (id={Id}), {NbJoueurs} joueurs", equipe.Nom, equipe.Id, joueurs.Count);
+        return equipe;
+    }
+
+    public async Task SupprimerEquipeAsync(int teamId, string coachId)
+    {
+        var equipe = await db.Teams
+            .Include(t => t.League)
+            .Include(t => t.Joueurs).ThenInclude(j => j.Competences)
+            .FirstOrDefaultAsync(t => t.Id == teamId)
+            ?? throw new InvalidOperationException("Équipe introuvable");
+
+        if (equipe.CoachId != coachId)
+            throw new InvalidOperationException("Vous n'êtes pas le coach de cette équipe.");
+        if (equipe.League is null || equipe.League.Statut != LeagueStatus.Inscription)
+            throw new InvalidOperationException("Suppression possible uniquement en phase Inscription.");
+
+        var competences = equipe.Joueurs.SelectMany(j => j.Competences).ToList();
+        if (competences.Count > 0)
+            db.TeamPlayerSkills.RemoveRange(competences);
+        if (equipe.Joueurs.Count > 0)
+            db.TeamPlayers.RemoveRange(equipe.Joueurs);
+        db.Teams.Remove(equipe);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Équipe supprimée : {NomEquipe} (id={Id})", equipe.Nom, equipe.Id);
+    }
+
+    private static void ValiderRoster(TeamType teamType, List<(int positionId, string nom, int numero)> joueurs)
+    {
+        // Limites par poste (quantité max)
+        foreach (var (posId, _, _) in joueurs)
+        {
+            var pos = teamType.Postes.FirstOrDefault(p => p.Id == posId)
+                ?? throw new InvalidOperationException($"Poste {posId} introuvable");
+            var countPoste = joueurs.Count(j => j.positionId == posId);
+            if (countPoste > pos.QuantiteMax)
+                throw new InvalidOperationException($"Limite dépassée pour {pos.Nom} : maximum {pos.QuantiteMax} par équipe.");
+        }
+
+        // Limites par mot-clé (ex : max 3 Gros Bras pour Renégats du Chaos)
+        if (teamType.LimitesMotsCles.Count > 0)
+        {
+            var keywordsParPosition = teamType.Postes.ToDictionary(
+                p => p.Id,
+                p => p.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+            foreach (var limite in teamType.LimitesMotsCles)
+            {
+                var count = joueurs.Count(j =>
+                    keywordsParPosition.TryGetValue(j.positionId, out var kws) && kws.Contains(limite.MotCle));
+                if (count > limite.Max)
+                    throw new InvalidOperationException(
+                        $"Limite « {limite.MotCle} » dépassée : maximum {limite.Max} joueurs avec ce mot-clé.");
+            }
+        }
     }
 
     public async Task<TeamPlayer> RecruterJoueurAsync(int teamId, int positionId, string nom, int numero)

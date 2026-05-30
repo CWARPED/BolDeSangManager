@@ -1,6 +1,10 @@
 @page "/equipes/{Id:int}"
 @rendermode InteractiveServer
 @inject TeamService TeamService
+@inject AuthenticationStateProvider AuthProvider
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>@(_equipe?.Nom ?? "Équipe") — BolDeSang Manager</PageTitle>
 
@@ -19,10 +23,23 @@ else
                 | Ligue : @_equipe.League?.Nom
             </MudText>
         </div>
-        <MudButton Href="@($"/equipes/ma-feuille?teamId={_equipe.Id}")" Variant="Variant.Outlined" Color="Color.Error"
-                  StartIcon="@Icons.Material.Filled.TableChart" Size="Size.Small">
-            Feuille PDF
-        </MudButton>
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            @if (_peutEditer)
+            {
+                <MudButton Href="@($"/equipes/rejoindre?teamId={_equipe.Id}")" Variant="Variant.Outlined" Color="Color.Primary"
+                          StartIcon="@Icons.Material.Filled.Edit" Size="Size.Small">
+                    Modifier
+                </MudButton>
+                <MudButton OnClick="ConfirmerSuppression" Variant="Variant.Outlined" Color="Color.Error"
+                          StartIcon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small">
+                    Supprimer
+                </MudButton>
+            }
+            <MudButton Href="@($"/equipes/ma-feuille?teamId={_equipe.Id}")" Variant="Variant.Outlined" Color="Color.Error"
+                      StartIcon="@Icons.Material.Filled.TableChart" Size="Size.Small">
+                Feuille PDF
+            </MudButton>
+        </MudStack>
     </MudStack>
 
     <!-- Statistiques d'équipe -->
@@ -231,12 +248,42 @@ else
 
     Team? _equipe;
     int _vea;
+    string _userId = "";
+
+    bool _peutEditer =>
+        _equipe is not null
+        && _equipe.CoachId == _userId
+        && _equipe.League?.Statut == LeagueStatus.Inscription;
 
     protected override async Task OnInitializedAsync()
     {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
         _equipe = await TeamService.GetEquipeAsync(Id);
         if (_equipe is not null)
             _vea = TeamService.CalculerVEA(_equipe);
+    }
+
+    async Task ConfirmerSuppression()
+    {
+        if (_equipe is null) return;
+        var result = await DialogService.ShowMessageBox(
+            "Supprimer l'équipe",
+            $"Êtes-vous sûr de vouloir supprimer « {_equipe.Nom} » ? Cette action est irréversible.",
+            yesText: "Supprimer", cancelText: "Annuler");
+        if (result != true) return;
+
+        try
+        {
+            await TeamService.SupprimerEquipeAsync(_equipe.Id, _userId);
+            Snackbar.Add("Équipe supprimée.", Severity.Success);
+            Nav.NavigateTo("/profil");
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
     }
 
     static string InjuryCellStyle(int mod) =>
