@@ -6,6 +6,7 @@
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
+@using BolDeSangManager.Helpers
 
 <PageTitle>@(_modeEdition ? "Modifier mon équipe" : "Rejoindre la ligue") — BolDeSang Manager</PageTitle>
 
@@ -69,22 +70,20 @@ else
             }
         </MudStack>
 
+        <div class="budget-sticky" style="@_budgetGauge">
+            <span class="budget-sticky-label">Budget restant</span>
+            <span class="budget-sticky-value@(_budgetNegatif ? " budget-neg" : "")">
+                @_budgetRestant.ToString("N0") po
+                <span class="budget-sticky-total">/ @_ligue.BudgetDepart.ToString("N0")</span>
+            </span>
+        </div>
+
         <MudGrid>
             <!-- Formulaire principal -->
             <MudItem xs="12" md="8">
                 <MudTextField @bind-Value="_nomEquipe" Label="Nom de l'équipe"
                              Variant="Variant.Outlined" Required="true" Class="mb-4"
                              HelperText="Ex: Les Crocs de Nuln" />
-
-                <!-- Budget tracker -->
-                <MudPaper Elevation="0" Class="pa-3 mb-4" Style="background:#fafafa; border:1px solid #e0e0e0; border-radius:8px">
-                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-                        <MudText Typo="Typo.subtitle2">Budget restant</MudText>
-                        <MudText Typo="Typo.h6" Color="@(_budgetRestant < 0 ? Color.Error : Color.Success)">
-                            <b>@_budgetRestant.ToString("N0") po</b>
-                        </MudText>
-                    </MudStack>
-                </MudPaper>
 
                 <!-- Effectif -->
                 <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Effectif — @_slots.Count joueur(s)</b></MudText>
@@ -164,91 +163,55 @@ else
             <!-- Panel postes disponibles -->
             <MudItem xs="12" md="4">
                 <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Postes disponibles</b></MudText>
-                @if (_selectedType?.LimitesMotsCles is not null && _selectedType.LimitesMotsCles.Any())
-                {
-                    <MudPaper Elevation="0" Class="pa-2 mb-3" Style="background:rgba(229,57,53,0.06); border:1px solid rgba(229,57,53,0.2); border-radius:4px">
-                        <MudText Typo="Typo.caption" Style="font-weight:600; color:rgba(255,255,255,0.7)">Limites par mot-clé</MudText>
-                        @foreach (var lim in _selectedType.LimitesMotsCles)
-                        {
-                            var countCurrent = _slots.Count(s =>
-                            {
-                                var p = _selectedType.Postes.FirstOrDefault(pp => pp.Id == s.PositionId);
-                                return p is not null && p.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                                    .Any(k => k.Trim().Equals(lim.MotCle, StringComparison.OrdinalIgnoreCase));
-                            });
-                            <MudText Typo="Typo.caption" Style="display:block; font-size:11px">
-                                <b>@lim.MotCle</b> : @countCurrent/@lim.Max
-                            </MudText>
-                        }
-                    </MudPaper>
+                @{
+                    var (_cadres, _classiques) = RosterDisplayHelpers.GroupePostesParMotCleLimite(
+                        _selectedType.Postes, _selectedType.LimitesMotsCles);
                 }
-                @foreach (var pos in _selectedType.Postes.OrderBy(p => p.Cout))
+                @foreach (var cadre in _cadres)
                 {
-                    var count = _slots.Count(s => s.PositionId == pos.Id);
-                    var complet = count >= pos.QuantiteMax || DepasseLimiteMotCle(pos);
-                        var sansFonds = _budgetRestant < pos.Cout;
-                        <MudPaper Elevation="0" Class="pa-2 mb-2"
-                                 Style="@($"border:1px solid {(complet ? "rgba(255,255,255,0.06)" : "rgba(229,57,53,0.35)")}; border-radius:4px; opacity:{(complet ? "0.45" : "1")}")">
-                            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Spacing="1">
-                                <div style="flex:1; min-width:0">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                                        <MudText Typo="Typo.body2"><b>@pos.Nom</b></MudText>
-                                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                            @count/@pos.QuantiteMax &nbsp;·&nbsp; @pos.Cout.ToString("N0") po
-                                        </MudText>
-                                    </MudStack>
-                                    @if (!string.IsNullOrEmpty(pos.MotsCles))
-                                    {
-                                        <MudText Typo="Typo.caption" Style="font-style:italic; color:#9e9e9e; font-size:10px; display:block; line-height:1.2; margin-bottom:2px">
-                                            @string.Join(", ", pos.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(k => k.Trim()))
-                                        </MudText>
-                                    }
-                                    <!-- Caractéristiques en colonnes -->
-                                    <div style="display:grid; grid-template-columns:repeat(5,1fr); text-align:center; margin:4px 0 2px">
-                                        <span style="font-size:10px; color:#9e9e9e">MOV</span>
-                                        <span style="font-size:10px; color:#9e9e9e">FOR</span>
-                                        <span style="font-size:10px; color:#9e9e9e">AGI</span>
-                                        <span style="font-size:10px; color:#9e9e9e">CP</span>
-                                        <span style="font-size:10px; color:#9e9e9e">ARM</span>
-                                        <span style="font-size:12px; font-weight:600">@pos.Mouvement</span>
-                                        <span style="font-size:12px; font-weight:600">@pos.Force</span>
-                                        <span style="font-size:12px; font-weight:600">@pos.Agilite</span>
-                                        <span style="font-size:12px; font-weight:600">@pos.CapacitePasse</span>
-                                        <span style="font-size:12px; font-weight:600">@pos.Armure</span>
-                                    </div>
-                                    @if (pos.CompetencesDepart.Any())
-                                    {
-                                        <MudText Typo="Typo.caption" Color="Color.Primary">
-                                            @SkillSpans(pos)
-                                        </MudText>
-                                    }
-                                    <MudStack Row="true" Spacing="1" Class="mt-1" Style="font-size:10px">
-                                        @if (!string.IsNullOrEmpty(pos.CompetencesPrincipales))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
-                                                     Style="height:18px; font-size:10px">
-                                                P: @pos.CompetencesPrincipales
-                                            </MudChip>
-                                        }
-                                        @if (!string.IsNullOrEmpty(pos.CompetencesSecondaires))
-                                        {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
-                                                     Style="height:18px; font-size:10px">
-                                                S: @pos.CompetencesSecondaires
-                                            </MudChip>
-                                        }
-                                    </MudStack>
-                                </div>
-                                <MudIconButton Icon="@Icons.Material.Filled.AddCircleOutline"
-                                             Size="Size.Small"
-                                             Color="@(!complet && !sansFonds ? Color.Warning : Color.Default)"
-                                             Disabled="@(complet || sansFonds)"
-                                             OnClick="@(() => AjouterJoueur(pos))" />
-                            </MudStack>
-                        </MudPaper>
+                    var countCadre = _slots.Count(s =>
+                    {
+                        var p = _selectedType.Postes.FirstOrDefault(pp => pp.Id == s.PositionId);
+                        return p is not null && RosterDisplayHelpers.PositionAMotCle(p, cadre.MotCle);
+                    });
+                    <div class="poste-keyword-frame" style="@($"border-color:{cadre.Couleur}; background:{cadre.Couleur}14")">
+                        <div class="poste-keyword-header" style="@($"color:{cadre.Couleur}")">
+                            <span><b>@cadre.MotCle</b></span>
+                            <span>@countCadre/@cadre.Max</span>
+                        </div>
+                        @foreach (var pos in cadre.Postes)
+                        {
+                            @PosteCard(pos)
+                        }
+                    </div>
+                }
+                @foreach (var pos in _classiques)
+                {
+                    @PosteCard(pos)
                 }
             </MudItem>
         </MudGrid>
+
+        @if (_competenceAffichee is { } comp)
+        {
+            <div class="skill-overlay-backdrop" @onclick="FermerCompetence">
+                <div class="skill-overlay-stop" @onclick="StopProp" @onclick:stopPropagation="true">
+                    <MudPaper Class="skill-overlay-card" Elevation="8">
+                        <div class="skill-overlay-head">
+                            <MudText Typo="Typo.h6"><b>@comp.Nom</b></MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="FermerCompetence" />
+                        </div>
+                        @if (comp.EstTrait || comp.EstElite)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                                @(comp.EstTrait ? "Trait" : null)@(comp.EstTrait && comp.EstElite ? " · " : null)@(comp.EstElite ? "Élite" : null)
+                            </MudText>
+                        }
+                        <MudText Typo="Typo.body2">@comp.Description</MudText>
+                    </MudPaper>
+                </div>
+            </div>
+        }
     }
 }
 
@@ -286,6 +249,23 @@ else
         - (_estDB ? 0 : _coachsAssistants * 10_000)
         - (_estDB ? 0 : _cheerleaders * 10_000)
         - (_apothicaire ? 50_000 : 0);
+
+    bool _budgetNegatif => _budgetRestant < 0;
+
+    int _budgetPct => _budgetNegatif
+        ? 100
+        : (_ligue is { BudgetDepart: > 0 }
+            ? (int)Math.Round(Math.Clamp((double)_budgetRestant / _ligue.BudgetDepart, 0, 1) * 100)
+            : 0);
+
+    string _budgetGauge
+    {
+        get
+        {
+            var c = _budgetNegatif ? "var(--mud-palette-error)" : "var(--mud-palette-success)";
+            return $"background:linear-gradient(to right,{c} 0%,{c} {_budgetPct}%,rgba(255,255,255,0.06) {_budgetPct}%,rgba(255,255,255,0.06) 100%)";
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -442,20 +422,85 @@ else
         }
     }
 
-    static RenderFragment SkillSpans(PlayerPosition pos) => builder =>
-    {
-        var skills = pos.CompetencesDepart.Select(c => c.Skill).Where(s => s is not null).Cast<Skill>().ToList();
-        for (int i = 0; i < skills.Count; i++)
-        {
-            builder.OpenElement(0, "span");
-            builder.AddAttribute(1, "title", skills[i].Description ?? "");
-            builder.AddAttribute(2, "style", "cursor:help; border-bottom:1px dotted #aaa");
-            builder.AddContent(3, skills[i].Nom);
-            builder.CloseElement();
-            if (i < skills.Count - 1)
-                builder.AddMarkupContent(4, ", ");
+    Skill? _competenceAffichee;
+    void OuvrirCompetence(Skill s) => _competenceAffichee = s;
+    void FermerCompetence() => _competenceAffichee = null;
+    void StopProp() { }
+
+    // Carte d'un poste (réutilisée dans les cadres de mots-clés et la liste classique).
+    RenderFragment<PlayerPosition> PosteCard => pos =>
+    @<text>
+        @{
+            var count = _slots.Count(s => s.PositionId == pos.Id);
+            var complet = count >= pos.QuantiteMax || DepasseLimiteMotCle(pos);
+            var sansFonds = _budgetRestant < pos.Cout;
         }
-    };
+        <MudPaper Elevation="0" Class="pa-2 mb-2"
+                  Style="@($"border:1px solid {(complet ? "rgba(255,255,255,0.06)" : "rgba(229,57,53,0.35)")}; border-radius:4px; opacity:{(complet ? "0.45" : "1")}")">
+            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Spacing="1">
+                <div style="flex:1; min-width:0">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                        <MudText Typo="Typo.body2"><b>@pos.Nom</b></MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            @count/@pos.QuantiteMax &nbsp;·&nbsp; @pos.Cout.ToString("N0") po
+                        </MudText>
+                    </MudStack>
+                    @if (!string.IsNullOrEmpty(pos.MotsCles))
+                    {
+                        <MudText Typo="Typo.caption" Style="font-style:italic; color:#9e9e9e; font-size:10px; display:block; line-height:1.2; margin-bottom:2px">
+                            @string.Join(", ", pos.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries).Select(k => k.Trim()))
+                        </MudText>
+                    }
+                    <div style="display:grid; grid-template-columns:repeat(5,1fr); text-align:center; margin:4px 0 2px">
+                        <span style="font-size:10px; color:#9e9e9e">MOV</span>
+                        <span style="font-size:10px; color:#9e9e9e">FOR</span>
+                        <span style="font-size:10px; color:#9e9e9e">AGI</span>
+                        <span style="font-size:10px; color:#9e9e9e">CP</span>
+                        <span style="font-size:10px; color:#9e9e9e">ARM</span>
+                        <span style="font-size:12px; font-weight:600">@pos.Mouvement</span>
+                        <span style="font-size:12px; font-weight:600">@pos.Force</span>
+                        <span style="font-size:12px; font-weight:600">@pos.Agilite</span>
+                        <span style="font-size:12px; font-weight:600">@pos.CapacitePasse</span>
+                        <span style="font-size:12px; font-weight:600">@pos.Armure</span>
+                    </div>
+                    @if (pos.CompetencesDepart.Any())
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Primary">@SkillSpans(pos)</MudText>
+                    }
+                    <MudStack Row="true" Spacing="1" Class="mt-1" Style="font-size:10px">
+                        @if (!string.IsNullOrEmpty(pos.CompetencesPrincipales))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
+                                     Style="height:18px; font-size:10px">P: @pos.CompetencesPrincipales</MudChip>
+                        }
+                        @if (!string.IsNullOrEmpty(pos.CompetencesSecondaires))
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
+                                     Style="height:18px; font-size:10px">S: @pos.CompetencesSecondaires</MudChip>
+                        }
+                    </MudStack>
+                </div>
+                <MudIconButton Icon="@Icons.Material.Filled.AddCircleOutline"
+                               Size="Size.Small"
+                               Color="@(!complet && !sansFonds ? Color.Warning : Color.Default)"
+                               Disabled="@(complet || sansFonds)"
+                               OnClick="@(() => AjouterJoueur(pos))" />
+            </MudStack>
+        </MudPaper>
+    </text>;
+
+    // Compétences de départ cliquables : ouvre l'overlay de détail (tactile, pas de hover).
+    RenderFragment<PlayerPosition> SkillSpans => pos =>
+    @<text>
+        @{
+            var skills = pos.CompetencesDepart.Select(c => c.Skill).Where(s => s is not null).Cast<Skill>().ToList();
+        }
+        @for (int i = 0; i < skills.Count; i++)
+        {
+            var sk = skills[i];
+            <span class="skill-link" @onclick="@(() => OuvrirCompetence(sk))">@sk.Nom</span>@(i < skills.Count - 1 ? ", " : "")
+        }
+    </text>;
 
     sealed class PlayerSlot
     {

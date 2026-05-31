@@ -82,7 +82,9 @@ src/BolDeSangManager/
 
 **Pages InteractiveServer vs SSR** : les pages sous `Components/Account/` sont SSR (`EditForm method="post"` + `[SupplyParameterFromForm]`). `MudTextField` ne génère pas d'attribut `name` → utiliser `InputText` avec CSS custom pour ces pages.
 
-**MudBlazor** : ne pas utiliser `MudTooltip` dans les pages InteractiveServer — casse le circuit Blazor (nécessite `MudPopoverProvider` dans le même arbre interactif). Utiliser l'attribut HTML `title` à la place.
+**MudBlazor** : ne pas utiliser `MudTooltip` dans les pages InteractiveServer — casse le circuit Blazor (nécessite `MudPopoverProvider` dans le même arbre interactif). Utiliser l'attribut HTML `title` à la place (ou, pour un usage tactile, un overlay custom au clic — cf. page de création d'équipe).
+
+**Page création d'équipe (`Equipes/Rejoindre.razor`)** : barre de budget **collante** en haut (`.budget-sticky` dans `app.css`, fond en jauge `restant/départ` via les propriétés `_budgetGauge`/`_budgetPct`, `top` calé sur la hauteur de la `MudAppBar`, 64px). Les postes dont un **mot-clé est sous limite** (`TeamType.LimitesMotsCles`) sont regroupés en cadres colorés (un par mot-clé, couleur cyclique) via `RosterDisplayHelpers.GroupePostesParMotCleLimite` ([Helpers/RosterDisplayHelpers.cs](src/BolDeSangManager/Helpers/RosterDisplayHelpers.cs)) ; les autres restent en cartes classiques. Le détail d'une **compétence** s'ouvre en **overlay au clic** (`.skill-overlay-*`) — pas de `title`/hover, pour rester utilisable au doigt. La logique de regroupement est pure et testée ([RosterDisplayHelpersTests.cs](tests/BolDeSangManager.Tests/RosterDisplayHelpersTests.cs)).
 
 **DbSeeder** : s'exécute à chaque démarrage via `DbSeeder.SeedAsync(app.Services)`. Il est idempotent (vérifie `!db.Games.Any()` avant d'insérer). Appelle aussi `db.Database.MigrateAsync()` — les nouvelles migrations sont donc appliquées automatiquement au démarrage.
 
