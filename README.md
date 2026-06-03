@@ -56,7 +56,7 @@ Application web de gestion de ligues **Blood Bowl** et **Dungeon Bowl** — cré
 ### Installation
 
 ```bash
-git clone https://github.com/cottedavid38-hue/BolDeSangManager.git
+git clone https://github.com/CWARPED/BolDeSangManager.git
 cd BolDeSangManager
 dotnet restore src/BolDeSangManager/BolDeSangManager.csproj
 cd src/BolDeSangManager
