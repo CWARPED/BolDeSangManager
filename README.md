@@ -353,7 +353,7 @@ Calculés à la saisie de la feuille :
 | Action | PSP |
 |---|---:|
 | Touchdown | +3 |
-| Completion | +1 |
+| Passe | +1 |
 | Interception | +2 |
 | Elimination infligée | +2 |
 | MVP | +4 |

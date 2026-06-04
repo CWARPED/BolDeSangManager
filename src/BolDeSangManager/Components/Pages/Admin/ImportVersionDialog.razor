@@ -1,0 +1,66 @@
+@using BolDeSangManager.Services
+@inject GameDataExportService GameDataExportService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-3">
+            Choisissez un nom pour la version importée. Elle sera créée inactive — activez-la manuellement si besoin.
+        </MudText>
+        <MudTextField @bind-Value="_nomVersion" Label="Nom de la version" Variant="Variant.Outlined"
+                      Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Label"
+                      Immediate="true" />
+        @if (_erreurs.Any())
+        {
+            <MudAlert Severity="Severity.Error" Class="mt-2">
+                @foreach (var e in _erreurs) { <div>@e</div> }
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Annuler</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   Disabled="@(string.IsNullOrWhiteSpace(_nomVersion) || _saving)"
+                   OnClick="Importer">
+            @(_saving ? "Import en cours…" : "Importer")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int GameId { get; set; }
+    [Parameter] public byte[] JsonBytes { get; set; } = [];
+
+    string _nomVersion = "";
+    bool _saving;
+    List<string> _erreurs = [];
+
+    async Task Importer()
+    {
+        if (string.IsNullOrWhiteSpace(_nomVersion)) return;
+        _saving = true;
+        _erreurs = [];
+        try
+        {
+            using var stream = new MemoryStream(JsonBytes);
+            var (success, errors) = await GameDataExportService.ImportAsync(stream, GameId, _nomVersion.Trim());
+            if (success)
+            {
+                MudDialog.Close(DialogResult.Ok(true));
+            }
+            else
+            {
+                _erreurs = errors;
+            }
+        }
+        catch (Exception ex)
+        {
+            _erreurs = [$"Erreur inattendue : {ex.Message}"];
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

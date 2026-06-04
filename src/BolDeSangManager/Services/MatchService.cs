@@ -187,7 +187,7 @@ public class MatchService(
         int pspParTd = gameType == GameType.DungeonBowl ? 5 : 3;
         int psp = 0;
         psp += record.Touchdowns * pspParTd;
-        psp += record.Completions * 1;
+        psp += record.Passes * 1;
         psp += record.Interceptions * 2;
         psp += record.EliminationsInfligees * 2;
         if (record.EstMVP) psp += 4;

@@ -7,9 +7,11 @@
 @using BolDeSangManager.Services
 @inject DataEditService DataEditService
 @inject LeagueService LeagueService
+@inject GameDataExportService GameDataExportService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IJSRuntime JS
 
 <PageTitle>Édition des données</PageTitle>
 
@@ -42,10 +44,10 @@
             </MudStack>
             <MudTable Items="@_teamTypes" Dense="true" Hover="true">
                 <HeaderContent>
-                    <MudTh>Nom</MudTh>
-                    <MudTh>Catégorie</MudTh>
-                    <MudTh>Coût relance</MudTh>
-                    <MudTh>Nb postes</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.Categorie)">Catégorie</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.CoutRelance)">Coût relance</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => (object)(x.Postes?.Count ?? 0))">Nb postes</MudTableSortLabel></MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -80,8 +82,8 @@
             </MudStack>
             <MudTable Items="@_skillsFiltres" Dense="true" Hover="true">
                 <HeaderContent>
-                    <MudTh>Nom</MudTh>
-                    <MudTh>Catégorie</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.Categorie)">Catégorie</MudTableSortLabel></MudTh>
                     <MudTh>Trait/Élite</MudTh>
                     <MudTh>Description</MudTh>
                     <MudTh>Actions</MudTh>
@@ -105,21 +107,36 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Versions">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_versions.Count version(s)</b></MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           OnClick="CreerVersion">Créer une nouvelle version</MudButton>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Color="Color.Secondary" Variant="Variant.Outlined"
+                               OnClick="@(() => JS.InvokeVoidAsync("clickElement", "importGameDataInput"))"
+                               Disabled="@_importEnCours">
+                        @(_importEnCours ? "Import en cours…" : "Importer une version")
+                    </MudButton>
+                    <InputFile id="importGameDataInput" OnChange="ImporterVersion"
+                               accept=".json" style="display:none" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               OnClick="CreerVersion">Créer une nouvelle version</MudButton>
+                </MudStack>
             </MudStack>
             <MudTable Items="@_versions" Dense="true">
                 <HeaderContent>
-                    <MudTh>Nom</MudTh>
-                    <MudTh>Ordre</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Ordre)">Ordre</MudTableSortLabel></MudTh>
                     <MudTh>Active</MudTh>
+                    <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd>@context.Nom</MudTd>
                     <MudTd>@context.Ordre</MudTd>
                     <MudTd>@(context.EstActive ? "Oui" : "Non")</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
+                                       title="Exporter cette version"
+                                       OnClick="@(() => ExporterVersion(context.Id))" />
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         </MudTabPanel>
@@ -134,6 +151,7 @@
     int _selectedGameId;
     int _selectedVersionId;
     SkillCategory? _categorieFiltre;
+    bool _importEnCours;
 
     List<Skill> _skillsFiltres =>
         _categorieFiltre is null ? _skills : _skills.Where(s => s.Categorie == _categorieFiltre).ToList();
@@ -248,5 +266,55 @@
         var dialog = await DialogService.ShowAsync<CreerVersionDialog>("Créer une nouvelle version", parameters);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled) await ChargerVersionsAsync();
+    }
+
+    async Task ExporterVersion(int versionId)
+    {
+        try
+        {
+            var bytes = await GameDataExportService.ExportAsync(versionId);
+            var version = _versions.FirstOrDefault(v => v.Id == versionId);
+            var nomFichier = $"gamedata_{version?.Nom ?? versionId.ToString()}.json"
+                .Replace(" ", "_").Replace("/", "-");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("blazorDownloadBase64File", nomFichier, "application/json", base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error);
+        }
+    }
+
+    async Task ImporterVersion(InputFileChangeEventArgs e)
+    {
+        _importEnCours = true;
+        try
+        {
+            var file = e.File;
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+            var bytes = ms.ToArray();
+
+            var parameters = new DialogParameters<ImportVersionDialog>
+            {
+                { x => x.GameId, _selectedGameId },
+                { x => x.JsonBytes, bytes }
+            };
+            var dialog = await DialogService.ShowAsync<ImportVersionDialog>("Importer une version", parameters);
+            var result = await dialog.Result;
+            if (result is not null && !result.Canceled)
+            {
+                await ChargerVersionsAsync();
+                Snackbar.Add("Version importée avec succès.", Severity.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur import : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _importEnCours = false;
+        }
     }
 }

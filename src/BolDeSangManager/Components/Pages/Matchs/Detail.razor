@@ -96,7 +96,7 @@ else
         </MudAlert>
 
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-            PSP : TD=3 pts | Complétion=1 pt | Interception=2 pts | Élimination=2 pts | MVP=4 pts
+            PSP : TD=3 pts | Passe=1 pt | Interception=2 pts | Élimination=2 pts | MVP=4 pts
         </MudText>
 
         <!-- Table domicile -->
@@ -109,7 +109,7 @@ else
                 <HeaderContent>
                     <MudTh>#</MudTh><MudTh>Joueur</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">TDs</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Comp</MudTh>
+                    <MudTh Style="text-align:center;min-width:60px">Passes</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Int</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Élim</MudTh>
                     <MudTh Style="text-align:center;min-width:50px">MVP</MudTh>
@@ -120,7 +120,7 @@ else
                     <MudTd>@r.Numero</MudTd>
                     <MudTd><b>@r.NomJoueur</b></MudTd>
                     <MudTd><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Completions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd Style="text-align:center">
@@ -162,7 +162,7 @@ else
                 <HeaderContent>
                     <MudTh>#</MudTh><MudTh>Joueur</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">TDs</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Comp</MudTh>
+                    <MudTh Style="text-align:center;min-width:60px">Passes</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Int</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Élim</MudTh>
                     <MudTh Style="text-align:center;min-width:50px">MVP</MudTh>
@@ -173,7 +173,7 @@ else
                     <MudTd>@r.Numero</MudTd>
                     <MudTd><b>@r.NomJoueur</b></MudTd>
                     <MudTd><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Completions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd Style="text-align:center">
@@ -276,7 +276,7 @@ else
                     <MudTh>Joueur</MudTh>
                     <MudTh>Poste</MudTh>
                     <MudTh Style="text-align:center">TDs</MudTh>
-                    <MudTh Style="text-align:center">Comp</MudTh>
+                    <MudTh Style="text-align:center">Passes</MudTh>
                     <MudTh Style="text-align:center">Int</MudTh>
                     <MudTh Style="text-align:center">Élim</MudTh>
                     <MudTh Style="text-align:center">MVP</MudTh>
@@ -288,7 +288,7 @@ else
                     <MudTd><b>@r.TeamPlayer?.Nom</b></MudTd>
                     <MudTd><MudText Typo="Typo.caption">@r.TeamPlayer?.PlayerPosition?.Nom</MudText></MudTd>
                     <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
-                    <MudTd Style="text-align:center">@r.Completions</MudTd>
+                    <MudTd Style="text-align:center">@r.Passes</MudTd>
                     <MudTd Style="text-align:center">@r.Interceptions</MudTd>
                     <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
                     <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
@@ -396,7 +396,7 @@ else
         NomJoueur             = r.TeamPlayer?.Nom ?? "",
         EstCoteDomicile       = r.EstCoteDomicile,
         Touchdowns            = r.Touchdowns,
-        Completions           = r.Completions,
+        Passes                = r.Passes,
         Interceptions         = r.Interceptions,
         EliminationsInfligees = r.EliminationsInfligees,
         Blessure              = r.Blessure,
@@ -427,7 +427,7 @@ else
                 TeamPlayerId          = r.TeamPlayerId,
                 EstCoteDomicile       = r.EstCoteDomicile,
                 Touchdowns            = r.Touchdowns,
-                Completions           = r.Completions,
+                Passes                = r.Passes,
                 Interceptions         = r.Interceptions,
                 EliminationsInfligees = r.EliminationsInfligees,
                 EstMVP                = ( r.EstCoteDomicile && r.TeamPlayerId == _mvpDomId)
@@ -464,7 +464,7 @@ else
         public string NomJoueur { get; set; } = "";
         public bool EstCoteDomicile { get; set; }
         public int Touchdowns { get; set; }
-        public int Completions { get; set; }
+        public int Passes { get; set; }
         public int Interceptions { get; set; }
         public int EliminationsInfligees { get; set; }
         public InjuryType? Blessure { get; set; }

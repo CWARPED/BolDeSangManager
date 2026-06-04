@@ -78,6 +78,7 @@ builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<MatchService>();
 builder.Services.AddScoped<PdfService>();
 builder.Services.AddScoped<LeagueExportService>();
+builder.Services.AddScoped<GameDataExportService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DataEditService>();
 builder.Services.AddScoped<BolDeSangManager.Services.IAuthorizationService, BolDeSangManager.Services.AuthorizationService>();

@@ -160,7 +160,7 @@ public class MatchServiceTests : IDisposable
     }
 
     [Fact]
-    public async Task SaisirFeuille_CalculePSP_TD3_Completion1_Inter2_Elim2_MVP4()
+    public async Task SaisirFeuille_CalculePSP_TD3_Passe1_Inter2_Elim2_MVP4()
     {
         var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
         await using var db = _factory.CreateContext();
@@ -179,7 +179,7 @@ public class MatchServiceTests : IDisposable
                 TeamPlayerId = joueurDom.Id,
                 EstCoteDomicile = true,
                 Touchdowns = 1,          // +3 PSP
-                Completions = 2,         // +2 PSP
+                Passes = 2,              // +2 PSP
                 Interceptions = 1,       // +2 PSP
                 EliminationsInfligees = 1, // +2 PSP
                 EstMVP = true            // +4 PSP
@@ -416,7 +416,7 @@ public class MatchServiceTests : IDisposable
         var record = new MatchPlayerRecord
         {
             Touchdowns = 1,          // 3 PSP
-            Completions = 2,         // 2 PSP
+            Passes = 2,              // 2 PSP
             Interceptions = 1,       // 2 PSP
             EliminationsInfligees = 2, // 4 PSP
             EstMVP = true            // 4 PSP

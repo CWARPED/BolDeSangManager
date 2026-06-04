@@ -71,7 +71,7 @@ public class MatchPlayerRecord
 
     // Actions du match
     public int Touchdowns { get; set; } = 0;
-    public int Completions { get; set; } = 0;      // Passes réussies
+    public int Passes { get; set; } = 0;
     public int Interceptions { get; set; } = 0;
     public int EliminationsInfligees { get; set; } = 0;
     public bool EstMVP { get; set; } = false;

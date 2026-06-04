@@ -102,7 +102,7 @@ else
                 <HeaderContent>
                     <MudTh>Joueur</MudTh>
                     <MudTh Style="text-align:center">TDs</MudTh>
-                    <MudTh Style="text-align:center">Comp</MudTh>
+                    <MudTh Style="text-align:center">Passes</MudTh>
                     <MudTh Style="text-align:center">Int</MudTh>
                     <MudTh Style="text-align:center">Élim</MudTh>
                     <MudTh Style="text-align:center">MVP</MudTh>
@@ -111,7 +111,7 @@ else
                 <RowTemplate Context="r">
                     <MudTd>@r.TeamPlayer?.Nom</MudTd>
                     <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
-                    <MudTd Style="text-align:center">@r.Completions</MudTd>
+                    <MudTd Style="text-align:center">@r.Passes</MudTd>
                     <MudTd Style="text-align:center">@r.Interceptions</MudTd>
                     <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
                     <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
@@ -205,7 +205,7 @@ else
                             </MudStack>
                             <div class="stat-grid">
                                 @StatBlock("TOUCHDOWNS", r.Touchdowns, v => r.Touchdowns = Math.Max(0, r.Touchdowns + v))
-                                @StatBlock("COMPLÉTIONS", r.Completions, v => r.Completions = Math.Max(0, r.Completions + v))
+                                @StatBlock("PASSES", r.Passes, v => r.Passes = Math.Max(0, r.Passes + v))
                                 @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
                                 @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
                             </div>
@@ -268,7 +268,7 @@ else
                             </MudStack>
                             <div class="stat-grid">
                                 @StatBlock("TOUCHDOWNS", r.Touchdowns, v => r.Touchdowns = Math.Max(0, r.Touchdowns + v))
-                                @StatBlock("COMPLÉTIONS", r.Completions, v => r.Completions = Math.Max(0, r.Completions + v))
+                                @StatBlock("PASSES", r.Passes, v => r.Passes = Math.Max(0, r.Passes + v))
                                 @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
                                 @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
                             </div>
@@ -531,7 +531,7 @@ else
                     TeamPlayerId          = r.TeamPlayerId,
                     EstCoteDomicile       = r.EstCoteDomicile,
                     Touchdowns            = r.Touchdowns,
-                    Completions           = r.Completions,
+                    Passes                = r.Passes,
                     Interceptions         = r.Interceptions,
                     EliminationsInfligees = r.EliminationsInfligees,
                     EstMVP                = r.EstMVP,
@@ -586,7 +586,7 @@ else
         public bool          EstCoteDomicile       { get; set; }
         public bool          EstMVP                { get; set; }
         public int           Touchdowns            { get; set; }
-        public int           Completions           { get; set; }
+        public int           Passes                { get; set; }
         public int           Interceptions         { get; set; }
         public int           EliminationsInfligees { get; set; }
         public InjuryType?   Blessure              { get; set; }

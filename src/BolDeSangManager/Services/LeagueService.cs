@@ -327,7 +327,7 @@ public class LeagueService(
             .Include(j => j.PlayerPosition)
             .Include(j => j.RecordsMatchs)
             .Where(j => j.Team.LeagueId == ligueId)
-            .OrderByDescending(j => j.RecordsMatchs.Sum(r => r.Completions + r.Interceptions))
+            .OrderByDescending(j => j.RecordsMatchs.Sum(r => r.Passes + r.Interceptions))
             .Take(limit)
             .ToListAsync();
 
