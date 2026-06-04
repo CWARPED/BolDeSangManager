@@ -136,6 +136,9 @@
                         <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
                                        title="Exporter cette version"
                                        OnClick="@(() => ExporterVersion(context.Id))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       title="Supprimer cette version"
+                                       OnClick="@(() => SupprimerVersion(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -266,6 +269,25 @@
         var dialog = await DialogService.ShowAsync<CreerVersionDialog>("Créer une nouvelle version", parameters);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled) await ChargerVersionsAsync();
+    }
+
+    async Task SupprimerVersion(RulesVersion v)
+    {
+        var ok = await DialogService.ShowMessageBox(
+            "Confirmer la suppression",
+            $"Supprimer définitivement la version « {v.Nom} » et toutes ses données (équipes, compétences, postes) ?",
+            "Supprimer", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.SupprimerVersionAsync(v.Id);
+            Snackbar.Add("Version supprimée.", Severity.Success);
+            await ChargerVersionsAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
     }
 
     async Task ExporterVersion(int versionId)

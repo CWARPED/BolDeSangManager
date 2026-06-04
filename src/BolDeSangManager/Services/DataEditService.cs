@@ -141,6 +141,42 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count);
     }
 
+    public async Task SupprimerVersionAsync(int id)
+    {
+        var version = await db.RulesVersions.FindAsync(id)
+            ?? throw new InvalidOperationException("Version introuvable");
+
+        if (version.EstActive)
+            throw new InvalidOperationException("Impossible de supprimer la version active. Activez une autre version d'abord.");
+
+        var nbEquipes = await db.Teams.CountAsync(t => t.TeamType.RulesVersionId == id);
+        if (nbEquipes > 0)
+            throw new InvalidOperationException($"{nbEquipes} équipe(s) utilisent un type de cette version. Supprimez ces équipes d'abord.");
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var teamTypes = await db.TeamTypes.Where(t => t.RulesVersionId == id).ToListAsync();
+            db.TeamTypes.RemoveRange(teamTypes);
+            await db.SaveChangesAsync();
+
+            var skills = await db.Skills.Where(s => s.RulesVersionId == id).ToListAsync();
+            db.Skills.RemoveRange(skills);
+            await db.SaveChangesAsync();
+
+            db.RulesVersions.Remove(version);
+            await db.SaveChangesAsync();
+
+            await tx.CommitAsync();
+            logger.LogInformation("Version supprimée : {Nom} (id={Id})", version.Nom, id);
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
     // ═══════════════════ TeamType ═══════════════════
 
     public async Task<List<TeamType>> GetTeamTypesAsync(int versionId) =>
