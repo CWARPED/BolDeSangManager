@@ -189,4 +189,109 @@ public class GameDataExportServiceTests : IDisposable
         Assert.False(success);
         Assert.NotEmpty(errors);
     }
+
+    // ─── Réserve : round-trip via export complet ──────────────────────────────
+
+    [Fact]
+    public async Task Export_Import_Complet_InclutLaReserve()
+    {
+        var (game, version, skill, _, _) = await SetupGameDataAsync();
+
+        // Ajouter un poste de réserve avec une compétence de départ (skill "Blocage")
+        await using (var db = _factory.CreateContext())
+        {
+            var pool = new PoolPosition
+            {
+                RulesVersionId = version.Id, Nom = "Ogre mercenaire",
+                Cout = 140_000, Force = 5, Mouvement = 5, Agilite = "4+", Armure = "10+"
+            };
+            db.PoolPositions.Add(pool);
+            await db.SaveChangesAsync();
+            db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = pool.Id, SkillId = skill.Id });
+            await db.SaveChangesAsync();
+        }
+
+        byte[] bytes;
+        await using (var db = _factory.CreateContext())
+            bytes = await CreateService(db).ExportAsync(version.Id);
+
+        // Le JSON contient bien la réserve
+        using (var doc = JsonDocument.Parse(bytes))
+        {
+            var reserve = doc.RootElement.GetProperty("reserve");
+            Assert.Equal(1, reserve.GetArrayLength());
+            Assert.Equal("Ogre mercenaire", reserve[0].GetProperty("nom").GetString());
+            Assert.Equal("Blocage", reserve[0].GetProperty("competencesDepart")[0].GetString());
+        }
+
+        // Import complet sous un nouveau nom → la réserve est recréée avec le skill résolu par nom
+        await using (var db = _factory.CreateContext())
+        {
+            using var stream = new MemoryStream(bytes);
+            var (success, errors) = await CreateService(db).ImportAsync(stream, game.Id, "Saison 3 — Copie");
+            Assert.True(success, string.Join("; ", errors));
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var nv = await db.RulesVersions.FirstAsync(v => v.Nom == "Saison 3 — Copie" && v.GameId == game.Id);
+            var pools = await db.PoolPositions.Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+                .Where(p => p.RulesVersionId == nv.Id).ToListAsync();
+            Assert.Single(pools);
+            Assert.Equal("Ogre mercenaire", pools[0].Nom);
+            Assert.Single(pools[0].CompetencesDepart);
+            Assert.Equal("Blocage", pools[0].CompetencesDepart.First().Skill.Nom);
+        }
+    }
+
+    // ─── Réserve seule : round-trip vers une autre version ────────────────────
+
+    [Fact]
+    public async Task ExportReserve_ImportReserve_VersAutreVersion()
+    {
+        var (game, version, skill, _, _) = await SetupGameDataAsync();
+
+        await using (var db = _factory.CreateContext())
+        {
+            var pool = new PoolPosition { RulesVersionId = version.Id, Nom = "Troll", Force = 5, Mouvement = 4 };
+            db.PoolPositions.Add(pool);
+            await db.SaveChangesAsync();
+            db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = pool.Id, SkillId = skill.Id });
+            await db.SaveChangesAsync();
+        }
+
+        // Version cible avec un skill de même nom "Blocage" (résolution par nom)
+        int cibleId;
+        await using (var db = _factory.CreateContext())
+        {
+            var cible = new RulesVersion { GameId = game.Id, Nom = "Saison 4", Ordre = 2, EstActive = false };
+            db.RulesVersions.Add(cible);
+            await db.SaveChangesAsync();
+            db.Skills.Add(new Skill { RulesVersionId = cible.Id, Nom = "Blocage", Categorie = SkillCategory.Generale });
+            await db.SaveChangesAsync();
+            cibleId = cible.Id;
+        }
+
+        byte[] bytes;
+        await using (var db = _factory.CreateContext())
+            bytes = await CreateService(db).ExportReserveAsync(version.Id);
+
+        await using (var db = _factory.CreateContext())
+        {
+            using var stream = new MemoryStream(bytes);
+            var (success, imported, errors) = await CreateService(db).ImportReserveAsync(stream, cibleId);
+            Assert.True(success, string.Join("; ", errors));
+            Assert.Equal(1, imported);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var pools = await db.PoolPositions.Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+                .Where(p => p.RulesVersionId == cibleId).ToListAsync();
+            Assert.Single(pools);
+            Assert.Equal("Troll", pools[0].Nom);
+            Assert.Single(pools[0].CompetencesDepart);
+            Assert.Equal("Blocage", pools[0].CompetencesDepart.First().Skill.Nom);
+        }
+    }
 }

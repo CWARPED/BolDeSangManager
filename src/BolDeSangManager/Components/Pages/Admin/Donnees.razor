@@ -109,8 +109,15 @@
         <MudTabPanel Text="Réserve">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_reserve.Count poste(s) en réserve</b></MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           OnClick="AjouterReservePoste">Ajouter un poste de réserve</MudButton>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton StartIcon="@Icons.Material.Filled.Download" Color="Color.Secondary" Variant="Variant.Outlined"
+                               OnClick="ExporterReserve" Disabled="@(_reserve.Count == 0)">Exporter la Réserve</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Color="Color.Secondary" Variant="Variant.Outlined"
+                               OnClick="@(() => JS.InvokeVoidAsync("clickElement", "importReserveInput"))">Importer une Réserve</MudButton>
+                    <InputFile id="importReserveInput" OnChange="ImporterReserve" accept=".json" style="display:none" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               OnClick="AjouterReservePoste">Ajouter un poste de réserve</MudButton>
+                </MudStack>
             </MudStack>
             <MudText Typo="Typo.body2" Class="mb-2" Style="color:#9e9e9e">
                 Postes réutilisables de cette version de règles. Importez-les dans une équipe depuis l'édition de l'équipe (bouton « Importer depuis la Réserve »). L'import crée une copie indépendante.
@@ -407,6 +414,41 @@
         {
             Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error);
         }
+    }
+
+    async Task ExporterReserve()
+    {
+        try
+        {
+            var bytes = await GameDataExportService.ExportReserveAsync(_selectedVersionId);
+            var version = _versions.FirstOrDefault(v => v.Id == _selectedVersionId);
+            var nomFichier = $"reserve_{version?.Nom ?? _selectedVersionId.ToString()}.json".Replace(" ", "_").Replace("/", "-");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("blazorDownloadBase64File", nomFichier, "application/json", base64);
+        }
+        catch (Exception ex) { Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error); }
+    }
+
+    async Task ImporterReserve(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+            var (success, imported, errors) = await GameDataExportService.ImportReserveAsync(ms, _selectedVersionId);
+            if (success)
+            {
+                Snackbar.Add($"{imported} poste(s) de réserve importé(s)." + (errors.Count > 0 ? $" ({errors.Count} avertissement(s))" : ""), Severity.Success);
+                foreach (var err in errors) Snackbar.Add(err, Severity.Warning);
+                await ChargerDonneesAsync();
+            }
+            else
+            {
+                foreach (var err in errors) Snackbar.Add(err, Severity.Error);
+            }
+        }
+        catch (Exception ex) { Snackbar.Add($"Erreur import : {ex.Message}", Severity.Error); }
     }
 
     async Task ImporterVersion(InputFileChangeEventArgs e)

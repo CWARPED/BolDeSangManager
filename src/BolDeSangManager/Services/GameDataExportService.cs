@@ -39,6 +39,12 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .OrderBy(tt => tt.Nom)
             .ToListAsync();
 
+        var reserve = await db.PoolPositions
+            .Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Where(p => p.RulesVersionId == rulesVersionId)
+            .OrderBy(p => p.Nom)
+            .ToListAsync();
+
         var dto = new GameDataExportDto(
             Jeu: version.Game.Nom,
             Version: version.Nom,
@@ -67,6 +73,12 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
                 )).ToList(),
                 tt.LimitesMotsCles.Select(l => new KeywordLimitGdDto(l.MotCle, l.Max)).ToList()
+            )).ToList(),
+            Reserve: reserve.Select(p => new PlayerPositionGdDto(
+                p.Nom, p.QuantiteMax, p.Cout, p.Mouvement, p.Force, p.Agilite,
+                p.CapacitePasse, p.Armure, p.CompetencesPrincipales, p.CompetencesSecondaires,
+                p.MotsCles,
+                p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
             )).ToList()
         );
 
@@ -209,6 +221,33 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 await db.SaveChangesAsync();
             }
 
+            // Réserve (PoolPosition) — skills de départ résolus par nom
+            foreach (var pDto in dto.Reserve ?? [])
+            {
+                var pool = new PoolPosition
+                {
+                    RulesVersionId = version.Id,
+                    Nom = pDto.Nom, QuantiteMax = pDto.QuantiteMax, Cout = pDto.Cout,
+                    Mouvement = pDto.Mouvement, Force = pDto.Force, Agilite = pDto.Agilite,
+                    CapacitePasse = pDto.CapacitePasse, Armure = pDto.Armure,
+                    CompetencesPrincipales = pDto.CompetencesPrincipales,
+                    CompetencesSecondaires = pDto.CompetencesSecondaires, MotsCles = pDto.MotsCles
+                };
+                db.PoolPositions.Add(pool);
+                await db.SaveChangesAsync();
+
+                foreach (var nomSkill in pDto.CompetencesDepart)
+                {
+                    if (!skillMap.TryGetValue(nomSkill, out var skillId))
+                    {
+                        errors.Add($"Compétence de départ (réserve) introuvable : « {nomSkill} » (poste : {pDto.Nom})");
+                        continue;
+                    }
+                    db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = pool.Id, SkillId = skillId });
+                }
+                await db.SaveChangesAsync();
+            }
+
             await tx.CommitAsync();
             logger.LogInformation("Import game data '{V}' : {NbTT} types, {NbS} skills, {NbErr} avertissements",
                 versionNom, dto.TypesEquipes.Count, dto.Skills.Count, errors.Count);
@@ -221,6 +260,109 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             return (false, [$"Erreur lors de l'import : {ex.Message}"]);
         }
     }
+
+    // ── Réserve seule ─────────────────────────────────────────────────────────
+
+    public async Task<byte[]> ExportReserveAsync(int rulesVersionId)
+    {
+        var version = await db.RulesVersions
+            .Include(v => v.Game)
+            .FirstOrDefaultAsync(v => v.Id == rulesVersionId)
+            ?? throw new InvalidOperationException("Version de règles introuvable");
+
+        var reserve = await db.PoolPositions
+            .Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Where(p => p.RulesVersionId == rulesVersionId)
+            .OrderBy(p => p.Nom)
+            .ToListAsync();
+
+        var dto = new ReserveExportDto(
+            Jeu: version.Game.Nom,
+            Version: version.Nom,
+            Reserve: reserve.Select(p => new PlayerPositionGdDto(
+                p.Nom, p.QuantiteMax, p.Cout, p.Mouvement, p.Force, p.Agilite,
+                p.CapacitePasse, p.Armure, p.CompetencesPrincipales, p.CompetencesSecondaires,
+                p.MotsCles,
+                p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
+            )).ToList()
+        );
+
+        logger.LogInformation("Export réserve : version '{V}' ({N} postes)", version.Nom, reserve.Count);
+        return JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
+    }
+
+    /// <summary>
+    /// Importe une réserve dans une version CIBLE. Mode AJOUT (append, pas de remplacement).
+    /// Les compétences de départ sont résolues par nom parmi les skills de la version cible ;
+    /// un nom introuvable est signalé mais n'interrompt pas l'import.
+    /// </summary>
+    public async Task<(bool Success, int Imported, List<string> Errors)> ImportReserveAsync(
+        Stream stream, int rulesVersionId)
+    {
+        var errors = new List<string>();
+
+        ReserveExportDto dto;
+        try
+        {
+            dto = await JsonSerializer.DeserializeAsync<ReserveExportDto>(stream, JsonOpts)
+                ?? throw new InvalidOperationException("Fichier JSON invalide");
+        }
+        catch (Exception ex)
+        {
+            return (false, 0, [$"Impossible de lire le fichier : {ex.Message}"]);
+        }
+
+        var version = await db.RulesVersions.FindAsync(rulesVersionId);
+        if (version is null)
+            return (false, 0, [$"Version id={rulesVersionId} introuvable"]);
+
+        // skills de la version cible, indexés par nom
+        var skillMap = await db.Skills
+            .Where(s => s.RulesVersionId == rulesVersionId)
+            .ToDictionaryAsync(s => s.Nom, s => s.Id, StringComparer.OrdinalIgnoreCase);
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            int imported = 0;
+            foreach (var pDto in dto.Reserve)
+            {
+                var pool = new PoolPosition
+                {
+                    RulesVersionId = rulesVersionId,
+                    Nom = pDto.Nom, QuantiteMax = pDto.QuantiteMax, Cout = pDto.Cout,
+                    Mouvement = pDto.Mouvement, Force = pDto.Force, Agilite = pDto.Agilite,
+                    CapacitePasse = pDto.CapacitePasse, Armure = pDto.Armure,
+                    CompetencesPrincipales = pDto.CompetencesPrincipales,
+                    CompetencesSecondaires = pDto.CompetencesSecondaires, MotsCles = pDto.MotsCles
+                };
+                db.PoolPositions.Add(pool);
+                await db.SaveChangesAsync();
+
+                foreach (var nomSkill in pDto.CompetencesDepart)
+                {
+                    if (!skillMap.TryGetValue(nomSkill, out var skillId))
+                    {
+                        errors.Add($"Compétence introuvable dans la version cible : « {nomSkill} » (poste : {pDto.Nom})");
+                        continue;
+                    }
+                    db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = pool.Id, SkillId = skillId });
+                }
+                await db.SaveChangesAsync();
+                imported++;
+            }
+
+            await tx.CommitAsync();
+            logger.LogInformation("Import réserve : {N} postes importés dans version {V} ({E} avertissements)",
+                imported, rulesVersionId, errors.Count);
+            return (true, imported, errors);
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync();
+            return (false, 0, [$"Erreur lors de l'import : {ex.Message}"]);
+        }
+    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -231,7 +373,14 @@ record GameDataExportDto(
     int Ordre,
     bool EstActive,
     List<SkillGdDto> Skills,
-    List<TeamTypeGdDto> TypesEquipes
+    List<TeamTypeGdDto> TypesEquipes,
+    List<PlayerPositionGdDto>? Reserve = null   // ← AJOUT optionnel (rétrocompat)
+);
+
+record ReserveExportDto(
+    string Jeu,
+    string Version,
+    List<PlayerPositionGdDto> Reserve
 );
 
 record SkillGdDto(
