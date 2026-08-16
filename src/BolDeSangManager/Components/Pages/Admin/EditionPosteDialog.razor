@@ -47,6 +47,8 @@
     [Parameter] public int TeamTypeId { get; set; }
     [Parameter] public int VersionId { get; set; }
     [Parameter] public PlayerPosition? Existant { get; set; }
+    [Parameter] public bool ModeReserve { get; set; } = false;
+    [Parameter] public PoolPosition? ExistantReserve { get; set; }
 
     PlayerPosition _data = new() { Nom = "", QuantiteMax = 1, Cout = 50_000, Mouvement = 6, Force = 3, Agilite = "3+", CapacitePasse = "-", Armure = "9+" };
     HashSet<int> _skillsSelectionnes = new();
@@ -55,7 +57,19 @@
     protected override async Task OnInitializedAsync()
     {
         _skillsDispo = await DataEditService.GetSkillsAsync(VersionId);
-        if (Existant is not null)
+        if (ModeReserve && ExistantReserve is not null)
+        {
+            _data = new PlayerPosition
+            {
+                Nom = ExistantReserve.Nom, QuantiteMax = ExistantReserve.QuantiteMax,
+                Cout = ExistantReserve.Cout, Mouvement = ExistantReserve.Mouvement, Force = ExistantReserve.Force,
+                Agilite = ExistantReserve.Agilite, CapacitePasse = ExistantReserve.CapacitePasse, Armure = ExistantReserve.Armure,
+                CompetencesPrincipales = ExistantReserve.CompetencesPrincipales, CompetencesSecondaires = ExistantReserve.CompetencesSecondaires,
+                MotsCles = ExistantReserve.MotsCles
+            };
+            _skillsSelectionnes = ExistantReserve.CompetencesDepart.Select(c => c.SkillId).ToHashSet();
+        }
+        else if (Existant is not null)
         {
             _data = new PlayerPosition
             {
@@ -75,6 +89,23 @@
     {
         try
         {
+            if (ModeReserve)
+            {
+                var poolData = new PoolPosition {
+                    Nom = _data.Nom, QuantiteMax = _data.QuantiteMax, Cout = _data.Cout,
+                    Mouvement = _data.Mouvement, Force = _data.Force, Agilite = _data.Agilite,
+                    CapacitePasse = _data.CapacitePasse, Armure = _data.Armure,
+                    CompetencesPrincipales = _data.CompetencesPrincipales,
+                    CompetencesSecondaires = _data.CompetencesSecondaires, MotsCles = _data.MotsCles
+                };
+                if (ExistantReserve is null)
+                    await DataEditService.AjouterReserveAsync(VersionId, poolData, _skillsSelectionnes);
+                else
+                    await DataEditService.ModifierReserveAsync(ExistantReserve.Id, poolData, _skillsSelectionnes);
+                Snackbar.Add("Poste de réserve sauvegardé", Severity.Success);
+                MudDialog.Close(DialogResult.Ok(true));
+                return;
+            }
             if (Existant is null)
                 await DataEditService.AjouterPosteAsync(TeamTypeId, _data, _skillsSelectionnes);
             else
