@@ -12,6 +12,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TeamType> TeamTypes => Set<TeamType>();
     public DbSet<PlayerPosition> PlayerPositions => Set<PlayerPosition>();
     public DbSet<PlayerPositionSkill> PlayerPositionSkills => Set<PlayerPositionSkill>();
+    public DbSet<PoolPosition> PoolPositions => Set<PoolPosition>();
+    public DbSet<PoolPositionSkill> PoolPositionSkills => Set<PoolPositionSkill>();
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<League> Leagues => Set<League>();
     public DbSet<Division> Divisions => Set<Division>();
@@ -36,6 +38,30 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // PlayerPositionSkill — composite key
         builder.Entity<PlayerPositionSkill>()
             .HasKey(pps => new { pps.PlayerPositionId, pps.SkillId });
+
+        // PoolPositionSkill — clé composite (miroir de PlayerPositionSkill)
+        builder.Entity<PoolPositionSkill>()
+            .HasKey(pps => new { pps.PoolPositionId, pps.SkillId });
+
+        // PoolPosition → RulesVersion (cascade : suppression version => suppression pool)
+        builder.Entity<PoolPosition>()
+            .HasOne(p => p.RulesVersion)
+            .WithMany(v => v.PoolPositions)
+            .HasForeignKey(p => p.RulesVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // PoolPositionSkill → PoolPosition (cascade) et → Skill (restrict)
+        builder.Entity<PoolPositionSkill>()
+            .HasOne(pps => pps.PoolPosition)
+            .WithMany(p => p.CompetencesDepart)
+            .HasForeignKey(pps => pps.PoolPositionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<PoolPositionSkill>()
+            .HasOne(pps => pps.Skill)
+            .WithMany()
+            .HasForeignKey(pps => pps.SkillId)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Match — deux FK vers Team, désactiver la suppression en cascade
         builder.Entity<Match>()
