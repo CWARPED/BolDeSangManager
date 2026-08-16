@@ -21,4 +21,6 @@ public class RulesVersion
     public string Nom { get; set; } = string.Empty;
     public bool EstActive { get; set; } = true;
     public int Ordre { get; set; }
+
+    public ICollection<PoolPosition> PoolPositions { get; set; } = [];
 }
