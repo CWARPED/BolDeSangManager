@@ -1,0 +1,112 @@
+name: Release — Build & Push Docker Hub
+
+# Déclenché à la PUBLICATION d'une release GitHub.
+# Le tag de la release doit suivre le schéma CalVer : v<YYYY.MM.DD>[-N] (ex : v2026.06.04, v2026.06.04-2).
+#
+# Images poussées sur Docker Hub (cwarp/boldesangmanager) — identique à scripts/release.ps1 :
+#   - :<YYYY.MM.DD>[-N]   version exacte, immuable
+#   - :<YYYY.MM>          rolling sur le mois
+#   - :latest             dernière en date
+#
+# Prérequis (Settings → Secrets and variables → Actions) :
+#   - DOCKERHUB_USERNAME : identifiant Docker Hub
+#   - DOCKERHUB_TOKEN    : Access Token Docker Hub (Read & Write) — PAS le mot de passe
+
+on:
+  release:
+    types: [published]
+  # Permet aussi un déclenchement manuel en fournissant une version.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version CalVer sans le v (ex : 2026.06.04 ou 2026.06.04-2)"
+        required: true
+
+env:
+  IMAGE: cwarp/boldesangmanager
+  PLATFORMS: linux/amd64,linux/arm64
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Déterminer la version et les tags
+        id: meta
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            # tag de la release, ex : v2026.06.04 → on retire le v
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+
+          # Validation stricte du format CalVer : YYYY.MM.DD ou YYYY.MM.DD-N
+          if ! echo "$VERSION" | grep -qE '^[0-9]{4}\.[0-9]{2}\.[0-9]{2}(-[0-9]+)?$'; then
+            echo "::error::Version invalide '$VERSION' — attendu YYYY.MM.DD[-N] (tag vYYYY.MM.DD[-N])"
+            exit 1
+          fi
+
+          # Mois glissant : YYYY.MM (2 premiers segments)
+          MONTH="$(echo "$VERSION" | cut -d. -f1-2)"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "month=$MONTH"     >> "$GITHUB_OUTPUT"
+          {
+            echo "tags<<EOF"
+            echo "${IMAGE}:${VERSION}"
+            echo "${IMAGE}:${MONTH}"
+            echo "${IMAGE}:latest"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+          echo "Version : $VERSION"
+          echo "Mois    : $MONTH"
+
+      - name: Set up QEMU (émulation arm64)
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build & push multi-arch
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: ${{ env.PLATFORMS }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+          provenance: false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Récapitulatif
+        run: |
+          {
+            echo "## Release ${{ steps.meta.outputs.version }} publiée sur Docker Hub"
+            echo ""
+            echo "Images poussées :"
+            echo '```'
+            echo "${IMAGE}:${{ steps.meta.outputs.version }}"
+            echo "${IMAGE}:${{ steps.meta.outputs.month }}"
+            echo "${IMAGE}:latest"
+            echo '```'
+            echo ""
+            echo "Plateformes : \`${PLATFORMS}\`"
+            echo ""
+            echo "Déploiement : \`docker compose pull && docker compose up -d\`"
+          } >> "$GITHUB_STEP_SUMMARY"
