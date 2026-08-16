@@ -50,8 +50,12 @@
             <MudPaper Class="pa-4 mb-3" Elevation="1">
                 <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
                     <MudText Typo="Typo.h6">Postes</MudText>
-                    <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small"
-                               OnClick="AjouterPoste">Ajouter poste</MudButton>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton StartIcon="@Icons.Material.Filled.Add" Size="Size.Small"
+                                   OnClick="AjouterPoste">Ajouter poste</MudButton>
+                        <MudButton StartIcon="@Icons.Material.Filled.Download" Size="Size.Small" Color="Color.Secondary"
+                                   OnClick="ImporterDepuisReserve">Importer depuis la Réserve</MudButton>
+                    </MudStack>
                 </MudStack>
                 <MudTable Items="@_team.Postes" Dense="true" Hover="true" Style="font-size:12px">
                     <HeaderContent>
@@ -225,6 +229,30 @@
         catch (InvalidOperationException ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    async Task ImporterDepuisReserve()
+    {
+        if (_team is null) return;
+        var parameters = new DialogParameters<ImportReserveDialog>
+        {
+            { x => x.VersionId, _team.RulesVersionId }
+        };
+        var dialog = await DialogService.ShowAsync<ImportReserveDialog>("Importer depuis la Réserve", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled && result.Data is List<int> ids && ids.Count > 0)
+        {
+            try
+            {
+                await DataEditService.ImporterReserveVersTeamTypeAsync(_team.Id, ids);
+                Snackbar.Add($"{ids.Count} poste(s) importé(s) depuis la Réserve", Severity.Success);
+                await ChargerAsync();
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+            }
         }
     }
 

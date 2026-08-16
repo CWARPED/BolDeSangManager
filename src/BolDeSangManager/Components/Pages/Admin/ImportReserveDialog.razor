@@ -1,0 +1,51 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+
+<MudDialog>
+    <DialogContent>
+        @if (_reserve.Count == 0)
+        {
+            <MudText>Aucun poste en réserve pour cette version. Ajoutez-en via Admin → Données → onglet Réserve.</MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-2" Style="color:#9e9e9e">Sélectionnez les postes à copier dans cette équipe. L'import crée des copies indépendantes.</MudText>
+            <div style="max-height:400px; overflow-y:auto">
+                @foreach (var p in _reserve)
+                {
+                    <MudCheckBox T="bool" Value="@_selection.Contains(p.Id)"
+                                 ValueChanged="@(v => Toggle(p.Id, v))"
+                                 Label="@($"{p.Nom} — {p.Cout:N0} po ({p.Mouvement}/{p.Force}/{p.Agilite}/{p.CapacitePasse}/{p.Armure})")" />
+                }
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Valider" Disabled="@(_selection.Count == 0)">
+            Importer (@_selection.Count)
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int VersionId { get; set; }
+
+    List<PoolPosition> _reserve = [];
+    HashSet<int> _selection = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _reserve = await DataEditService.GetReserveAsync(VersionId);
+    }
+
+    void Toggle(int id, bool on)
+    {
+        if (on) _selection.Add(id); else _selection.Remove(id);
+    }
+
+    void Annuler() => MudDialog.Cancel();
+    void Valider() => MudDialog.Close(DialogResult.Ok(_selection.ToList()));
+}
