@@ -327,6 +327,52 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         logger.LogInformation("Réserve : poste supprimé {Nom} (id={Id})", p.Nom, id);
     }
 
+    /// <summary>
+    /// Copie les postes de réserve indiqués dans le TeamType cible (design catalogue :
+    /// copie indépendante). Les compétences de départ sont recopiées (même version → mêmes SkillId).
+    /// </summary>
+    public async Task ImporterReserveVersTeamTypeAsync(int teamTypeId, IEnumerable<int> poolIds)
+    {
+        var tt = await db.TeamTypes.FindAsync(teamTypeId)
+            ?? throw new InvalidOperationException("TeamType introuvable");
+
+        var ids = poolIds.ToHashSet();
+        var pools = await db.PoolPositions
+            .Include(p => p.CompetencesDepart)
+            .Where(p => ids.Contains(p.Id))
+            .ToListAsync();
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        foreach (var pool in pools)
+        {
+            if (pool.RulesVersionId != tt.RulesVersionId)
+                throw new InvalidOperationException(
+                    $"Le poste de réserve '{pool.Nom}' n'appartient pas à la version de ce type d'équipe.");
+
+            var copie = new PlayerPosition
+            {
+                TeamTypeId = teamTypeId,
+                Nom = pool.Nom, QuantiteMax = pool.QuantiteMax, Cout = pool.Cout,
+                Mouvement = pool.Mouvement, Force = pool.Force, Agilite = pool.Agilite,
+                CapacitePasse = pool.CapacitePasse, Armure = pool.Armure,
+                CompetencesPrincipales = pool.CompetencesPrincipales,
+                CompetencesSecondaires = pool.CompetencesSecondaires, MotsCles = pool.MotsCles
+            };
+            db.PlayerPositions.Add(copie);
+            await db.SaveChangesAsync();
+
+            foreach (var pps in pool.CompetencesDepart)
+                db.PlayerPositionSkills.Add(new PlayerPositionSkill
+                {
+                    PlayerPositionId = copie.Id,
+                    SkillId = pps.SkillId
+                });
+            await db.SaveChangesAsync();
+        }
+        await tx.CommitAsync();
+        logger.LogInformation("Réserve : {N} poste(s) importé(s) dans TeamType {Id}", pools.Count, teamTypeId);
+    }
+
     // ═══════════════════ Skill ═══════════════════
 
     public async Task<List<Skill>> GetSkillsAsync(int versionId) =>
