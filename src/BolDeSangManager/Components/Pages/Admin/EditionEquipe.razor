@@ -239,7 +239,8 @@
         {
             { x => x.VersionId, _team.RulesVersionId }
         };
-        var dialog = await DialogService.ShowAsync<ImportReserveDialog>("Importer depuis la Réserve", parameters);
+        var options = new DialogOptions { MaxWidth = MaxWidth.Large, FullWidth = true, CloseOnEscapeKey = true };
+        var dialog = await DialogService.ShowAsync<ImportReserveDialog>("Importer depuis la Réserve", parameters, options);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled && result.Data is List<int> ids && ids.Count > 0)
         {

@@ -10,14 +10,59 @@
         }
         else
         {
-            <MudText Typo="Typo.body2" Class="mb-2" Style="color:#9e9e9e">Sélectionnez les postes à copier dans cette équipe. L'import crée des copies indépendantes.</MudText>
-            <div style="max-height:400px; overflow-y:auto">
-                @foreach (var p in _reserve)
-                {
-                    <MudCheckBox T="bool" Value="@_selection.Contains(p.Id)"
-                                 ValueChanged="@(v => Toggle(p.Id, v))"
-                                 Label="@($"{p.Nom} — {p.Cout:N0} po ({p.Mouvement}/{p.Force}/{p.Agilite}/{p.CapacitePasse}/{p.Armure})")" />
-                }
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2" Wrap="Wrap.Wrap">
+                <MudTextField @bind-Value="_recherche" Placeholder="Rechercher…" Immediate="true"
+                              Variant="Variant.Outlined" Margin="Margin.Dense"
+                              Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                              Clearable="true" Style="max-width:280px" />
+                <MudText Typo="Typo.caption" Style="color:#9e9e9e">@_selection.Count sélectionné(s) / @_reserve.Count</MudText>
+            </MudStack>
+
+            <div style="max-height:60vh; overflow-y:auto">
+                <MudTable Items="@Filtres" Dense="true" Hover="true" FixedHeader="true"
+                          Style="font-size:12px" T="PoolPosition" Breakpoint="Breakpoint.None"
+                          OnRowClick="@((TableRowClickEventArgs<PoolPosition> a) => Toggle(a.Item!.Id))">
+                    <HeaderContent>
+                        <MudTh Style="width:32px">
+                            <MudCheckBox T="bool" Dense="true" Value="@ToutFiltreSelectionne"
+                                         ValueChanged="@(v => ToggleTous(v))" />
+                        </MudTh>
+                        <MudTh>Poste</MudTh>
+                        <MudTh Style="text-align:right; white-space:nowrap">Coût</MudTh>
+                        <MudTh Class="d-none d-sm-table-cell" Style="text-align:center">M/F/AG/CP/AR</MudTh>
+                        <MudTh Class="d-none d-md-table-cell">Skills</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd Style="width:32px">
+                            <MudCheckBox T="bool" Dense="true" Value="@_selection.Contains(context.Id)"
+                                         ValueChanged="@(v => Toggle(context.Id))" />
+                        </MudTd>
+                        <MudTd DataLabel="Poste">
+                            <span style="font-weight:600">@context.Nom</span>
+                            @if (!string.IsNullOrEmpty(context.MotsCles))
+                            {
+                                <span style="font-size:10px; color:#9e9e9e; font-style:italic"> · @context.MotsCles.Replace(",", ", ")</span>
+                            }
+                            @* Sur mobile : caracs + skills repliés sous le nom, puisque leurs colonnes sont masquées *@
+                            <div class="d-sm-none" style="font-family:monospace; font-size:10px; color:#bdbdbd">
+                                @context.Mouvement/@context.Force/@context.Agilite/@context.CapacitePasse/@context.Armure
+                                @if (context.CompetencesDepart?.Any() == true)
+                                {
+                                    <span> · @string.Join(", ", context.CompetencesDepart.Select(c => c.Skill?.Nom))</span>
+                                }
+                            </div>
+                        </MudTd>
+                        <MudTd DataLabel="Coût" Style="text-align:right; white-space:nowrap">@context.Cout.ToString("N0")</MudTd>
+                        <MudTd DataLabel="Caracs" Class="d-none d-sm-table-cell" Style="text-align:center; font-family:monospace; font-size:11px; white-space:nowrap">
+                            @context.Mouvement/@context.Force/@context.Agilite/@context.CapacitePasse/@context.Armure
+                        </MudTd>
+                        <MudTd DataLabel="Skills" Class="d-none d-md-table-cell" Style="font-size:10px; color:#bdbdbd">
+                            @(context.CompetencesDepart?.Any() == true
+                                ? string.Join(", ", context.CompetencesDepart.Select(c => c.Skill?.Nom))
+                                : "—")
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
             </div>
         }
     </DialogContent>
@@ -35,15 +80,34 @@
 
     List<PoolPosition> _reserve = [];
     HashSet<int> _selection = new();
+    string _recherche = "";
+
+    IEnumerable<PoolPosition> Filtres =>
+        string.IsNullOrWhiteSpace(_recherche)
+            ? _reserve
+            : _reserve.Where(p =>
+                p.Nom.Contains(_recherche, StringComparison.OrdinalIgnoreCase)
+                || (p.MotsCles?.Contains(_recherche, StringComparison.OrdinalIgnoreCase) ?? false));
+
+    bool ToutFiltreSelectionne => Filtres.Any() && Filtres.All(p => _selection.Contains(p.Id));
 
     protected override async Task OnInitializedAsync()
     {
         _reserve = await DataEditService.GetReserveAsync(VersionId);
     }
 
-    void Toggle(int id, bool on)
+    void Toggle(int id)
     {
-        if (on) _selection.Add(id); else _selection.Remove(id);
+        if (!_selection.Add(id)) _selection.Remove(id);
+    }
+
+    void ToggleTous(bool on)
+    {
+        foreach (var p in Filtres)
+        {
+            if (on) _selection.Add(p.Id);
+            else _selection.Remove(p.Id);
+        }
     }
 
     void Annuler() => MudDialog.Cancel();
