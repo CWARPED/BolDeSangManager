@@ -98,4 +98,43 @@ public class DataEditServiceTests
             Assert.Single(poste!.CompetencesDepart);
         }
     }
+
+    [Fact]
+    public async Task ClonerVersion_CopieAussiLaReserve()
+    {
+        using var factory = new TestDbFactory();
+        int gameId, srcVersionId, skillId, poolId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);
+            gameId = gId; srcVersionId = vId;
+            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, RulesVersionId = srcVersionId };
+            db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
+            var pool = new PoolPosition { RulesVersionId = srcVersionId, Nom = "Troll", Force = 5 };
+            db.PoolPositions.Add(pool); db.SaveChanges(); poolId = pool.Id;
+            db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = poolId, SkillId = skillId });
+            db.SaveChanges();
+        }
+
+        int newVersionId;
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            var nouvelle = await svc.CreerVersionAsync(gameId, "Saison 4", 2, false, srcVersionId);
+            newVersionId = nouvelle.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var pools = await db.PoolPositions
+                .Include(p => p.CompetencesDepart)
+                .Where(p => p.RulesVersionId == newVersionId).ToListAsync();
+            Assert.Single(pools);
+            Assert.Equal("Troll", pools[0].Nom);
+            var skillCloneId = pools[0].CompetencesDepart.Single().SkillId;
+            var skillClone = await db.Skills.FindAsync(skillCloneId);
+            Assert.Equal(newVersionId, skillClone!.RulesVersionId);
+        }
+    }
 }

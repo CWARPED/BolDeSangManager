@@ -137,6 +137,36 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
+        // Cloner les PoolPositions (Réserve) + leurs compétences de départ (remap skills)
+        var sourcePools = await db.PoolPositions
+            .Include(p => p.CompetencesDepart)
+            .Where(p => p.RulesVersionId == sourceVersionId)
+            .ToListAsync();
+
+        foreach (var srcPool in sourcePools)
+        {
+            var copie = new PoolPosition
+            {
+                RulesVersionId = destVersionId,
+                Nom = srcPool.Nom, QuantiteMax = srcPool.QuantiteMax, Cout = srcPool.Cout,
+                Mouvement = srcPool.Mouvement, Force = srcPool.Force, Agilite = srcPool.Agilite,
+                CapacitePasse = srcPool.CapacitePasse, Armure = srcPool.Armure,
+                CompetencesPrincipales = srcPool.CompetencesPrincipales,
+                CompetencesSecondaires = srcPool.CompetencesSecondaires, MotsCles = srcPool.MotsCles
+            };
+            db.PoolPositions.Add(copie);
+            await db.SaveChangesAsync();
+
+            foreach (var pps in srcPool.CompetencesDepart)
+                if (skillMap.TryGetValue(pps.SkillId, out var newSkill))
+                    db.PoolPositionSkills.Add(new PoolPositionSkill
+                    {
+                        PoolPositionId = copie.Id,
+                        SkillId = newSkill.Id
+                    });
+        }
+        await db.SaveChangesAsync();
+
         await tx.CommitAsync();
         logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count);
     }
