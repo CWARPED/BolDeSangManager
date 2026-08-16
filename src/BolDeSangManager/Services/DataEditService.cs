@@ -277,6 +277,56 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         await db.SaveChangesAsync();
     }
 
+    // ═══════════════════ Réserve (PoolPosition) ═══════════════════
+
+    public async Task<List<PoolPosition>> GetReserveAsync(int versionId) =>
+        await db.PoolPositions
+            .Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Where(p => p.RulesVersionId == versionId)
+            .OrderBy(p => p.Nom)
+            .ToListAsync();
+
+    public async Task<PoolPosition> AjouterReserveAsync(int versionId, PoolPosition data, IEnumerable<int> skillsDepart)
+    {
+        data.RulesVersionId = versionId;
+        db.PoolPositions.Add(data);
+        await db.SaveChangesAsync();
+        foreach (var sid in skillsDepart)
+            db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = data.Id, SkillId = sid });
+        await db.SaveChangesAsync();
+        logger.LogInformation("Réserve : poste ajouté {Nom} (id={Id}) sur version {V}", data.Nom, data.Id, versionId);
+        return data;
+    }
+
+    public async Task ModifierReserveAsync(int id, PoolPosition data, IEnumerable<int> skillsDepart)
+    {
+        var p = await db.PoolPositions
+            .Include(x => x.CompetencesDepart)
+            .FirstOrDefaultAsync(x => x.Id == id)
+            ?? throw new InvalidOperationException("Poste de réserve introuvable");
+
+        p.Nom = data.Nom; p.QuantiteMax = data.QuantiteMax; p.Cout = data.Cout;
+        p.Mouvement = data.Mouvement; p.Force = data.Force; p.Agilite = data.Agilite;
+        p.CapacitePasse = data.CapacitePasse; p.Armure = data.Armure;
+        p.CompetencesPrincipales = data.CompetencesPrincipales;
+        p.CompetencesSecondaires = data.CompetencesSecondaires; p.MotsCles = data.MotsCles;
+
+        db.PoolPositionSkills.RemoveRange(p.CompetencesDepart);
+        await db.SaveChangesAsync();
+        foreach (var sid in skillsDepart)
+            db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = p.Id, SkillId = sid });
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SupprimerReserveAsync(int id)
+    {
+        var p = await db.PoolPositions.FindAsync(id)
+            ?? throw new InvalidOperationException("Poste de réserve introuvable");
+        db.PoolPositions.Remove(p); // cascade sur PoolPositionSkill ; n'affecte PAS les postes déjà importés
+        await db.SaveChangesAsync();
+        logger.LogInformation("Réserve : poste supprimé {Nom} (id={Id})", p.Nom, id);
+    }
+
     // ═══════════════════ Skill ═══════════════════
 
     public async Task<List<Skill>> GetSkillsAsync(int versionId) =>
