@@ -36,6 +36,69 @@
     </MudStack>
 
     <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4">
+        <MudTabPanel Text="Réserve">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_reserve.Count poste(s) en réserve</b></MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton StartIcon="@Icons.Material.Filled.Download" Color="Color.Secondary" Variant="Variant.Outlined"
+                               OnClick="ExporterReserve" Disabled="@(_reserve.Count == 0)">Exporter la Réserve</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Color="Color.Secondary" Variant="Variant.Outlined"
+                               OnClick="@(() => JS.InvokeVoidAsync("clickElement", "importReserveInput"))">Importer une Réserve</MudButton>
+                    <InputFile id="importReserveInput" OnChange="ImporterReserve" accept=".json" style="display:none" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               OnClick="AjouterReservePoste">Ajouter un poste de réserve</MudButton>
+                </MudStack>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="color:#9e9e9e">
+                Postes réutilisables de cette version de règles. Importez-les dans une équipe depuis l'édition de l'équipe (bouton « Importer depuis la Réserve »). L'import crée une copie indépendante.
+            </MudText>
+            <MudTable Items="@_reserve" Dense="true" Hover="true" Style="font-size:12px">
+                <HeaderContent>
+                    <MudTh>Poste</MudTh>
+                    <MudTh Style="text-align:center">Q.</MudTh>
+                    <MudTh Style="text-align:right">Coût</MudTh>
+                    <MudTh Style="text-align:center">M / F / AG / CP / AR</MudTh>
+                    <MudTh>P / S</MudTh>
+                    <MudTh>Skills départ</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>
+                        <div style="font-weight:600">@context.Nom</div>
+                        @if (!string.IsNullOrEmpty(context.MotsCles))
+                        {
+                            <div style="font-size:10px; color:#9e9e9e; font-style:italic">@context.MotsCles.Replace(",", ", ")</div>
+                        }
+                    </MudTd>
+                    <MudTd Style="text-align:center">@context.QuantiteMax</MudTd>
+                    <MudTd Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
+                    <MudTd Style="text-align:center; font-family:monospace; font-size:11px">
+                        @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
+                    </MudTd>
+                    <MudTd>
+                        <div style="font-size:11px"><span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
+                        <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
+                    </MudTd>
+                    <MudTd>
+                        @if (context.CompetencesDepart?.Any() == true)
+                        {
+                            <div style="display:flex; flex-wrap:wrap; gap:2px">
+                                @foreach (var c in context.CompetencesDepart)
+                                {
+                                    <span style="font-size:10px; padding:1px 4px; background:rgba(229,57,53,0.15); border-radius:3px; white-space:nowrap">@c.Skill?.Nom</span>
+                                }
+                            </div>
+                        }
+                        else { <span style="font-size:10px; color:#666">—</span> }
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditerReservePoste(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerReservePoste(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
         <MudTabPanel Text="Équipes">
             <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_teamTypes.Count équipe(s)</b></MudText>
@@ -146,69 +209,6 @@
                                        OnClick="@(() => EditerSkill(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                        OnClick="@(() => SupprimerSkill(context))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudTabPanel>
-
-        <MudTabPanel Text="Réserve">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
-                <MudText Typo="Typo.subtitle1"><b>@_reserve.Count poste(s) en réserve</b></MudText>
-                <MudStack Row="true" Spacing="2">
-                    <MudButton StartIcon="@Icons.Material.Filled.Download" Color="Color.Secondary" Variant="Variant.Outlined"
-                               OnClick="ExporterReserve" Disabled="@(_reserve.Count == 0)">Exporter la Réserve</MudButton>
-                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Color="Color.Secondary" Variant="Variant.Outlined"
-                               OnClick="@(() => JS.InvokeVoidAsync("clickElement", "importReserveInput"))">Importer une Réserve</MudButton>
-                    <InputFile id="importReserveInput" OnChange="ImporterReserve" accept=".json" style="display:none" />
-                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                               OnClick="AjouterReservePoste">Ajouter un poste de réserve</MudButton>
-                </MudStack>
-            </MudStack>
-            <MudText Typo="Typo.body2" Class="mb-2" Style="color:#9e9e9e">
-                Postes réutilisables de cette version de règles. Importez-les dans une équipe depuis l'édition de l'équipe (bouton « Importer depuis la Réserve »). L'import crée une copie indépendante.
-            </MudText>
-            <MudTable Items="@_reserve" Dense="true" Hover="true" Style="font-size:12px">
-                <HeaderContent>
-                    <MudTh>Poste</MudTh>
-                    <MudTh Style="text-align:center">Q.</MudTh>
-                    <MudTh Style="text-align:right">Coût</MudTh>
-                    <MudTh Style="text-align:center">M / F / AG / CP / AR</MudTh>
-                    <MudTh>P / S</MudTh>
-                    <MudTh>Skills départ</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>
-                        <div style="font-weight:600">@context.Nom</div>
-                        @if (!string.IsNullOrEmpty(context.MotsCles))
-                        {
-                            <div style="font-size:10px; color:#9e9e9e; font-style:italic">@context.MotsCles.Replace(",", ", ")</div>
-                        }
-                    </MudTd>
-                    <MudTd Style="text-align:center">@context.QuantiteMax</MudTd>
-                    <MudTd Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
-                    <MudTd Style="text-align:center; font-family:monospace; font-size:11px">
-                        @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
-                    </MudTd>
-                    <MudTd>
-                        <div style="font-size:11px"><span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
-                        <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
-                    </MudTd>
-                    <MudTd>
-                        @if (context.CompetencesDepart?.Any() == true)
-                        {
-                            <div style="display:flex; flex-wrap:wrap; gap:2px">
-                                @foreach (var c in context.CompetencesDepart)
-                                {
-                                    <span style="font-size:10px; padding:1px 4px; background:rgba(229,57,53,0.15); border-radius:3px; white-space:nowrap">@c.Skill?.Nom</span>
-                                }
-                            </div>
-                        }
-                        else { <span style="font-size:10px; color:#666">—</span> }
-                    </MudTd>
-                    <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditerReservePoste(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerReservePoste(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
