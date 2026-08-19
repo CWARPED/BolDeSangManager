@@ -756,9 +756,6 @@ namespace BolDeSangManager.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<int>("Ordre")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int>("RulesVersionId")
                         .HasColumnType("INTEGER");
 

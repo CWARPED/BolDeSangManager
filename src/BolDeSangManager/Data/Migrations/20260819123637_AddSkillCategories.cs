@@ -25,8 +25,7 @@ namespace BolDeSangManager.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     RulesVersionId = table.Column<int>(type: "INTEGER", nullable: false),
                     Nom = table.Column<string>(type: "TEXT", nullable: false),
-                    Code = table.Column<string>(type: "TEXT", nullable: false),
-                    Ordre = table.Column<int>(type: "INTEGER", nullable: false)
+                    Code = table.Column<string>(type: "TEXT", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -64,16 +63,16 @@ namespace BolDeSangManager.Migrations
             // et la clé étrangère ajoutée juste après échouerait.
             // ─────────────────────────────────────────────────────────────────
             migrationBuilder.Sql(@"
-                INSERT INTO SkillCategories (RulesVersionId, Nom, Code, Ordre)
-                SELECT v.Id, c.Nom, c.Code, c.Ordre
+                INSERT INTO SkillCategories (RulesVersionId, Nom, Code)
+                SELECT v.Id, c.Nom, c.Code
                 FROM RulesVersions v
                 CROSS JOIN (
-                    SELECT 0 AS Val, 'Agilité'   AS Nom, 'A' AS Code, 1 AS Ordre
-                    UNION ALL SELECT 1, 'Force',     'F', 2
-                    UNION ALL SELECT 2, 'Générale',  'G', 3
-                    UNION ALL SELECT 3, 'Mutation',  'M', 4
-                    UNION ALL SELECT 4, 'Passe',     'P', 5
-                    UNION ALL SELECT 5, 'Scélérate', 'S', 6
+                    SELECT 'Agilité'   AS Nom, 'A' AS Code
+                    UNION ALL SELECT 'Force',     'F'
+                    UNION ALL SELECT 'Générale',  'G'
+                    UNION ALL SELECT 'Mutation',  'M'
+                    UNION ALL SELECT 'Passe',     'P'
+                    UNION ALL SELECT 'Scélérate', 'S'
                 ) c;");
 
             migrationBuilder.Sql(@"

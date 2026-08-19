@@ -134,12 +134,12 @@ public static class DbSeeder
             .ToListAsync();
 
         var map = new Dictionary<SkillCategory, int>();
-        foreach (var (valeurEnum, nom, code, ordre) in StandardSkillCategories.Toutes)
+        foreach (var (valeurEnum, nom, code) in StandardSkillCategories.Toutes)
         {
             var cat = existantes.FirstOrDefault(c => c.Nom == nom);
             if (cat is null)
             {
-                cat = new SkillCategoryDef { RulesVersionId = versionId, Nom = nom, Code = code, Ordre = ordre };
+                cat = new SkillCategoryDef { RulesVersionId = versionId, Nom = nom, Code = code };
                 db.SkillCategories.Add(cat);
                 await db.SaveChangesAsync();
             }

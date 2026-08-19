@@ -54,8 +54,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             {
                 RulesVersionId = destVersionId,
                 Nom = srcCat.Nom,
-                Code = srcCat.Code,
-                Ordre = srcCat.Ordre
+                Code = srcCat.Code
             };
             db.SkillCategories.Add(copieCat);
             categorieMap[srcCat.Id] = copieCat;
@@ -489,10 +488,10 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     public async Task<List<SkillCategoryDef>> GetCategoriesAsync(int versionId) =>
         await db.SkillCategories
             .Where(c => c.RulesVersionId == versionId)
-            .OrderBy(c => c.Ordre).ThenBy(c => c.Nom)
+            .OrderBy(c => c.Nom)
             .ToListAsync();
 
-    public async Task<SkillCategoryDef> CreerCategorieAsync(int versionId, string nom, string code, int ordre)
+    public async Task<SkillCategoryDef> CreerCategorieAsync(int versionId, string nom, string code)
     {
         var (nomNet, codeNet) = ValiderCategorie(nom, code);
         await VerifierUniciteCategorieAsync(versionId, nomNet, codeNet, categorieExclue: null);
@@ -501,8 +500,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         {
             RulesVersionId = versionId,
             Nom = nomNet,
-            Code = codeNet,
-            Ordre = ordre
+            Code = codeNet
         };
         db.SkillCategories.Add(cat);
         await db.SaveChangesAsync();
@@ -514,7 +512,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     /// Renomme / recode une catégorie. Autorisé même si elle est utilisée : les compétences
     /// pointent vers son identifiant, pas vers son libellé.
     /// </summary>
-    public async Task ModifierCategorieAsync(int id, string nom, string code, int ordre)
+    public async Task ModifierCategorieAsync(int id, string nom, string code)
     {
         var cat = await db.SkillCategories.FindAsync(id)
             ?? throw new InvalidOperationException("Catégorie introuvable");
@@ -524,7 +522,6 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
         cat.Nom = nomNet;
         cat.Code = codeNet;
-        cat.Ordre = ordre;
         await db.SaveChangesAsync();
         logger.LogInformation("Catégorie modifiée : {Nom} ({Code}) id={Id}", nomNet, codeNet, id);
     }
@@ -578,7 +575,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         await db.Skills
             .Include(s => s.SkillCategoryDef)
             .Where(s => s.RulesVersionId == versionId)
-            .OrderBy(s => s.SkillCategoryDef.Ordre).ThenBy(s => s.Nom)
+            .OrderBy(s => s.SkillCategoryDef.Nom).ThenBy(s => s.Nom)
             .ToListAsync();
 
     public async Task<Skill> CreerSkillAsync(int versionId, Skill data)

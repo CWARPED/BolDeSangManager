@@ -26,9 +26,9 @@ public class SkillCategoryTests
         return (game.Id, v.Id);
     }
 
-    private static int SeedCategorie(Data.ApplicationDbContext db, int versionId, string nom, string code, int ordre = 1)
+    private static int SeedCategorie(Data.ApplicationDbContext db, int versionId, string nom, string code)
     {
-        var c = new SkillCategoryDef { RulesVersionId = versionId, Nom = nom, Code = code, Ordre = ordre };
+        var c = new SkillCategoryDef { RulesVersionId = versionId, Nom = nom, Code = code };
         db.SkillCategories.Add(c);
         db.SaveChanges();
         return c.Id;
@@ -44,7 +44,7 @@ public class SkillCategoryTests
         using (var db = factory.CreateContext())
         {
             var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
-            await svc.CreerCategorieAsync(versionId, "Dungeon", "DB", 7);
+            await svc.CreerCategorieAsync(versionId, "Dungeon", "DB");
         }
 
         using (var db = factory.CreateContext())
@@ -52,7 +52,6 @@ public class SkillCategoryTests
             var c = await db.SkillCategories.SingleAsync(x => x.RulesVersionId == versionId);
             Assert.Equal("Dungeon", c.Nom);
             Assert.Equal("DB", c.Code);   // code à 2 lettres accepté
-            Assert.Equal(7, c.Ordre);
         }
     }
 
@@ -69,7 +68,7 @@ public class SkillCategoryTests
         using var ctx = factory.CreateContext();
         var svc = new DataEditService(ctx, NullLogger<DataEditService>.Instance);
         await Assert.ThrowsAsync<InvalidOperationException>(
-            () => svc.CreerCategorieAsync(versionId, "Bidon", code, 1));
+            () => svc.CreerCategorieAsync(versionId, "Bidon", code));
     }
 
     [Fact]
@@ -88,10 +87,10 @@ public class SkillCategoryTests
             var svc = new DataEditService(ctx, NullLogger<DataEditService>.Instance);
             // même nom (casse différente)
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => svc.CreerCategorieAsync(versionId, "agilité", "X", 2));
+                () => svc.CreerCategorieAsync(versionId, "agilité", "X"));
             // même code (casse différente)
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => svc.CreerCategorieAsync(versionId, "Autre", "a", 2));
+                () => svc.CreerCategorieAsync(versionId, "Autre", "a"));
         }
     }
 
@@ -111,7 +110,7 @@ public class SkillCategoryTests
         using (var ctx = factory.CreateContext())
         {
             var svc = new DataEditService(ctx, NullLogger<DataEditService>.Instance);
-            await svc.ModifierCategorieAsync(catId, "Agilité & Vitesse", "AV", 9);
+            await svc.ModifierCategorieAsync(catId, "Agilité & Vitesse", "AV");
         }
 
         using (var db = factory.CreateContext())
@@ -181,7 +180,7 @@ public class SkillCategoryTests
         {
             var (gId, vId) = SeedVersion(db);
             gameId = gId; srcVersionId = vId;
-            catId = SeedCategorie(db, srcVersionId, "Générale", "G", 3);
+            catId = SeedCategorie(db, srcVersionId, "Générale", "G");
             db.Skills.Add(new Skill { RulesVersionId = srcVersionId, SkillCategoryDefId = catId, Nom = "Blocage" });
             db.SaveChanges();
         }
@@ -207,16 +206,16 @@ public class SkillCategoryTests
     }
 
     [Fact]
-    public async Task GetCategories_TrieParOrdre()
+    public async Task GetCategories_TrieParNom()
     {
         using var factory = new TestDbFactory();
         int versionId;
         using (var db = factory.CreateContext())
         {
             (_, versionId) = SeedVersion(db);
-            SeedCategorie(db, versionId, "Passe", "P", 5);
-            SeedCategorie(db, versionId, "Agilité", "A", 1);
-            SeedCategorie(db, versionId, "Force", "F", 2);
+            SeedCategorie(db, versionId, "Passe", "P");
+            SeedCategorie(db, versionId, "Agilité", "A");
+            SeedCategorie(db, versionId, "Force", "F");
         }
 
         using var ctx = factory.CreateContext();

@@ -88,14 +88,12 @@
                         </MudStack>
                         <MudTable Items="@_categories" Dense="true" Hover="true" Elevation="0">
                             <HeaderContent>
-                                <MudTh Style="width:10%">Ordre</MudTh>
                                 <MudTh>Nom</MudTh>
                                 <MudTh Style="width:10%">Code</MudTh>
                                 <MudTh Style="width:20%">Compétences</MudTh>
                                 <MudTh Style="width:12%">Actions</MudTh>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd>@context.Ordre</MudTd>
                                 <MudTd><b>@context.Nom</b></MudTd>
                                 <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Code</MudChip></MudTd>
                                 <MudTd>@NbSkills(context.Id)</MudTd>
@@ -130,7 +128,7 @@
             <MudTable Items="@_skillsFiltres" Dense="true" Hover="true">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.SkillCategoryDef.Ordre)">Catégorie</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.SkillCategoryDef.Nom)">Catégorie</MudTableSortLabel></MudTh>
                     <MudTh>Trait/Élite</MudTh>
                     <MudTh>Description</MudTh>
                     <MudTh>Actions</MudTh>
@@ -321,8 +319,7 @@
         var parameters = new DialogParameters<EditionCategorieDialog>
         {
             { x => x.VersionId, _selectedVersionId },
-            { x => x.Existant, null },
-            { x => x.OrdreParDefaut, _categories.Count == 0 ? 1 : _categories.Max(c => c.Ordre) + 1 }
+            { x => x.Existant, null }
         };
         var dialog = await DialogService.ShowAsync<EditionCategorieDialog>("Nouvelle catégorie", parameters);
         var result = await dialog.Result;

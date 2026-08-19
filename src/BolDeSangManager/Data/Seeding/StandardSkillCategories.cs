@@ -10,15 +10,15 @@ namespace BolDeSangManager.Data.Seeding;
 /// </summary>
 public static class StandardSkillCategories
 {
-    /// <summary>Nom, code d'affichage et ordre de chaque catégorie standard.</summary>
-    public static readonly (SkillCategory Enum, string Nom, string Code, int Ordre)[] Toutes =
+    /// <summary>Nom et code d'affichage de chaque catégorie standard.</summary>
+    public static readonly (SkillCategory Enum, string Nom, string Code)[] Toutes =
     [
-        (SkillCategory.Agilite,   "Agilité",   "A", 1),
-        (SkillCategory.Force,     "Force",     "F", 2),
-        (SkillCategory.Generale,  "Générale",  "G", 3),
-        (SkillCategory.Mutation,  "Mutation",  "M", 4),
-        (SkillCategory.Passe,     "Passe",     "P", 5),
-        (SkillCategory.Scelerate, "Scélérate", "S", 6),
+        (SkillCategory.Agilite,   "Agilité",   "A"),
+        (SkillCategory.Force,     "Force",     "F"),
+        (SkillCategory.Generale,  "Générale",  "G"),
+        (SkillCategory.Mutation,  "Mutation",  "M"),
+        (SkillCategory.Passe,     "Passe",     "P"),
+        (SkillCategory.Scelerate, "Scélérate", "S"),
     ];
 
     /// <summary>Nom complet correspondant à une valeur de l'ancien enum.</summary>

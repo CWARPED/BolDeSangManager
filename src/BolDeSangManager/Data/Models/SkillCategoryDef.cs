@@ -20,8 +20,5 @@ public class SkillCategoryDef
     /// </summary>
     public string Code { get; set; } = string.Empty;
 
-    /// <summary>Ordre d'affichage dans les listes et les regroupements.</summary>
-    public int Ordre { get; set; }
-
     public ICollection<Skill> Competences { get; set; } = [];
 }

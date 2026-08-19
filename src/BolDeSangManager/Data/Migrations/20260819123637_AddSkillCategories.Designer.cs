@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BolDeSangManager.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260819120805_AddSkillCategories")]
+    [Migration("20260819123637_AddSkillCategories")]
     partial class AddSkillCategories
     {
         /// <inheritdoc />
@@ -758,9 +758,6 @@ namespace BolDeSangManager.Migrations
                     b.Property<string>("Nom")
                         .IsRequired()
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("Ordre")
-                        .HasColumnType("INTEGER");
 
                     b.Property<int>("RulesVersionId")
                         .HasColumnType("INTEGER");

@@ -31,7 +31,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
         var skills = await db.Skills
             .Include(s => s.SkillCategoryDef)
             .Where(s => s.RulesVersionId == rulesVersionId)
-            .OrderBy(s => s.SkillCategoryDef.Ordre).ThenBy(s => s.Nom)
+            .OrderBy(s => s.SkillCategoryDef.Nom).ThenBy(s => s.Nom)
             .ToListAsync();
 
         var teamTypes = await db.TeamTypes
@@ -49,7 +49,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
 
         var categories = await db.SkillCategories
             .Where(c => c.RulesVersionId == rulesVersionId)
-            .OrderBy(c => c.Ordre)
+            .OrderBy(c => c.Nom)
             .ToListAsync();
 
         var dto = new GameDataExportDto(
@@ -88,7 +88,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 p.MotsCles,
                 p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
             )).ToList(),
-            Categories: categories.Select(c => new SkillCategoryGdDto(c.Nom, c.Code, c.Ordre)).ToList()
+            Categories: categories.Select(c => new SkillCategoryGdDto(c.Nom, c.Code)).ToList()
         );
 
         var json = JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
@@ -156,7 +156,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             var categoriesDto = dto.Categories is { Count: > 0 }
                 ? dto.Categories
                 : StandardSkillCategories.Toutes
-                    .Select(t => new SkillCategoryGdDto(t.Nom, t.Code, t.Ordre)).ToList();
+                    .Select(t => new SkillCategoryGdDto(t.Nom, t.Code)).ToList();
 
             foreach (var c in categoriesDto)
             {
@@ -164,8 +164,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 {
                     RulesVersionId = version.Id,
                     Nom = c.Nom,
-                    Code = c.Code,
-                    Ordre = c.Ordre
+                    Code = c.Code
                 };
                 db.SkillCategories.Add(cat);
                 await db.SaveChangesAsync();
@@ -441,8 +440,7 @@ record SkillGdDto(
 /// <summary>Catégorie de compétence exportée. Absent des fichiers antérieurs à R2.</summary>
 record SkillCategoryGdDto(
     string Nom,
-    string Code,
-    int Ordre
+    string Code
 );
 
 record TeamTypeGdDto(
