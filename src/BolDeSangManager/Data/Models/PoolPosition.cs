@@ -20,7 +20,16 @@ public class PoolPosition
     public string Agilite { get; set; } = "3+";
     public string CapacitePasse { get; set; } = "-";
     public string Armure { get; set; } = "9+";
+
+    /// <summary>Accès aux catégories de compétence (principal / secondaire).</summary>
+    public ICollection<PoolPositionCategoryAccess> AccesCategories { get; set; } = [];
+
+    /// <summary>Codes d'accès principaux au format seed ("GAF"). Non persisté.</summary>
+    [NotMapped]
     public string CompetencesPrincipales { get; set; } = "G";
+
+    /// <summary>Codes d'accès secondaires au format seed ("AS"). Non persisté.</summary>
+    [NotMapped]
     public string CompetencesSecondaires { get; set; } = string.Empty;
     public string MotsCles { get; set; } = string.Empty;
 

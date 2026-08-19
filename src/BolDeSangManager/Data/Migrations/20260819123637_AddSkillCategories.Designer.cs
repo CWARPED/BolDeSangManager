@@ -3,6 +3,7 @@ using System;
 using BolDeSangManager.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BolDeSangManager.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260819123637_AddSkillCategories")]
+    partial class AddSkillCategories
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
@@ -554,6 +557,14 @@ namespace BolDeSangManager.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CompetencesPrincipales")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CompetencesSecondaires")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Cout")
                         .HasColumnType("INTEGER");
 
@@ -582,24 +593,6 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("TeamTypeId");
 
                     b.ToTable("PlayerPositions");
-                });
-
-            modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPositionCategoryAccess", b =>
-                {
-                    b.Property<int>("PlayerPositionId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("SkillCategoryDefId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EstPrincipale")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("PlayerPositionId", "SkillCategoryDefId");
-
-                    b.HasIndex("SkillCategoryDefId");
-
-                    b.ToTable("PlayerPositionCategoryAccesses");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPositionSkill", b =>
@@ -635,6 +628,14 @@ namespace BolDeSangManager.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("CompetencesPrincipales")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CompetencesSecondaires")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Cout")
                         .HasColumnType("INTEGER");
 
@@ -663,24 +664,6 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("RulesVersionId");
 
                     b.ToTable("PoolPositions");
-                });
-
-            modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPositionCategoryAccess", b =>
-                {
-                    b.Property<int>("PoolPositionId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("SkillCategoryDefId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<bool>("EstPrincipale")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("PoolPositionId", "SkillCategoryDefId");
-
-                    b.HasIndex("SkillCategoryDefId");
-
-                    b.ToTable("PoolPositionCategoryAccesses");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPositionSkill", b =>
@@ -1374,25 +1357,6 @@ namespace BolDeSangManager.Migrations
                     b.Navigation("TeamType");
                 });
 
-            modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPositionCategoryAccess", b =>
-                {
-                    b.HasOne("BolDeSangManager.Data.Models.PlayerPosition", "PlayerPosition")
-                        .WithMany("AccesCategories")
-                        .HasForeignKey("PlayerPositionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("BolDeSangManager.Data.Models.SkillCategoryDef", "SkillCategoryDef")
-                        .WithMany()
-                        .HasForeignKey("SkillCategoryDefId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("PlayerPosition");
-
-                    b.Navigation("SkillCategoryDef");
-                });
-
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPositionSkill", b =>
                 {
                     b.HasOne("BolDeSangManager.Data.Models.PlayerPosition", "PlayerPosition")
@@ -1421,25 +1385,6 @@ namespace BolDeSangManager.Migrations
                         .IsRequired();
 
                     b.Navigation("RulesVersion");
-                });
-
-            modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPositionCategoryAccess", b =>
-                {
-                    b.HasOne("BolDeSangManager.Data.Models.PoolPosition", "PoolPosition")
-                        .WithMany("AccesCategories")
-                        .HasForeignKey("PoolPositionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("BolDeSangManager.Data.Models.SkillCategoryDef", "SkillCategoryDef")
-                        .WithMany()
-                        .HasForeignKey("SkillCategoryDefId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("PoolPosition");
-
-                    b.Navigation("SkillCategoryDef");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPositionSkill", b =>
@@ -1705,8 +1650,6 @@ namespace BolDeSangManager.Migrations
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPosition", b =>
                 {
-                    b.Navigation("AccesCategories");
-
                     b.Navigation("CompetencesDepart");
 
                     b.Navigation("Joueurs");
@@ -1714,8 +1657,6 @@ namespace BolDeSangManager.Migrations
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPosition", b =>
                 {
-                    b.Navigation("AccesCategories");
-
                     b.Navigation("CompetencesDepart");
                 });
 

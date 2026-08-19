@@ -17,8 +17,28 @@
             <MudItem xs="4" sm="2"><MudTextField @bind-Value="_data.CapacitePasse" Label="CP" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="4" sm="2"><MudTextField @bind-Value="_data.Armure" Label="ARM" Variant="Variant.Outlined" /></MudItem>
 
-            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_data.CompetencesPrincipales" Label="Accès Principal (ex: GAF)" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" sm="6"><MudTextField @bind-Value="_data.CompetencesSecondaires" Label="Accès Secondaire (ex: ASF)" Variant="Variant.Outlined" /></MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="int" MultiSelection="true" SelectAll="false"
+                           SelectedValues="_accesPrincipales" SelectedValuesChanged="@(v => OnPrincipalesChanged(v))"
+                           ToStringFunc="@NomCategorie"
+                           Label="Accès Principal" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var c in _categories)
+                    {
+                        <MudSelectItem T="int" Value="@c.Id">@c.Nom (@c.Code)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudSelect T="int" MultiSelection="true" SelectAll="false"
+                           SelectedValues="_accesSecondaires" SelectedValuesChanged="@(v => _accesSecondaires = v.ToHashSet())"
+                           ToStringFunc="@NomCategorie"
+                           Label="Accès Secondaire" Variant="Variant.Outlined" Margin="Margin.Dense">
+                    @foreach (var c in _categories.Where(c => !_accesPrincipales.Contains(c.Id)))
+                    {
+                        <MudSelectItem T="int" Value="@c.Id">@c.Nom (@c.Code)</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
 
             <MudItem xs="12"><MudTextField @bind-Value="_data.MotsCles" Label="Mots-clés (CSV: Trois-quart,Humain,...)" Variant="Variant.Outlined" /></MudItem>
 
@@ -53,10 +73,24 @@
     PlayerPosition _data = new() { Nom = "", QuantiteMax = 1, Cout = 50_000, Mouvement = 6, Force = 3, Agilite = "3+", CapacitePasse = "-", Armure = "9+" };
     HashSet<int> _skillsSelectionnes = new();
     List<Skill> _skillsDispo = [];
+    List<SkillCategoryDef> _categories = [];
+    HashSet<int> _accesPrincipales = new();
+    HashSet<int> _accesSecondaires = new();
+
+    string NomCategorie(int id) => _categories.FirstOrDefault(c => c.Id == id)?.Nom ?? id.ToString();
+
+    /// <summary>Une catégorie passée en principal est retirée des secondaires (principal l'emporte).</summary>
+    void OnPrincipalesChanged(IEnumerable<int> valeurs)
+    {
+        _accesPrincipales = valeurs.ToHashSet();
+        _accesSecondaires.RemoveWhere(id => _accesPrincipales.Contains(id));
+    }
 
     protected override async Task OnInitializedAsync()
     {
         _skillsDispo = await DataEditService.GetSkillsAsync(VersionId);
+        _categories = await DataEditService.GetCategoriesAsync(VersionId);
+
         if (ModeReserve && ExistantReserve is not null)
         {
             _data = new PlayerPosition
@@ -64,10 +98,11 @@
                 Nom = ExistantReserve.Nom, QuantiteMax = ExistantReserve.QuantiteMax,
                 Cout = ExistantReserve.Cout, Mouvement = ExistantReserve.Mouvement, Force = ExistantReserve.Force,
                 Agilite = ExistantReserve.Agilite, CapacitePasse = ExistantReserve.CapacitePasse, Armure = ExistantReserve.Armure,
-                CompetencesPrincipales = ExistantReserve.CompetencesPrincipales, CompetencesSecondaires = ExistantReserve.CompetencesSecondaires,
                 MotsCles = ExistantReserve.MotsCles
             };
             _skillsSelectionnes = ExistantReserve.CompetencesDepart.Select(c => c.SkillId).ToHashSet();
+            _accesPrincipales = ExistantReserve.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDefId).ToHashSet();
+            _accesSecondaires = ExistantReserve.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDefId).ToHashSet();
         }
         else if (Existant is not null)
         {
@@ -76,10 +111,11 @@
                 Id = Existant.Id, Nom = Existant.Nom, QuantiteMax = Existant.QuantiteMax,
                 Cout = Existant.Cout, Mouvement = Existant.Mouvement, Force = Existant.Force,
                 Agilite = Existant.Agilite, CapacitePasse = Existant.CapacitePasse, Armure = Existant.Armure,
-                CompetencesPrincipales = Existant.CompetencesPrincipales, CompetencesSecondaires = Existant.CompetencesSecondaires,
                 MotsCles = Existant.MotsCles
             };
             _skillsSelectionnes = Existant.CompetencesDepart.Select(c => c.SkillId).ToHashSet();
+            _accesPrincipales = Existant.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDefId).ToHashSet();
+            _accesSecondaires = Existant.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDefId).ToHashSet();
         }
     }
 
@@ -87,6 +123,7 @@
 
     async Task Sauvegarder()
     {
+        var acces = new DataEditService.AccesCategoriesInput(_accesPrincipales, _accesSecondaires);
         try
         {
             if (ModeReserve)
@@ -94,22 +131,20 @@
                 var poolData = new PoolPosition {
                     Nom = _data.Nom, QuantiteMax = _data.QuantiteMax, Cout = _data.Cout,
                     Mouvement = _data.Mouvement, Force = _data.Force, Agilite = _data.Agilite,
-                    CapacitePasse = _data.CapacitePasse, Armure = _data.Armure,
-                    CompetencesPrincipales = _data.CompetencesPrincipales,
-                    CompetencesSecondaires = _data.CompetencesSecondaires, MotsCles = _data.MotsCles
+                    CapacitePasse = _data.CapacitePasse, Armure = _data.Armure, MotsCles = _data.MotsCles
                 };
                 if (ExistantReserve is null)
-                    await DataEditService.AjouterReserveAsync(VersionId, poolData, _skillsSelectionnes);
+                    await DataEditService.AjouterReserveAsync(VersionId, poolData, _skillsSelectionnes, acces);
                 else
-                    await DataEditService.ModifierReserveAsync(ExistantReserve.Id, poolData, _skillsSelectionnes);
+                    await DataEditService.ModifierReserveAsync(ExistantReserve.Id, poolData, _skillsSelectionnes, acces);
                 Snackbar.Add("Poste de réserve sauvegardé", Severity.Success);
                 MudDialog.Close(DialogResult.Ok(true));
                 return;
             }
             if (Existant is null)
-                await DataEditService.AjouterPosteAsync(TeamTypeId, _data, _skillsSelectionnes);
+                await DataEditService.AjouterPosteAsync(TeamTypeId, _data, _skillsSelectionnes, acces);
             else
-                await DataEditService.ModifierPosteAsync(Existant.Id, _data, _skillsSelectionnes);
+                await DataEditService.ModifierPosteAsync(Existant.Id, _data, _skillsSelectionnes, acces);
             Snackbar.Add("Poste sauvegardé", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }

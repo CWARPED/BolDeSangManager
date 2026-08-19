@@ -4,6 +4,8 @@ using System.Text.Json.Serialization;
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Data.Seeding;
+using BolDeSangManager.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
@@ -28,12 +30,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             ?? throw new InvalidOperationException("Version de règles introuvable");
 
         var skills = await db.Skills
+            .Include(s => s.SkillCategoryDef)
             .Where(s => s.RulesVersionId == rulesVersionId)
-            .OrderBy(s => s.Categorie).ThenBy(s => s.Nom)
+            .OrderBy(s => s.SkillCategoryDef.Nom).ThenBy(s => s.Nom)
             .ToListAsync();
 
         var teamTypes = await db.TeamTypes
             .Include(tt => tt.Postes).ThenInclude(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Include(tt => tt.Postes).ThenInclude(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Include(tt => tt.LimitesMotsCles)
             .Where(tt => tt.RulesVersionId == rulesVersionId)
             .OrderBy(tt => tt.Nom)
@@ -41,8 +45,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
 
         var reserve = await db.PoolPositions
             .Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Include(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Where(p => p.RulesVersionId == rulesVersionId)
             .OrderBy(p => p.Nom)
+            .ToListAsync();
+
+        var categories = await db.SkillCategories
+            .Where(c => c.RulesVersionId == rulesVersionId)
+            .OrderBy(c => c.Nom)
             .ToListAsync();
 
         var dto = new GameDataExportDto(
@@ -51,7 +61,8 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             Ordre: version.Ordre,
             EstActive: version.EstActive,
             Skills: skills.Select(s => new SkillGdDto(
-                s.Nom, s.Categorie, s.Description, s.EstElite, s.EstTrait)).ToList(),
+                s.Nom, s.Categorie, s.Description, s.EstElite, s.EstTrait,
+                CategorieNom: s.SkillCategoryDef?.Nom)).ToList(),
             TypesEquipes: teamTypes.Select(tt => new TeamTypeGdDto(
                 tt.Nom,
                 tt.Categorie,
@@ -70,7 +81,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     p.CompetencesPrincipales,
                     p.CompetencesSecondaires,
                     p.MotsCles,
-                    p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
+                    p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList(),
+                    p.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList(),
+                    p.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList()
                 )).ToList(),
                 tt.LimitesMotsCles.Select(l => new KeywordLimitGdDto(l.MotCle, l.Max)).ToList()
             )).ToList(),
@@ -78,8 +91,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 p.Nom, p.QuantiteMax, p.Cout, p.Mouvement, p.Force, p.Agilite,
                 p.CapacitePasse, p.Armure, p.CompetencesPrincipales, p.CompetencesSecondaires,
                 p.MotsCles,
-                p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
-            )).ToList()
+                p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList(),
+                p.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList(),
+                p.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList()
+            )).ToList(),
+            Categories: categories.Select(c => new SkillCategoryGdDto(c.Nom, c.Code)).ToList()
         );
 
         var json = JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
@@ -139,15 +155,50 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             db.RulesVersions.Add(version);
             await db.SaveChangesAsync();
 
-            // 2. Compétences
+            // 2. Catégories de compétence
+            // Fichier récent → on reprend ses catégories. Fichier antérieur à R2
+            // (Categories absent) → on matérialise les 6 catégories standard, et les
+            // compétences sont rattachées via leur ancien enum.
+            var categorieMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var categoriesCreees = new List<SkillCategoryDef>();
+            var categoriesDto = dto.Categories is { Count: > 0 }
+                ? dto.Categories
+                : StandardSkillCategories.Toutes
+                    .Select(t => new SkillCategoryGdDto(t.Nom, t.Code)).ToList();
+
+            foreach (var c in categoriesDto)
+            {
+                var cat = new SkillCategoryDef
+                {
+                    RulesVersionId = version.Id,
+                    Nom = c.Nom,
+                    Code = c.Code
+                };
+                db.SkillCategories.Add(cat);
+                await db.SaveChangesAsync();
+                categorieMap[c.Nom] = cat.Id;
+                categoriesCreees.Add(cat);
+            }
+
+            // 3. Compétences
             var skillMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var s in dto.Skills)
             {
+                // Résolution par nom de catégorie ; repli sur l'ancien enum pour les
+                // fichiers exportés avant R2.
+                var nomCategorie = s.CategorieNom ?? StandardSkillCategories.Nom(s.Categorie);
+                if (!categorieMap.TryGetValue(nomCategorie, out var categorieId))
+                {
+                    errors.Add($"Catégorie « {nomCategorie} » introuvable pour la compétence « {s.Nom} ».");
+                    continue;
+                }
+
                 var skill = new Skill
                 {
                     RulesVersionId = version.Id,
                     Nom = s.Nom,
                     Categorie = s.Categorie,
+                    SkillCategoryDefId = categorieId,
                     Description = s.Description,
                     EstElite = s.EstElite,
                     EstTrait = s.EstTrait
@@ -157,7 +208,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 skillMap[s.Nom] = skill.Id;
             }
 
-            // 3. TypesEquipes + Postes + Limites
+            // 4. TypesEquipes + Postes + Limites
             foreach (var ttDto in dto.TypesEquipes)
             {
                 var tt = new TeamType
@@ -207,6 +258,15 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                         });
                     }
                     await db.SaveChangesAsync();
+
+                    var (accP, accS) = ResoudreAccesImport(pDto, categoriesCreees);
+                    foreach (var catId in accP)
+                        db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                        { PlayerPositionId = pos.Id, SkillCategoryDefId = catId, EstPrincipale = true });
+                    foreach (var catId in accS)
+                        db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                        { PlayerPositionId = pos.Id, SkillCategoryDefId = catId, EstPrincipale = false });
+                    await db.SaveChangesAsync();
                 }
 
                 foreach (var lim in ttDto.Limites)
@@ -245,6 +305,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     }
                     db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = pool.Id, SkillId = skillId });
                 }
+
+                var (poolP, poolS) = ResoudreAccesImport(pDto, categoriesCreees);
+                foreach (var catId in poolP)
+                    db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+                    { PoolPositionId = pool.Id, SkillCategoryDefId = catId, EstPrincipale = true });
+                foreach (var catId in poolS)
+                    db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+                    { PoolPositionId = pool.Id, SkillCategoryDefId = catId, EstPrincipale = false });
                 await db.SaveChangesAsync();
             }
 
@@ -272,6 +340,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
 
         var reserve = await db.PoolPositions
             .Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Include(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Where(p => p.RulesVersionId == rulesVersionId)
             .OrderBy(p => p.Nom)
             .ToListAsync();
@@ -283,7 +352,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 p.Nom, p.QuantiteMax, p.Cout, p.Mouvement, p.Force, p.Agilite,
                 p.CapacitePasse, p.Armure, p.CompetencesPrincipales, p.CompetencesSecondaires,
                 p.MotsCles,
-                p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
+                p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList(),
+                p.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList(),
+                p.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList()
             )).ToList()
         );
 
@@ -321,6 +392,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .Where(s => s.RulesVersionId == rulesVersionId)
             .ToDictionaryAsync(s => s.Nom, s => s.Id, StringComparer.OrdinalIgnoreCase);
 
+        // catégories de la version cible, pour résoudre les accès des postes importés
+        var categoriesCible = await db.SkillCategories
+            .Where(c => c.RulesVersionId == rulesVersionId)
+            .ToListAsync();
+
         await using var tx = await db.Database.BeginTransactionAsync();
         try
         {
@@ -348,6 +424,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     }
                     db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = pool.Id, SkillId = skillId });
                 }
+
+                var (poolP, poolS) = ResoudreAccesImport(pDto, categoriesCible);
+                foreach (var catId in poolP)
+                    db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+                    { PoolPositionId = pool.Id, SkillCategoryDefId = catId, EstPrincipale = true });
+                foreach (var catId in poolS)
+                    db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+                    { PoolPositionId = pool.Id, SkillCategoryDefId = catId, EstPrincipale = false });
                 await db.SaveChangesAsync();
                 imported++;
             }
@@ -363,6 +447,32 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             return (false, 0, [$"Erreur lors de l'import : {ex.Message}"]);
         }
     }
+
+    /// <summary>
+    /// Résout les accès de catégorie d'un poste importé. Priorité aux listes par NOM
+    /// (exports R2b) ; repli sur les codes historiques « GAF » pour les fichiers antérieurs.
+    /// Renvoie (principales, secondaires) sous forme d'identifiants de catégorie.
+    /// </summary>
+    private static (List<int> principales, List<int> secondaires) ResoudreAccesImport(
+        PlayerPositionGdDto dto, List<SkillCategoryDef> categories)
+    {
+        List<int> ParNoms(List<string> noms) => noms
+            .Select(n => categories.FirstOrDefault(c => string.Equals(c.Nom, n, StringComparison.OrdinalIgnoreCase)))
+            .Where(c => c is not null)
+            .Select(c => c!.Id)
+            .Distinct()
+            .ToList();
+
+        var principales = dto.AccesPrincipal is { Count: > 0 }
+            ? ParNoms(dto.AccesPrincipal)
+            : CategoryAccessHelpers.ResoudreCodesHistoriques(dto.CompetencesPrincipales, categories).Select(c => c.Id).ToList();
+
+        var secondaires = dto.AccesSecondaire is { Count: > 0 }
+            ? ParNoms(dto.AccesSecondaire)
+            : CategoryAccessHelpers.ResoudreCodesHistoriques(dto.CompetencesSecondaires, categories).Select(c => c.Id).ToList();
+
+        return (principales, secondaires.Where(s => !principales.Contains(s)).ToList());
+    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -374,7 +484,8 @@ record GameDataExportDto(
     bool EstActive,
     List<SkillGdDto> Skills,
     List<TeamTypeGdDto> TypesEquipes,
-    List<PlayerPositionGdDto>? Reserve = null   // ← AJOUT optionnel (rétrocompat)
+    List<PlayerPositionGdDto>? Reserve = null,  // ← AJOUT optionnel (rétrocompat)
+    List<SkillCategoryGdDto>? Categories = null // ← AJOUT optionnel (rétrocompat, R2)
 );
 
 record ReserveExportDto(
@@ -388,7 +499,16 @@ record SkillGdDto(
     SkillCategory Categorie,
     string Description,
     bool EstElite,
-    bool EstTrait
+    bool EstTrait,
+    // Nom de la catégorie (catégories devenues éditables). Null sur les exports
+    // antérieurs : on retombe alors sur le champ Categorie (ancien enum).
+    string? CategorieNom = null
+);
+
+/// <summary>Catégorie de compétence exportée. Absent des fichiers antérieurs à R2.</summary>
+record SkillCategoryGdDto(
+    string Nom,
+    string Code
 );
 
 record TeamTypeGdDto(
@@ -410,10 +530,15 @@ record PlayerPositionGdDto(
     string Agilite,
     string CapacitePasse,
     string Armure,
+    // Codes historiques (« GAF »). Conservés pour relire les exports antérieurs à R2b ;
+    // ignorés dès que AccesPrincipal / AccesSecondaire sont présents.
     string CompetencesPrincipales,
     string CompetencesSecondaires,
     string MotsCles,
-    List<string> CompetencesDepart
+    List<string> CompetencesDepart,
+    // Accès par NOM de catégorie (R2b) : seule forme compatible avec des codes à 2 caractères.
+    List<string>? AccesPrincipal = null,
+    List<string>? AccesSecondaire = null
 );
 
 record KeywordLimitGdDto(string MotCle, int Max);

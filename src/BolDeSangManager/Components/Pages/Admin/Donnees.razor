@@ -36,76 +36,6 @@
     </MudStack>
 
     <MudTabs Elevation="1" Rounded="true" PanelClass="pa-4">
-        <MudTabPanel Text="Équipes">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
-                <MudText Typo="Typo.subtitle1"><b>@_teamTypes.Count équipe(s)</b></MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           OnClick="AjouterTeamType">Ajouter une équipe</MudButton>
-            </MudStack>
-            <MudTable Items="@_teamTypes" Dense="true" Hover="true">
-                <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.Categorie)">Catégorie</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.CoutRelance)">Coût relance</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => (object)(x.Postes?.Count ?? 0))">Nb postes</MudTableSortLabel></MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>@context.Nom</MudTd>
-                    <MudTd>@context.Categorie</MudTd>
-                    <MudTd>@context.CoutRelance.ToString("N0") po</MudTd>
-                    <MudTd>@(context.Postes?.Count ?? 0)</MudTd>
-                    <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                       OnClick="@(() => EditerTeamType(context.Id))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => SupprimerTeamType(context))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudTabPanel>
-
-        <MudTabPanel Text="Compétences">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-                    <MudText Typo="Typo.subtitle1"><b>@_skillsFiltres.Count compétence(s)</b></MudText>
-                    <MudSelect T="SkillCategory?" Label="Catégorie" Value="_categorieFiltre" ValueChanged="@OnCategorieChanged"
-                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:150px" Clearable="true">
-                        @foreach (var c in Enum.GetValues<SkillCategory>())
-                        {
-                            <MudSelectItem T="SkillCategory?" Value="@((SkillCategory?)c)">@c</MudSelectItem>
-                        }
-                    </MudSelect>
-                </MudStack>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           OnClick="AjouterSkill">Ajouter une compétence</MudButton>
-            </MudStack>
-            <MudTable Items="@_skillsFiltres" Dense="true" Hover="true">
-                <HeaderContent>
-                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.Categorie)">Catégorie</MudTableSortLabel></MudTh>
-                    <MudTh>Trait/Élite</MudTh>
-                    <MudTh>Description</MudTh>
-                    <MudTh>Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>@context.Nom</MudTd>
-                    <MudTd>@context.Categorie</MudTd>
-                    <MudTd>
-                        @if (context.EstElite) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Élite</MudChip> }
-                        @if (context.EstTrait) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Trait</MudChip> }
-                    </MudTd>
-                    <MudTd Style="max-width:400px; white-space:normal">@context.Description</MudTd>
-                    <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                       OnClick="@(() => EditerSkill(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       OnClick="@(() => SupprimerSkill(context))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudTabPanel>
-
         <MudTabPanel Text="Réserve">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_reserve.Count poste(s) en réserve</b></MudText>
@@ -146,8 +76,8 @@
                         @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
                     </MudTd>
                     <MudTd>
-                        <div style="font-size:11px"><span style="color:#90caf9">P:</span> @(string.IsNullOrEmpty(context.CompetencesPrincipales) ? "—" : context.CompetencesPrincipales)</div>
-                        <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @(string.IsNullOrEmpty(context.CompetencesSecondaires) ? "—" : context.CompetencesSecondaires)</div>
+                        <div style="font-size:11px"><span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
+                        <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
                     </MudTd>
                     <MudTd>
                         @if (context.CompetencesDepart?.Any() == true)
@@ -164,6 +94,121 @@
                     <MudTd>
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditerReservePoste(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerReservePoste(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Équipes">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_teamTypes.Count équipe(s)</b></MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           OnClick="AjouterTeamType">Ajouter une équipe</MudButton>
+            </MudStack>
+            <MudTable Items="@_teamTypes" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.Categorie)">Catégorie</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => x.CoutRelance)">Coût relance</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<TeamType,object>(x => (object)(x.Postes?.Count ?? 0))">Nb postes</MudTableSortLabel></MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Nom</MudTd>
+                    <MudTd>@context.Categorie</MudTd>
+                    <MudTd>@context.CoutRelance.ToString("N0") po</MudTd>
+                    <MudTd>@(context.Postes?.Count ?? 0)</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditerTeamType(context.Id))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerTeamType(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Compétences">
+            <MudExpansionPanels Elevation="0" Class="mb-3">
+                <MudExpansionPanel Dense="true">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Category" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle2">
+                                <b>Catégories</b>
+                                <span style="color:var(--mud-palette-text-secondary)"> — @_categories.Count définie(s) pour cette version</span>
+                            </MudText>
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                                Les catégories appartiennent à la version de règles sélectionnée et sont clonées avec elle.
+                                Une catégorie utilisée ne peut pas être supprimée, mais peut être renommée.
+                            </MudText>
+                            <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                                       Size="Size.Small" OnClick="AjouterCategorie">Ajouter une catégorie</MudButton>
+                        </MudStack>
+                        <MudTable Items="@_categories" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Nom</MudTh>
+                                <MudTh Style="width:10%">Code</MudTh>
+                                <MudTh Style="width:20%">Compétences</MudTh>
+                                <MudTh Style="width:12%">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd><b>@context.Nom</b></MudTd>
+                                <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Code</MudChip></MudTd>
+                                <MudTd>@NbSkills(context.Id)</MudTd>
+                                <MudTd>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   title="Renommer / changer le code"
+                                                   OnClick="@(() => EditerCategorie(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   title="Supprimer cette catégorie"
+                                                   OnClick="@(() => SupprimerCategorie(context))" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
+            <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                    <MudText Typo="Typo.subtitle1"><b>@_skillsFiltres.Count compétence(s)</b></MudText>
+                    <MudSelect T="int?" Label="Catégorie" Value="_categorieFiltre" ValueChanged="@OnCategorieChanged"
+                               Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:150px" Clearable="true">
+                        @foreach (var c in _categories)
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)c.Id)">@c.Nom</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudStack>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           OnClick="AjouterSkill">Ajouter une compétence</MudButton>
+            </MudStack>
+            <MudTable Items="@_skillsFiltres" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Skill,object>(x => x.SkillCategoryDef.Nom)">Catégorie</MudTableSortLabel></MudTh>
+                    <MudTh>Trait/Élite</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd>@context.Nom</MudTd>
+                    <MudTd>@(context.SkillCategoryDef?.Nom ?? "—")</MudTd>
+                    <MudTd>
+                        @if (context.EstElite) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Élite</MudChip> }
+                        @if (context.EstTrait) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Trait</MudChip> }
+                    </MudTd>
+                    <MudTd Style="max-width:400px; white-space:normal">@context.Description</MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditerSkill(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerSkill(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -215,13 +260,16 @@
     List<TeamType> _teamTypes = [];
     List<PoolPosition> _reserve = [];
     List<Skill> _skills = [];
+    List<SkillCategoryDef> _categories = [];
     int _selectedGameId;
     int _selectedVersionId;
-    SkillCategory? _categorieFiltre;
+    int? _categorieFiltre;
     bool _importEnCours;
 
     List<Skill> _skillsFiltres =>
-        _categorieFiltre is null ? _skills : _skills.Where(s => s.Categorie == _categorieFiltre).ToList();
+        _categorieFiltre is null ? _skills : _skills.Where(s => s.SkillCategoryDefId == _categorieFiltre).ToList();
+
+    int NbSkills(int categorieId) => _skills.Count(s => s.SkillCategoryDefId == categorieId);
 
     protected override async Task OnInitializedAsync()
     {
@@ -242,10 +290,13 @@
 
     async Task ChargerDonneesAsync()
     {
-        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; return; }
+        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; _categories = []; return; }
         _teamTypes = await DataEditService.GetTeamTypesAsync(_selectedVersionId);
+        _categories = await DataEditService.GetCategoriesAsync(_selectedVersionId);
         _skills = await DataEditService.GetSkillsAsync(_selectedVersionId);
         _reserve = await DataEditService.GetReserveAsync(_selectedVersionId);
+        // Le filtre pointe sur une catégorie d'une autre version : le réinitialiser
+        if (_categorieFiltre is int f && !_categories.Any(c => c.Id == f)) _categorieFiltre = null;
     }
 
     async Task OnGameChanged(int id)
@@ -260,7 +311,48 @@
         await ChargerDonneesAsync();
     }
 
-    void OnCategorieChanged(SkillCategory? c) => _categorieFiltre = c;
+    void OnCategorieChanged(int? c) => _categorieFiltre = c;
+
+    async Task AjouterCategorie()
+    {
+        if (_selectedVersionId == 0) return;
+        var parameters = new DialogParameters<EditionCategorieDialog>
+        {
+            { x => x.VersionId, _selectedVersionId },
+            { x => x.Existant, null }
+        };
+        var dialog = await DialogService.ShowAsync<EditionCategorieDialog>("Nouvelle catégorie", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task EditerCategorie(SkillCategoryDef c)
+    {
+        var parameters = new DialogParameters<EditionCategorieDialog>
+        {
+            { x => x.VersionId, _selectedVersionId },
+            { x => x.Existant, c }
+        };
+        var dialog = await DialogService.ShowAsync<EditionCategorieDialog>("Éditer la catégorie", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task SupprimerCategorie(SkillCategoryDef c)
+    {
+        var ok = await DialogService.ShowMessageBox("Confirmer", $"Supprimer la catégorie « {c.Nom} » ?", "Supprimer", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.SupprimerCategorieAsync(c.Id);
+            Snackbar.Add("Catégorie supprimée", Severity.Success);
+            await ChargerDonneesAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
 
     void AjouterTeamType()
     {

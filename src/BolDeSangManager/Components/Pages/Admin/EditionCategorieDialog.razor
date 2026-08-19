@@ -1,0 +1,68 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="9">
+                <MudTextField @bind-Value="_nom" Label="Nom" Variant="Variant.Outlined"
+                              HelperText="Libellé complet, ex. « Agilité »" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudTextField @bind-Value="_code" Label="Code" Variant="Variant.Outlined"
+                              MaxLength="2" HelperText="1 ou 2 car." />
+            </MudItem>
+        </MudGrid>
+        <MudText Typo="Typo.caption" Class="mt-2" Style="color:var(--mud-palette-text-secondary)">
+            Le code est une simple étiquette d'affichage : renommer une catégorie ne casse pas
+            les compétences qui l'utilisent.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Sauvegarder">Sauvegarder</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int VersionId { get; set; }
+    [Parameter] public SkillCategoryDef? Existant { get; set; }
+
+    string _nom = "";
+    string _code = "";
+
+    protected override void OnInitialized()
+    {
+        if (Existant is not null)
+        {
+            _nom = Existant.Nom;
+            _code = Existant.Code;
+        }
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Sauvegarder()
+    {
+        try
+        {
+            if (Existant is null)
+                await DataEditService.CreerCategorieAsync(VersionId, _nom, _code);
+            else
+                await DataEditService.ModifierCategorieAsync(Existant.Id, _nom, _code);
+            Snackbar.Add("Catégorie sauvegardée", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+}

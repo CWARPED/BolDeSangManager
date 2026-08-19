@@ -43,7 +43,25 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     {
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        // 1. Cloner les Skills + map oldId → newSkill
+        // 1. Cloner les catégories de compétence + map oldId → newId
+        var sourceCategories = await db.SkillCategories
+            .Where(c => c.RulesVersionId == sourceVersionId)
+            .ToListAsync();
+        var categorieMap = new Dictionary<int, SkillCategoryDef>();
+        foreach (var srcCat in sourceCategories)
+        {
+            var copieCat = new SkillCategoryDef
+            {
+                RulesVersionId = destVersionId,
+                Nom = srcCat.Nom,
+                Code = srcCat.Code
+            };
+            db.SkillCategories.Add(copieCat);
+            categorieMap[srcCat.Id] = copieCat;
+        }
+        await db.SaveChangesAsync();
+
+        // 2. Cloner les Skills + map oldId → newSkill (en rattachant à la catégorie clonée)
         var sourceSkills = await db.Skills.Where(s => s.RulesVersionId == sourceVersionId).ToListAsync();
         var skillMap = new Dictionary<int, Skill>();
         foreach (var src in sourceSkills)
@@ -52,6 +70,9 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             {
                 Nom = src.Nom,
                 Categorie = src.Categorie,
+                SkillCategoryDefId = categorieMap.TryGetValue(src.SkillCategoryDefId, out var newCat)
+                    ? newCat.Id
+                    : src.SkillCategoryDefId,
                 Description = src.Description,
                 EstElite = src.EstElite,
                 EstTrait = src.EstTrait,
@@ -62,9 +83,10 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
-        // 2. Cloner les TeamTypes + map
+        // 3. Cloner les TeamTypes + map
         var sourceTypes = await db.TeamTypes
             .Include(t => t.Postes).ThenInclude(p => p.CompetencesDepart)
+            .Include(t => t.Postes).ThenInclude(p => p.AccesCategories)
             .Include(t => t.LimitesMotsCles)
             .Where(t => t.RulesVersionId == sourceVersionId)
             .ToListAsync();
@@ -87,7 +109,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
-        // 3. Cloner les PlayerPositions + leurs CompetencesDepart (avec mapping skill)
+        // 4. Cloner les PlayerPositions + leurs CompetencesDepart (avec mapping skill)
         foreach (var src in sourceTypes)
         {
             var destType = teamTypeMap[src.Id];
@@ -104,8 +126,6 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                     Agilite = pos.Agilite,
                     CapacitePasse = pos.CapacitePasse,
                     Armure = pos.Armure,
-                    CompetencesPrincipales = pos.CompetencesPrincipales,
-                    CompetencesSecondaires = pos.CompetencesSecondaires,
                     MotsCles = pos.MotsCles
                 };
                 db.PlayerPositions.Add(copie);
@@ -119,6 +139,20 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                         {
                             PlayerPositionId = copie.Id,
                             SkillId = newSkill.Id
+                        });
+                    }
+                }
+
+                // Accès de catégorie : remap vers les catégories clonées
+                foreach (var acc in pos.AccesCategories)
+                {
+                    if (categorieMap.TryGetValue(acc.SkillCategoryDefId, out var newCat))
+                    {
+                        db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                        {
+                            PlayerPositionId = copie.Id,
+                            SkillCategoryDefId = newCat.Id,
+                            EstPrincipale = acc.EstPrincipale
                         });
                     }
                 }
@@ -140,6 +174,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         // Cloner les PoolPositions (Réserve) + leurs compétences de départ (remap skills)
         var sourcePools = await db.PoolPositions
             .Include(p => p.CompetencesDepart)
+            .Include(p => p.AccesCategories)
             .Where(p => p.RulesVersionId == sourceVersionId)
             .ToListAsync();
 
@@ -151,8 +186,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                 Nom = srcPool.Nom, QuantiteMax = srcPool.QuantiteMax, Cout = srcPool.Cout,
                 Mouvement = srcPool.Mouvement, Force = srcPool.Force, Agilite = srcPool.Agilite,
                 CapacitePasse = srcPool.CapacitePasse, Armure = srcPool.Armure,
-                CompetencesPrincipales = srcPool.CompetencesPrincipales,
-                CompetencesSecondaires = srcPool.CompetencesSecondaires, MotsCles = srcPool.MotsCles
+                MotsCles = srcPool.MotsCles
             };
             db.PoolPositions.Add(copie);
             await db.SaveChangesAsync();
@@ -163,6 +197,15 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                     {
                         PoolPositionId = copie.Id,
                         SkillId = newSkill.Id
+                    });
+
+            foreach (var acc in srcPool.AccesCategories)
+                if (categorieMap.TryGetValue(acc.SkillCategoryDefId, out var newCat))
+                    db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+                    {
+                        PoolPositionId = copie.Id,
+                        SkillCategoryDefId = newCat.Id,
+                        EstPrincipale = acc.EstPrincipale
                     });
         }
         await db.SaveChangesAsync();
@@ -194,6 +237,10 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             db.Skills.RemoveRange(skills);
             await db.SaveChangesAsync();
 
+            var categories = await db.SkillCategories.Where(c => c.RulesVersionId == id).ToListAsync();
+            db.SkillCategories.RemoveRange(categories);
+            await db.SaveChangesAsync();
+
             db.RulesVersions.Remove(version);
             await db.SaveChangesAsync();
 
@@ -219,6 +266,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     public async Task<TeamType?> GetTeamTypeAsync(int id) =>
         await db.TeamTypes
             .Include(t => t.Postes).ThenInclude(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Include(t => t.Postes).ThenInclude(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Include(t => t.LimitesMotsCles)
             .FirstOrDefaultAsync(t => t.Id == id);
 
@@ -258,21 +306,34 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
     // ═══════════════════ PlayerPosition ═══════════════════
 
-    public async Task<PlayerPosition> AjouterPosteAsync(int teamTypeId, PlayerPosition data, IEnumerable<int> skillsDepart)
+    /// <summary>
+    /// Accès de catégorie choisis dans l'UI : identifiants des catégories principales
+    /// et secondaires. Une catégorie présente dans les deux est traitée comme principale.
+    /// </summary>
+    public readonly record struct AccesCategoriesInput(IEnumerable<int> Principales, IEnumerable<int> Secondaires)
+    {
+        public static AccesCategoriesInput Vide => new([], []);
+    }
+
+    public async Task<PlayerPosition> AjouterPosteAsync(
+        int teamTypeId, PlayerPosition data, IEnumerable<int> skillsDepart, AccesCategoriesInput acces)
     {
         data.TeamTypeId = teamTypeId;
         db.PlayerPositions.Add(data);
         await db.SaveChangesAsync();
         foreach (var sid in skillsDepart)
             db.PlayerPositionSkills.Add(new PlayerPositionSkill { PlayerPositionId = data.Id, SkillId = sid });
+        AppliquerAccesPoste(data.Id, acces);
         await db.SaveChangesAsync();
         return data;
     }
 
-    public async Task ModifierPosteAsync(int id, PlayerPosition data, IEnumerable<int> skillsDepart)
+    public async Task ModifierPosteAsync(
+        int id, PlayerPosition data, IEnumerable<int> skillsDepart, AccesCategoriesInput acces)
     {
         var p = await db.PlayerPositions
             .Include(x => x.CompetencesDepart)
+            .Include(x => x.AccesCategories)
             .FirstOrDefaultAsync(x => x.Id == id)
             ?? throw new InvalidOperationException("Poste introuvable");
 
@@ -284,16 +345,34 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         p.Agilite = data.Agilite;
         p.CapacitePasse = data.CapacitePasse;
         p.Armure = data.Armure;
-        p.CompetencesPrincipales = data.CompetencesPrincipales;
-        p.CompetencesSecondaires = data.CompetencesSecondaires;
         p.MotsCles = data.MotsCles;
 
-        // Resync skills de départ
+        // Resync skills de départ + accès de catégorie
         db.PlayerPositionSkills.RemoveRange(p.CompetencesDepart);
+        db.PlayerPositionCategoryAccesses.RemoveRange(p.AccesCategories);
         await db.SaveChangesAsync();
+
         foreach (var sid in skillsDepart)
             db.PlayerPositionSkills.Add(new PlayerPositionSkill { PlayerPositionId = p.Id, SkillId = sid });
+        AppliquerAccesPoste(p.Id, acces);
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>Ajoute les lignes d'accès ; principal l'emporte sur secondaire en cas de doublon.</summary>
+    private void AppliquerAccesPoste(int positionId, AccesCategoriesInput acces)
+    {
+        var principales = acces.Principales.Distinct().ToList();
+        foreach (var catId in principales)
+            db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+            {
+                PlayerPositionId = positionId, SkillCategoryDefId = catId, EstPrincipale = true
+            });
+
+        foreach (var catId in acces.Secondaires.Distinct().Where(c => !principales.Contains(c)))
+            db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+            {
+                PlayerPositionId = positionId, SkillCategoryDefId = catId, EstPrincipale = false
+            });
     }
 
     public async Task SupprimerPosteAsync(int id)
@@ -312,40 +391,63 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     public async Task<List<PoolPosition>> GetReserveAsync(int versionId) =>
         await db.PoolPositions
             .Include(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
+            .Include(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Where(p => p.RulesVersionId == versionId)
             .OrderBy(p => p.Nom)
             .ToListAsync();
 
-    public async Task<PoolPosition> AjouterReserveAsync(int versionId, PoolPosition data, IEnumerable<int> skillsDepart)
+    public async Task<PoolPosition> AjouterReserveAsync(
+        int versionId, PoolPosition data, IEnumerable<int> skillsDepart, AccesCategoriesInput acces)
     {
         data.RulesVersionId = versionId;
         db.PoolPositions.Add(data);
         await db.SaveChangesAsync();
         foreach (var sid in skillsDepart)
             db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = data.Id, SkillId = sid });
+        AppliquerAccesReserve(data.Id, acces);
         await db.SaveChangesAsync();
         logger.LogInformation("Réserve : poste ajouté {Nom} (id={Id}) sur version {V}", data.Nom, data.Id, versionId);
         return data;
     }
 
-    public async Task ModifierReserveAsync(int id, PoolPosition data, IEnumerable<int> skillsDepart)
+    public async Task ModifierReserveAsync(
+        int id, PoolPosition data, IEnumerable<int> skillsDepart, AccesCategoriesInput acces)
     {
         var p = await db.PoolPositions
             .Include(x => x.CompetencesDepart)
+            .Include(x => x.AccesCategories)
             .FirstOrDefaultAsync(x => x.Id == id)
             ?? throw new InvalidOperationException("Poste de réserve introuvable");
 
         p.Nom = data.Nom; p.QuantiteMax = data.QuantiteMax; p.Cout = data.Cout;
         p.Mouvement = data.Mouvement; p.Force = data.Force; p.Agilite = data.Agilite;
         p.CapacitePasse = data.CapacitePasse; p.Armure = data.Armure;
-        p.CompetencesPrincipales = data.CompetencesPrincipales;
-        p.CompetencesSecondaires = data.CompetencesSecondaires; p.MotsCles = data.MotsCles;
+        p.MotsCles = data.MotsCles;
 
         db.PoolPositionSkills.RemoveRange(p.CompetencesDepart);
+        db.PoolPositionCategoryAccesses.RemoveRange(p.AccesCategories);
         await db.SaveChangesAsync();
         foreach (var sid in skillsDepart)
             db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = p.Id, SkillId = sid });
+        AppliquerAccesReserve(p.Id, acces);
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>Jumeau de <see cref="AppliquerAccesPoste"/> pour la Réserve.</summary>
+    private void AppliquerAccesReserve(int poolId, AccesCategoriesInput acces)
+    {
+        var principales = acces.Principales.Distinct().ToList();
+        foreach (var catId in principales)
+            db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+            {
+                PoolPositionId = poolId, SkillCategoryDefId = catId, EstPrincipale = true
+            });
+
+        foreach (var catId in acces.Secondaires.Distinct().Where(c => !principales.Contains(c)))
+            db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+            {
+                PoolPositionId = poolId, SkillCategoryDefId = catId, EstPrincipale = false
+            });
     }
 
     public async Task SupprimerReserveAsync(int id)
@@ -369,6 +471,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         var ids = poolIds.ToHashSet();
         var pools = await db.PoolPositions
             .Include(p => p.CompetencesDepart)
+            .Include(p => p.AccesCategories)
             .Where(p => ids.Contains(p.Id))
             .ToListAsync();
 
@@ -385,8 +488,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                 Nom = pool.Nom, QuantiteMax = pool.QuantiteMax, Cout = pool.Cout,
                 Mouvement = pool.Mouvement, Force = pool.Force, Agilite = pool.Agilite,
                 CapacitePasse = pool.CapacitePasse, Armure = pool.Armure,
-                CompetencesPrincipales = pool.CompetencesPrincipales,
-                CompetencesSecondaires = pool.CompetencesSecondaires, MotsCles = pool.MotsCles
+                MotsCles = pool.MotsCles
             };
             db.PlayerPositions.Add(copie);
             await db.SaveChangesAsync();
@@ -397,18 +499,177 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                     PlayerPositionId = copie.Id,
                     SkillId = pps.SkillId
                 });
+
+            foreach (var acc in pool.AccesCategories)
+                db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                {
+                    PlayerPositionId = copie.Id,
+                    SkillCategoryDefId = acc.SkillCategoryDefId,
+                    EstPrincipale = acc.EstPrincipale
+                });
             await db.SaveChangesAsync();
         }
         await tx.CommitAsync();
         logger.LogInformation("Réserve : {N} poste(s) importé(s) dans TeamType {Id}", pools.Count, teamTypeId);
     }
 
-    // ═══════════════════ Skill ═══════════════════
+    /// <summary>
+    /// Chemin inverse de <see cref="ImporterReserveVersTeamTypeAsync"/> : copie un poste d'un
+    /// TeamType vers la Réserve de sa version de règles. Copie indépendante (le poste d'origine
+    /// reste en place). Refuse si un poste de réserve porte déjà le même nom dans cette version.
+    /// </summary>
+    public async Task<PoolPosition> ExporterPosteVersReserveAsync(int playerPositionId)
+    {
+        var poste = await db.PlayerPositions
+            .Include(p => p.CompetencesDepart)
+            .Include(p => p.AccesCategories)
+            .Include(p => p.TeamType)
+            .FirstOrDefaultAsync(p => p.Id == playerPositionId)
+            ?? throw new InvalidOperationException("Poste introuvable");
 
+        var versionId = poste.TeamType.RulesVersionId;
+
+        var nomsExistants = await db.PoolPositions
+            .Where(p => p.RulesVersionId == versionId)
+            .Select(p => p.Nom)
+            .ToListAsync();
+
+        if (nomsExistants.Any(n => string.Equals(n, poste.Nom, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                $"Un poste « {poste.Nom} » existe déjà dans la Réserve de cette version. Renommez-le avant de le renvoyer.");
+
+        var copie = new PoolPosition
+        {
+            RulesVersionId = versionId,
+            Nom = poste.Nom, QuantiteMax = poste.QuantiteMax, Cout = poste.Cout,
+            Mouvement = poste.Mouvement, Force = poste.Force, Agilite = poste.Agilite,
+            CapacitePasse = poste.CapacitePasse, Armure = poste.Armure,
+            MotsCles = poste.MotsCles
+        };
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        db.PoolPositions.Add(copie);
+        await db.SaveChangesAsync();
+
+        foreach (var pps in poste.CompetencesDepart)
+            db.PoolPositionSkills.Add(new PoolPositionSkill
+            {
+                PoolPositionId = copie.Id,
+                SkillId = pps.SkillId
+            });
+
+        foreach (var acc in poste.AccesCategories)
+            db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+            {
+                PoolPositionId = copie.Id,
+                SkillCategoryDefId = acc.SkillCategoryDefId,
+                EstPrincipale = acc.EstPrincipale
+            });
+
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        logger.LogInformation("Réserve : poste {Nom} (id={Id}) du TeamType {Tt} renvoyé en Réserve (id={PoolId})",
+            poste.Nom, poste.Id, poste.TeamTypeId, copie.Id);
+        return copie;
+    }
+
+    // ═══════════════════ Catégories de compétence ═══════════════════
+
+    /// <summary>Longueur maximale du code d'affichage d'une catégorie.</summary>
+    public const int CodeCategorieMaxLength = 2;
+
+    public async Task<List<SkillCategoryDef>> GetCategoriesAsync(int versionId) =>
+        await db.SkillCategories
+            .Where(c => c.RulesVersionId == versionId)
+            .OrderBy(c => c.Nom)
+            .ToListAsync();
+
+    public async Task<SkillCategoryDef> CreerCategorieAsync(int versionId, string nom, string code)
+    {
+        var (nomNet, codeNet) = ValiderCategorie(nom, code);
+        await VerifierUniciteCategorieAsync(versionId, nomNet, codeNet, categorieExclue: null);
+
+        var cat = new SkillCategoryDef
+        {
+            RulesVersionId = versionId,
+            Nom = nomNet,
+            Code = codeNet
+        };
+        db.SkillCategories.Add(cat);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Catégorie créée : {Nom} ({Code}) sur version {V}", nomNet, codeNet, versionId);
+        return cat;
+    }
+
+    /// <summary>
+    /// Renomme / recode une catégorie. Autorisé même si elle est utilisée : les compétences
+    /// pointent vers son identifiant, pas vers son libellé.
+    /// </summary>
+    public async Task ModifierCategorieAsync(int id, string nom, string code)
+    {
+        var cat = await db.SkillCategories.FindAsync(id)
+            ?? throw new InvalidOperationException("Catégorie introuvable");
+
+        var (nomNet, codeNet) = ValiderCategorie(nom, code);
+        await VerifierUniciteCategorieAsync(cat.RulesVersionId, nomNet, codeNet, categorieExclue: id);
+
+        cat.Nom = nomNet;
+        cat.Code = codeNet;
+        await db.SaveChangesAsync();
+        logger.LogInformation("Catégorie modifiée : {Nom} ({Code}) id={Id}", nomNet, codeNet, id);
+    }
+
+    /// <summary>Supprime une catégorie. Refusé si au moins une compétence l'utilise.</summary>
+    public async Task SupprimerCategorieAsync(int id)
+    {
+        var cat = await db.SkillCategories.FindAsync(id)
+            ?? throw new InvalidOperationException("Catégorie introuvable");
+
+        var nbSkills = await db.Skills.CountAsync(s => s.SkillCategoryDefId == id);
+        if (nbSkills > 0)
+            throw new InvalidOperationException(
+                $"{nbSkills} compétence(s) utilisent la catégorie « {cat.Nom} ». Réaffectez-les avant de la supprimer.");
+
+        db.SkillCategories.Remove(cat);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Catégorie supprimée : {Nom} (id={Id})", cat.Nom, id);
+    }
+
+    private static (string nom, string code) ValiderCategorie(string nom, string code)
+    {
+        var nomNet = (nom ?? "").Trim();
+        var codeNet = (code ?? "").Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(nomNet))
+            throw new InvalidOperationException("Le nom de la catégorie est obligatoire.");
+        if (string.IsNullOrWhiteSpace(codeNet))
+            throw new InvalidOperationException("Le code de la catégorie est obligatoire.");
+        if (codeNet.Length > CodeCategorieMaxLength)
+            throw new InvalidOperationException($"Le code doit faire 1 ou {CodeCategorieMaxLength} caractère(s) (reçu : « {codeNet} »).");
+
+        return (nomNet, codeNet);
+    }
+
+    private async Task VerifierUniciteCategorieAsync(int versionId, string nom, string code, int? categorieExclue)
+    {
+        var existantes = await db.SkillCategories
+            .Where(c => c.RulesVersionId == versionId && (categorieExclue == null || c.Id != categorieExclue))
+            .Select(c => new { c.Nom, c.Code })
+            .ToListAsync();
+
+        if (existantes.Any(c => string.Equals(c.Nom, nom, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Une catégorie « {nom} » existe déjà dans cette version.");
+        if (existantes.Any(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Le code « {code} » est déjà utilisé par une autre catégorie de cette version.");
+    }
+
+    // ═══════════════════ Skill ═══════════════════
     public async Task<List<Skill>> GetSkillsAsync(int versionId) =>
         await db.Skills
+            .Include(s => s.SkillCategoryDef)
             .Where(s => s.RulesVersionId == versionId)
-            .OrderBy(s => s.Categorie).ThenBy(s => s.Nom)
+            .OrderBy(s => s.SkillCategoryDef.Nom).ThenBy(s => s.Nom)
             .ToListAsync();
 
     public async Task<Skill> CreerSkillAsync(int versionId, Skill data)
@@ -419,11 +680,11 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         return data;
     }
 
-    public async Task ModifierSkillAsync(int id, string nom, SkillCategory categorie, string description, bool estElite, bool estTrait)
+    public async Task ModifierSkillAsync(int id, string nom, int categorieId, string description, bool estElite, bool estTrait)
     {
         var s = await db.Skills.FindAsync(id) ?? throw new InvalidOperationException("Skill introuvable");
         s.Nom = nom;
-        s.Categorie = categorie;
+        s.SkillCategoryDefId = categorieId;
         s.Description = description;
         s.EstElite = estElite;
         s.EstTrait = estTrait;

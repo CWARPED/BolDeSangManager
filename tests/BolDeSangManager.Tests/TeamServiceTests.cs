@@ -260,7 +260,9 @@ public class TeamServiceTests : IDisposable
         db.TeamPlayers.Add(joueur);
         await db.SaveChangesAsync();
 
-        var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, RulesVersionId = (await db.RulesVersions.FirstAsync()).Id };
+        var vId = (await db.RulesVersions.FirstAsync()).Id;
+        var catId = await DataSeeder.GetOrCreateCategorieAsync(db, vId);
+        var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = vId };
         db.Skills.Add(skill);
         await db.SaveChangesAsync();
 
@@ -291,7 +293,9 @@ public class TeamServiceTests : IDisposable
         db.TeamPlayers.Add(joueur);
         await db.SaveChangesAsync();
 
-        var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, RulesVersionId = (await db.RulesVersions.FirstAsync()).Id };
+        var vId = (await db.RulesVersions.FirstAsync()).Id;
+        var catId = await DataSeeder.GetOrCreateCategorieAsync(db, vId);
+        var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = vId };
         db.Skills.Add(skill);
         await db.SaveChangesAsync();
 
