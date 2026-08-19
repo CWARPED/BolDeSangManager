@@ -66,6 +66,53 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Compétences">
+            <MudExpansionPanels Elevation="0" Class="mb-3">
+                <MudExpansionPanel Dense="true">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                            <MudIcon Icon="@Icons.Material.Filled.Category" Size="Size.Small" />
+                            <MudText Typo="Typo.subtitle2">
+                                <b>Catégories</b>
+                                <span style="color:var(--mud-palette-text-secondary)"> — @_categories.Count définie(s) pour cette version</span>
+                            </MudText>
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                                Les catégories appartiennent à la version de règles sélectionnée et sont clonées avec elle.
+                                Une catégorie utilisée ne peut pas être supprimée, mais peut être renommée.
+                            </MudText>
+                            <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                                       Size="Size.Small" OnClick="AjouterCategorie">Ajouter une catégorie</MudButton>
+                        </MudStack>
+                        <MudTable Items="@_categories" Dense="true" Hover="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh Style="width:10%">Ordre</MudTh>
+                                <MudTh>Nom</MudTh>
+                                <MudTh Style="width:10%">Code</MudTh>
+                                <MudTh Style="width:20%">Compétences</MudTh>
+                                <MudTh Style="width:12%">Actions</MudTh>
+                            </HeaderContent>
+                            <RowTemplate>
+                                <MudTd>@context.Ordre</MudTd>
+                                <MudTd><b>@context.Nom</b></MudTd>
+                                <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Code</MudChip></MudTd>
+                                <MudTd>@NbSkills(context.Id)</MudTd>
+                                <MudTd>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                                   title="Renommer / changer le code"
+                                                   OnClick="@(() => EditerCategorie(context))" />
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                                   title="Supprimer cette catégorie"
+                                                   OnClick="@(() => SupprimerCategorie(context))" />
+                                </MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </ChildContent>
+                </MudExpansionPanel>
+            </MudExpansionPanels>
+
             <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-2">
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                     <MudText Typo="Typo.subtitle1"><b>@_skillsFiltres.Count compétence(s)</b></MudText>
@@ -101,41 +148,6 @@
                                        OnClick="@(() => EditerSkill(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                        OnClick="@(() => SupprimerSkill(context))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudTabPanel>
-
-        <MudTabPanel Text="Catégories">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
-                <MudText Typo="Typo.subtitle1"><b>@_categories.Count catégorie(s) de compétence</b></MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           OnClick="AjouterCategorie">Ajouter une catégorie</MudButton>
-            </MudStack>
-            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
-                Les catégories appartiennent à la version de règles sélectionnée : elles sont clonées avec elle.
-                Une catégorie utilisée par des compétences ne peut pas être supprimée, mais peut être renommée.
-            </MudAlert>
-            <MudTable Items="@_categories" Dense="true" Hover="true">
-                <HeaderContent>
-                    <MudTh Style="width:10%">Ordre</MudTh>
-                    <MudTh>Nom</MudTh>
-                    <MudTh Style="width:10%">Code</MudTh>
-                    <MudTh Style="width:20%">Compétences</MudTh>
-                    <MudTh Style="width:12%">Actions</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd>@context.Ordre</MudTd>
-                    <MudTd><b>@context.Nom</b></MudTd>
-                    <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Code</MudChip></MudTd>
-                    <MudTd>@NbSkills(context.Id)</MudTd>
-                    <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                       title="Renommer / changer le code"
-                                       OnClick="@(() => EditerCategorie(context))" />
-                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
-                                       title="Supprimer cette catégorie"
-                                       OnClick="@(() => SupprimerCategorie(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
