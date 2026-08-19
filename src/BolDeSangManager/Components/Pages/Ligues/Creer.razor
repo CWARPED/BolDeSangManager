@@ -40,8 +40,9 @@
                     }
                 </MudSelect>
 
-                <MudSelect T="string" @bind-Value="_selectedVersionNom" Label="Version des règles"
+                <MudSelect T="string" Value="@_selectedVersionNom" Label="Version des règles"
                            Variant="Variant.Outlined" Class="mb-3"
+                           ValueChanged="OnVersionChanged"
                            Disabled="@(_versions.Count == 0)">
                     @foreach (var v in _versions)
                     {
@@ -81,6 +82,36 @@
                     Le reste du calendrier à venir est masqué, pour qu'on ne joue pas une
                     rencontre en anticipant les suivantes. Les commissaires voient tout.
                 </MudText>
+
+                <MudDivider Class="my-3" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-1"><b>Barème d'XP</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                    XP gagnée par les joueurs selon leurs actions. Ces valeurs pré-remplissent
+                    la feuille de match — le coach peut ensuite les ajuster.
+                </MudText>
+                <MudGrid Spacing="2" Class="mb-3">
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_xpTd" Label="Touchdown"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_xpPasse" Label="Passe complétée"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_xpInterception" Label="Interception"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_xpElimination" Label="Élimination"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_xpMvp" Label="Bonus MVP"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+                    </MudItem>
+                </MudGrid>
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4" Spacing="2">
                     <MudButton Href="/ligues" Variant="Variant.Text" Disabled="@_saving">
@@ -137,6 +168,9 @@
 
     bool _modeBrouillard;
 
+    // Barème d'XP (R6) — valeurs LRB par défaut, ajustées selon le jeu choisi.
+    int _xpTd = 3, _xpPasse = 1, _xpInterception = 2, _xpElimination = 2, _xpMvp = 4;
+
     List<Game> _games = [];
     List<RulesVersion> _versions = [];
     string _selectedGameNom = "";
@@ -158,7 +192,30 @@
             _versions = await LeagueService.GetVersionsAsync(_games[0].Id);
             var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
             _selectedVersionNom = active?.Nom ?? "";
+            AppliquerBaremeDeVersion(_games[0].Type);
         }
+    }
+
+    /// <summary>
+    /// Reprend le barème d'XP défini sur la version de règles sélectionnée (R6).
+    /// Le commissaire peut ensuite l'ajuster pour cette ligue.
+    /// </summary>
+    void AppliquerBaremeDeVersion(GameType gameType)
+    {
+        var version = _versions.FirstOrDefault(v => v.Nom == _selectedVersionNom);
+        var bareme  = XpBareme.DeVersion(version, gameType);
+        _xpTd           = bareme.ParTouchdown;
+        _xpPasse        = bareme.ParPasse;
+        _xpInterception = bareme.ParInterception;
+        _xpElimination  = bareme.ParElimination;
+        _xpMvp          = bareme.BonusMvp;
+    }
+
+    void OnVersionChanged(string nom)
+    {
+        _selectedVersionNom = nom;
+        var game = _games.FirstOrDefault(g => g.Nom == _selectedGameNom);
+        if (game is not null) AppliquerBaremeDeVersion(game.Type);
     }
 
     async Task OnGameNameChanged(string nom)
@@ -174,6 +231,8 @@
             _versions = await LeagueService.GetVersionsAsync(game.Id);
             var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
             _selectedVersionNom = active?.Nom ?? "";
+
+            AppliquerBaremeDeVersion(game.Type);
         }
         StateHasChanged();
     }
@@ -216,6 +275,11 @@
                 BudgetDepart           = _budget,
                 NombreEquipesPlayoff   = nbPlayoff,
                 ModeBrouillard         = _modeBrouillard,
+                XpParTouchdown         = _xpTd,
+                XpParPasse             = _xpPasse,
+                XpParInterception      = _xpInterception,
+                XpParElimination       = _xpElimination,
+                XpBonusMvp             = _xpMvp,
             };
 
             await LeagueService.CreerLigueAsync(ligue, userId);

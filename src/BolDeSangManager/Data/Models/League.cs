@@ -27,6 +27,26 @@ public class League
     /// </summary>
     public bool ModeBrouillard { get; set; } = false;
 
+    // ── Barème d'XP de la ligue (R6) ──────────────────────────────────────────
+    // Valeurs par défaut = LRB Saison 3. Le touchdown vaut 5 en Dungeon Bowl :
+    // à la création, le formulaire pré-remplit selon le jeu choisi.
+    // Les matchs déjà saisis conservent leur XP : rien n'est recalculé.
+
+    /// <summary>XP par touchdown.</summary>
+    public int XpParTouchdown { get; set; } = 3;
+
+    /// <summary>XP par passe complétée.</summary>
+    public int XpParPasse { get; set; } = 1;
+
+    /// <summary>XP par interception.</summary>
+    public int XpParInterception { get; set; } = 2;
+
+    /// <summary>XP par élimination infligée.</summary>
+    public int XpParElimination { get; set; } = 2;
+
+    /// <summary>XP bonus pour le joueur désigné MVP.</summary>
+    public int XpBonusMvp { get; set; } = 4;
+
     public DateTime CreeLe { get; set; } = DateTime.UtcNow;
 
     public ICollection<Division> Divisions { get; set; } = [];

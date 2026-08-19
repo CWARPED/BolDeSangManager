@@ -139,6 +139,12 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
             RulesVersionNom: ligue.RulesVersion?.Nom,
             Format: ligue.Format,
             BudgetDepart: ligue.BudgetDepart,
+            XpParTouchdown: ligue.XpParTouchdown,
+            XpParPasse: ligue.XpParPasse,
+            XpParInterception: ligue.XpParInterception,
+            XpParElimination: ligue.XpParElimination,
+            XpBonusMvp: ligue.XpBonusMvp,
+            ModeBrouillard: ligue.ModeBrouillard,
             NombreEquipesPlayoff: ligue.NombreEquipesPlayoff,
             Equipes: equipes,
             Matchs: matchs
@@ -238,6 +244,12 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
             RulesVersionId = rulesVersion.Id,
             Format = dto.Format,
             BudgetDepart = dto.BudgetDepart,
+            XpParTouchdown    = dto.XpParTouchdown    ?? XpBareme.ParDefaut(game.Type).ParTouchdown,
+            XpParPasse        = dto.XpParPasse        ?? 1,
+            XpParInterception = dto.XpParInterception ?? 2,
+            XpParElimination  = dto.XpParElimination  ?? 2,
+            XpBonusMvp        = dto.XpBonusMvp        ?? 4,
+            ModeBrouillard    = dto.ModeBrouillard    ?? false,
             NombreEquipesPlayoff = dto.NombreEquipesPlayoff,
             Statut = LeagueStatus.Termine,
             CreeLe = DateTime.UtcNow
@@ -438,7 +450,15 @@ record LeagueExportDto(
     int BudgetDepart,
     int NombreEquipesPlayoff,
     List<EquipeExportDto> Equipes,
-    List<MatchExportDto> Matchs
+    List<MatchExportDto> Matchs,
+    // Barème d'XP de la ligue (R6). Optionnels : un export antérieur reprend
+    // les valeurs LRB par défaut à l'import.
+    int? XpParTouchdown = null,
+    int? XpParPasse = null,
+    int? XpParInterception = null,
+    int? XpParElimination = null,
+    int? XpBonusMvp = null,
+    bool? ModeBrouillard = null
 );
 
 record EquipeExportDto(

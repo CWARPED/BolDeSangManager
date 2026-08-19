@@ -37,6 +37,58 @@ public class XpBareme
     };
 
     /// <summary>
+    /// Barème défini par la version de règles (R6) — la référence dont héritent
+    /// les nouvelles ligues. Repli sur les valeurs du jeu si la version est inconnue.
+    /// </summary>
+    public static XpBareme DeVersion(RulesVersion? version, GameType gameType) =>
+        version is null
+            ? ParDefaut(gameType)
+            : new XpBareme
+            {
+                ParTouchdown    = version.XpParTouchdown,
+                ParPasse        = version.XpParPasse,
+                ParInterception = version.XpParInterception,
+                ParElimination  = version.XpParElimination,
+                BonusMvp        = version.XpBonusMvp
+            };
+
+    /// <summary>Applique ce barème à une version de règles.</summary>
+    public void AppliquerA(RulesVersion version)
+    {
+        version.XpParTouchdown    = ParTouchdown;
+        version.XpParPasse        = ParPasse;
+        version.XpParInterception = ParInterception;
+        version.XpParElimination  = ParElimination;
+        version.XpBonusMvp        = BonusMvp;
+    }
+
+    /// <summary>
+    /// Barème configuré sur la ligue (R6). Si la ligue est inconnue, on retombe
+    /// sur les valeurs par défaut du jeu.
+    /// </summary>
+    public static XpBareme DeLigue(League? ligue, GameType gameType) =>
+        ligue is null
+            ? ParDefaut(gameType)
+            : new XpBareme
+            {
+                ParTouchdown    = ligue.XpParTouchdown,
+                ParPasse        = ligue.XpParPasse,
+                ParInterception = ligue.XpParInterception,
+                ParElimination  = ligue.XpParElimination,
+                BonusMvp        = ligue.XpBonusMvp
+            };
+
+    /// <summary>Applique ce barème aux champs d'une ligue (création / édition).</summary>
+    public void AppliquerA(League ligue)
+    {
+        ligue.XpParTouchdown    = ParTouchdown;
+        ligue.XpParPasse        = ParPasse;
+        ligue.XpParInterception = ParInterception;
+        ligue.XpParElimination  = ParElimination;
+        ligue.XpBonusMvp        = BonusMvp;
+    }
+
+    /// <summary>
     /// XP proposée pour la performance d'un joueur sur un match.
     /// C'est une <b>valeur par défaut</b> : depuis R4, le coach peut la modifier
     /// sur la feuille de match et c'est sa saisie qui est persistée.

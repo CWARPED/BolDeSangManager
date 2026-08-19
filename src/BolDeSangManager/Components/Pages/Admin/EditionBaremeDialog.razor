@@ -1,0 +1,93 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle1" Class="mb-1"><b>@Version.Nom</b></MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            XP gagnée par les joueurs selon leurs actions. Ces valeurs servent de
+            référence : une nouvelle ligue les reprend à sa création et peut ensuite
+            les ajuster pour son propre format.
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            Les ligues <b>déjà créées</b> gardent le barème qu'elles ont enregistré :
+            modifier cette version ne change rien à leurs matchs.
+        </MudAlert>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_td" Label="Touchdown"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_passe" Label="Passe complétée"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_interception" Label="Interception"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_elimination" Label="Élimination"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_mvp" Label="Bonus MVP"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Enregistrer" Disabled="@_enCours">
+            @(_enCours ? "Enregistrement…" : "Sauvegarder")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public RulesVersion Version { get; set; } = default!;
+
+    int _td, _passe, _interception, _elimination, _mvp;
+    bool _enCours;
+
+    protected override void OnInitialized()
+    {
+        _td           = Version.XpParTouchdown;
+        _passe        = Version.XpParPasse;
+        _interception = Version.XpParInterception;
+        _elimination  = Version.XpParElimination;
+        _mvp          = Version.XpBonusMvp;
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Enregistrer()
+    {
+        _enCours = true;
+        try
+        {
+            await DataEditService.ModifierBaremeXpAsync(Version.Id, new XpBareme
+            {
+                ParTouchdown    = _td,
+                ParPasse        = _passe,
+                ParInterception = _interception,
+                ParElimination  = _elimination,
+                BonusMvp        = _mvp
+            });
+            Snackbar.Add($"Barème d'XP de « {Version.Nom} » mis à jour.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _enCours = false; }
+    }
+}
