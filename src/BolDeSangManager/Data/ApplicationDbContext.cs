@@ -12,8 +12,10 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<TeamType> TeamTypes => Set<TeamType>();
     public DbSet<PlayerPosition> PlayerPositions => Set<PlayerPosition>();
     public DbSet<PlayerPositionSkill> PlayerPositionSkills => Set<PlayerPositionSkill>();
+    public DbSet<PlayerPositionCategoryAccess> PlayerPositionCategoryAccesses => Set<PlayerPositionCategoryAccess>();
     public DbSet<PoolPosition> PoolPositions => Set<PoolPosition>();
     public DbSet<PoolPositionSkill> PoolPositionSkills => Set<PoolPositionSkill>();
+    public DbSet<PoolPositionCategoryAccess> PoolPositionCategoryAccesses => Set<PoolPositionCategoryAccess>();
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<SkillCategoryDef> SkillCategories => Set<SkillCategoryDef>();
     public DbSet<League> Leagues => Set<League>();
@@ -249,6 +251,39 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(s => s.SkillCategoryDef)
             .WithMany(c => c.Competences)
             .HasForeignKey(s => s.SkillCategoryDefId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Accès d'un poste aux catégories — clé composite (poste, catégorie)
+        builder.Entity<PlayerPositionCategoryAccess>()
+            .HasKey(a => new { a.PlayerPositionId, a.SkillCategoryDefId });
+
+        builder.Entity<PlayerPositionCategoryAccess>()
+            .HasOne(a => a.PlayerPosition)
+            .WithMany(p => p.AccesCategories)
+            .HasForeignKey(a => a.PlayerPositionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Restrict : une catégorie référencée par un accès de poste ne peut pas être supprimée
+        builder.Entity<PlayerPositionCategoryAccess>()
+            .HasOne(a => a.SkillCategoryDef)
+            .WithMany()
+            .HasForeignKey(a => a.SkillCategoryDefId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Idem pour la Réserve
+        builder.Entity<PoolPositionCategoryAccess>()
+            .HasKey(a => new { a.PoolPositionId, a.SkillCategoryDefId });
+
+        builder.Entity<PoolPositionCategoryAccess>()
+            .HasOne(a => a.PoolPosition)
+            .WithMany(p => p.AccesCategories)
+            .HasForeignKey(a => a.PoolPositionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<PoolPositionCategoryAccess>()
+            .HasOne(a => a.SkillCategoryDef)
+            .WithMany()
+            .HasForeignKey(a => a.SkillCategoryDefId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

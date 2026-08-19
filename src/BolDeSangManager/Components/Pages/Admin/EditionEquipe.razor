@@ -85,8 +85,8 @@
                             @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
                         </MudTd>
                         <MudTd>
-                            <div style="font-size:11px"><span style="color:#90caf9">P:</span> @(string.IsNullOrEmpty(context.CompetencesPrincipales) ? "—" : context.CompetencesPrincipales)</div>
-                            <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @(string.IsNullOrEmpty(context.CompetencesSecondaires) ? "—" : context.CompetencesSecondaires)</div>
+                            <div style="font-size:11px"><span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
+                            <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
                         </MudTd>
                         <MudTd>
                             @if (context.CompetencesDepart?.Any() == true)

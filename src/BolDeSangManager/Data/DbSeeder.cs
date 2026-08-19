@@ -1,6 +1,7 @@
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
 using BolDeSangManager.Data.Seeding;
+using BolDeSangManager.Helpers;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -28,6 +29,7 @@ public static class DbSeeder
             await SeedBloodBowlTeamsAsync(db);
             await SeedDungeonBowlTeamsAsync(db);
             await SeedPositionSkillsAsync(db, logger);
+            await SeedPositionCategoryAccessAsync(db, logger);
         }
 
         await SeedAdminUserAsync(userManager, config);
@@ -185,6 +187,52 @@ public static class DbSeeder
             }
             await db.SaveChangesAsync();
         }
+    }
+
+    /// <summary>
+    /// Convertit les codes d'accès du seed (« GAF » / « AS », champs [NotMapped]) en
+    /// lignes PlayerPositionCategoryAccess. Les codes sont résolus par le Code des
+    /// catégories de la version du poste.
+    /// </summary>
+    private static async Task SeedPositionCategoryAccessAsync(ApplicationDbContext db, ILogger logger)
+    {
+        var positions = await db.PlayerPositions
+            .Include(p => p.TeamType)
+            .ToListAsync();
+
+        var categoriesParVersion = (await db.SkillCategories.ToListAsync())
+            .GroupBy(c => c.RulesVersionId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var nbAcces = 0;
+        foreach (var pos in positions)
+        {
+            if (!categoriesParVersion.TryGetValue(pos.TeamType.RulesVersionId, out var cats)) continue;
+
+            var principales = CategoryAccessHelpers.ResoudreCodesHistoriques(pos.CompetencesPrincipales, cats);
+            var secondaires = CategoryAccessHelpers.ResoudreCodesHistoriques(pos.CompetencesSecondaires, cats)
+                .Where(c => principales.All(p => p.Id != c.Id))   // principal l'emporte
+                .ToList();
+
+            foreach (var cat in principales)
+            {
+                db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                {
+                    PlayerPositionId = pos.Id, SkillCategoryDefId = cat.Id, EstPrincipale = true
+                });
+                nbAcces++;
+            }
+            foreach (var cat in secondaires)
+            {
+                db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                {
+                    PlayerPositionId = pos.Id, SkillCategoryDefId = cat.Id, EstPrincipale = false
+                });
+                nbAcces++;
+            }
+        }
+        await db.SaveChangesAsync();
+        logger.LogInformation("Seed : {N} accès de catégorie créés pour {P} postes", nbAcces, positions.Count);
     }
 
     private static async Task SeedPositionSkillsAsync(ApplicationDbContext db, ILogger logger)

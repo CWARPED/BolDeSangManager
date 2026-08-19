@@ -37,8 +37,20 @@ public class PlayerPosition
     public string Agilite { get; set; } = "3+";     // "2+", "3+", "4+", "5+", "6+", "-"
     public string CapacitePasse { get; set; } = "-"; // idem
     public string Armure { get; set; } = "9+";       // "6+", "7+", ..., "11+"
-    public string CompetencesPrincipales { get; set; } = "G";    // ex: "GAF"
-    public string CompetencesSecondaires { get; set; } = string.Empty; // ex: "P"
+
+    /// <summary>
+    /// Accès aux catégories de compétence (principal / secondaire).
+    /// Remplace les anciennes chaînes de lettres : voir <see cref="PlayerPositionCategoryAccess"/>.
+    /// </summary>
+    public ICollection<PlayerPositionCategoryAccess> AccesCategories { get; set; } = [];
+
+    /// <summary>Codes d'accès principaux au format seed ("GAF"). Non persisté — cf. DbSeeder.</summary>
+    [NotMapped]
+    public string CompetencesPrincipales { get; set; } = "G";
+
+    /// <summary>Codes d'accès secondaires au format seed ("AS"). Non persisté — cf. DbSeeder.</summary>
+    [NotMapped]
+    public string CompetencesSecondaires { get; set; } = string.Empty;
 
     // CSV des mots-clés du poste (ex: "Trois-quart,Humain,Squelette,Mort-Vivant").
     // Utilisés par les compétences/traits qui ciblent des keywords (ex: Haine (X)).

@@ -468,15 +468,15 @@ else
                         <MudText Typo="Typo.caption" Color="Color.Primary">@SkillSpans(pos)</MudText>
                     }
                     <MudStack Row="true" Spacing="1" Class="mt-1" Style="font-size:10px">
-                        @if (!string.IsNullOrEmpty(pos.CompetencesPrincipales))
+                        @if (pos.AccesCategories.Any(a => a.EstPrincipale))
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Primary" Variant="Variant.Outlined"
-                                     Style="height:18px; font-size:10px">P: @pos.CompetencesPrincipales</MudChip>
+                                     Style="height:18px; font-size:10px">P: @CategoryAccessHelpers.FormatAcces(pos.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</MudChip>
                         }
-                        @if (!string.IsNullOrEmpty(pos.CompetencesSecondaires))
+                        @if (pos.AccesCategories.Any(a => !a.EstPrincipale))
                         {
                             <MudChip T="string" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined"
-                                     Style="height:18px; font-size:10px">S: @pos.CompetencesSecondaires</MudChip>
+                                     Style="height:18px; font-size:10px">S: @CategoryAccessHelpers.FormatAcces(pos.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</MudChip>
                         }
                     </MudStack>
                 </div>

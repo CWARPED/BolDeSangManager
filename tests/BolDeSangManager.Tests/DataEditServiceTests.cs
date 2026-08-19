@@ -33,7 +33,7 @@ public class DataEditServiceTests
         {
             var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
             var data = new PoolPosition { Nom = "Ogre mercenaire", Cout = 140_000, Force = 5, Mouvement = 5 };
-            await svc.AjouterReserveAsync(versionId, data, Array.Empty<int>());
+            await svc.AjouterReserveAsync(versionId, data, Array.Empty<int>(), DataEditService.AccesCategoriesInput.Vide);
         }
 
         using (var db = factory.CreateContext())
@@ -104,13 +104,14 @@ public class DataEditServiceTests
     public async Task ExporterPosteVersReserve_CopiePosteEtSkills()
     {
         using var factory = new TestDbFactory();
-        int versionId, posteId, skillId;
+        int versionId, posteId, skillId, catId, catAgiliteId;
 
         using (var db = factory.CreateContext())
         {
             var (gameId, vId) = SeedVersion(db);
             versionId = vId;
-            var catId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId);
+            catId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId);
+            catAgiliteId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId, "Agilité", "A");
             var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = versionId };
             db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
 
@@ -121,10 +122,15 @@ public class DataEditServiceTests
             {
                 TeamTypeId = tt.Id, Nom = "Trois-quart", QuantiteMax = 16, Cout = 50_000,
                 Mouvement = 6, Force = 3, Agilite = "3+", CapacitePasse = "4+", Armure = "9+",
-                CompetencesPrincipales = "G", CompetencesSecondaires = "AS", MotsCles = "Humain"
+                MotsCles = "Humain"
             };
             db.PlayerPositions.Add(poste); db.SaveChanges(); posteId = poste.Id;
             db.PlayerPositionSkills.Add(new PlayerPositionSkill { PlayerPositionId = posteId, SkillId = skillId });
+            // accès : Générale en principal, Agilité en secondaire
+            db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                { PlayerPositionId = posteId, SkillCategoryDefId = catId, EstPrincipale = true });
+            db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+                { PlayerPositionId = posteId, SkillCategoryDefId = catAgiliteId, EstPrincipale = false });
             db.SaveChanges();
         }
 
@@ -138,6 +144,7 @@ public class DataEditServiceTests
         {
             var pool = await db.PoolPositions
                 .Include(p => p.CompetencesDepart)
+                .Include(p => p.AccesCategories)
                 .FirstOrDefaultAsync(p => p.RulesVersionId == versionId && p.Nom == "Trois-quart");
             Assert.NotNull(pool);
             Assert.Equal(16, pool!.QuantiteMax);
@@ -147,9 +154,10 @@ public class DataEditServiceTests
             Assert.Equal("3+", pool.Agilite);
             Assert.Equal("4+", pool.CapacitePasse);
             Assert.Equal("9+", pool.Armure);
-            Assert.Equal("G", pool.CompetencesPrincipales);
-            Assert.Equal("AS", pool.CompetencesSecondaires);
             Assert.Equal("Humain", pool.MotsCles);
+            // les accès de catégorie suivent la copie, avec leur nature principal/secondaire
+            Assert.Equal(catId, pool.AccesCategories.Single(a => a.EstPrincipale).SkillCategoryDefId);
+            Assert.Equal(catAgiliteId, pool.AccesCategories.Single(a => !a.EstPrincipale).SkillCategoryDefId);
             Assert.Single(pool.CompetencesDepart);
             Assert.Equal(skillId, pool.CompetencesDepart.First().SkillId);
         }

@@ -167,13 +167,13 @@ else
                     <MudTd Style="text-align:center">@j.PlayerPosition?.Armure</MudTd>
                     <MudTd>
                         <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
-                        @if (!string.IsNullOrEmpty(j.PlayerPosition?.CompetencesPrincipales))
+                        @if (j.PlayerPosition?.AccesCategories.Any() == true)
                         {
                             <div style="font-size:10px; margin-top:2px">
-                                <span style="color:#90caf9">P:</span> @j.PlayerPosition.CompetencesPrincipales
-                                @if (!string.IsNullOrEmpty(j.PlayerPosition.CompetencesSecondaires))
+                                <span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(j.PlayerPosition.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))
+                                @if (j.PlayerPosition.AccesCategories.Any(a => !a.EstPrincipale))
                                 {
-                                    <span style="color:#ce93d8; margin-left:8px">S:</span> @j.PlayerPosition.CompetencesSecondaires
+                                    <span style="color:#ce93d8; margin-left:8px">S:</span> @CategoryAccessHelpers.FormatAcces(j.PlayerPosition.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))
                                 }
                             </div>
                         }
