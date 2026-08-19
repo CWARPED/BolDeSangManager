@@ -2,8 +2,12 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using System.Text
+@using Microsoft.AspNetCore.WebUtilities
 @inject AuthenticationStateProvider AuthProvider
 @inject UserManager<ApplicationUser> UserManager
+@inject GmailEmailSender EmailSender
 @inject TeamService TeamService
 @inject LeagueService LeagueService
 @inject NavigationManager Nav
@@ -114,6 +118,38 @@ else
                         </MudItem>
                     </MudGrid>
                 </MudCardContent>
+            </MudCard>
+
+            <!-- Changer l'adresse email -->
+            <MudCard Elevation="2" Class="mb-3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.AlternateEmail" Class="mr-1" Size="Size.Small" />
+                        <b>Adresse email</b>
+                    </MudText>
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                        Votre adresse email vous sert aussi d'identifiant de connexion.
+                        Un lien de confirmation sera envoyé à la <b>nouvelle</b> adresse : tant que vous
+                        n'avez pas cliqué dessus, rien ne change. Une fois confirmée, vous devrez vous
+                        reconnecter avec la nouvelle adresse.
+                    </MudAlert>
+                    <MudTextField Value="@_user.Email" Label="Adresse actuelle"
+                                  Variant="Variant.Outlined" FullWidth="true" Class="mb-2"
+                                  ReadOnly="true" Disabled="true" T="string" />
+                    <MudTextField @bind-Value="_nouvelEmail"
+                                  Label="Nouvelle adresse email"
+                                  InputType="InputType.Email"
+                                  Variant="Variant.Outlined"
+                                  FullWidth="true"
+                                  Disabled="@_changingEmail" />
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Error"
+                               OnClick="ChangerEmail" Disabled="@_changingEmail"
+                               StartIcon="@Icons.Material.Filled.Send">
+                        @(_changingEmail ? "Envoi…" : "Envoyer le lien de confirmation")
+                    </MudButton>
+                </MudCardActions>
             </MudCard>
 
             <!-- Changer le mot de passe -->
@@ -270,6 +306,9 @@ else
     string _confirmMdp = "";
     bool _changingPassword;
 
+    string _nouvelEmail = "";
+    bool _changingEmail;
+
     protected override async Task OnInitializedAsync()
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
@@ -305,6 +344,78 @@ else
                 Snackbar.Add($"Erreur : {string.Join(", ", result.Errors.Select(e => e.Description))}", Severity.Error);
         }
         finally { _savingPseudo = false; }
+    }
+
+    async Task ChangerEmail()
+    {
+        if (_user is null) return;
+
+        var nouvel = _nouvelEmail.Trim();
+
+        if (string.IsNullOrWhiteSpace(nouvel))
+        {
+            Snackbar.Add("Veuillez saisir la nouvelle adresse email.", Severity.Warning);
+            return;
+        }
+        if (string.Equals(nouvel, _user.Email, StringComparison.OrdinalIgnoreCase))
+        {
+            Snackbar.Add("Cette adresse est déjà la vôtre.", Severity.Warning);
+            return;
+        }
+        if (!new EmailAddressAttribute().IsValid(nouvel))
+        {
+            Snackbar.Add("Adresse email invalide.", Severity.Warning);
+            return;
+        }
+        if (await UserManager.FindByEmailAsync(nouvel) is not null)
+        {
+            Snackbar.Add("Cette adresse est déjà utilisée par un autre compte.", Severity.Error);
+            return;
+        }
+
+        // Sans compte Gmail configuré, l'envoi est ignoré silencieusement : on refuse
+        // plutôt que d'annoncer un envoi qui n'arrivera jamais.
+        if (!await EmailSender.EstConfigureAsync())
+        {
+            Snackbar.Add(
+                "L'envoi d'emails n'est pas configuré sur ce site. Contactez un administrateur (Admin > Paramètres).",
+                Severity.Error);
+            return;
+        }
+
+        _changingEmail = true;
+        try
+        {
+            var code = await UserManager.GenerateChangeEmailTokenAsync(_user, nouvel);
+            code = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+
+            var lien = Nav.GetUriWithQueryParameters(
+                Nav.ToAbsoluteUri("Account/ConfirmEmailChange").AbsoluteUri,
+                new Dictionary<string, object?>
+                {
+                    ["userId"] = _user.Id,
+                    ["email"] = nouvel,
+                    ["code"] = code
+                });
+
+            await EmailSender.EnvoyerNotificationMatchAsync(
+                nouvel,
+                "Confirmation de votre nouvelle adresse — BolDeSang Manager",
+                "Confirmer votre nouvelle adresse email",
+                "Vous avez demandé à modifier l'adresse email de votre compte BolDeSang Manager. " +
+                "Cliquez sur le bouton ci-dessous pour confirmer. Vous devrez ensuite vous reconnecter avec cette nouvelle adresse.",
+                lien,
+                "Confirmer ma nouvelle adresse",
+                footer: "Si vous n'avez pas fait cette demande, ignorez cet email — votre adresse actuelle restera inchangée.");
+
+            Snackbar.Add($"Un lien de confirmation a été envoyé à {nouvel}. Votre adresse actuelle reste active tant qu'il n'est pas validé.", Severity.Success);
+            _nouvelEmail = "";
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Échec de l'envoi : {ex.Message}", Severity.Error);
+        }
+        finally { _changingEmail = false; }
     }
 
     async Task ChangerMotDePasse()
