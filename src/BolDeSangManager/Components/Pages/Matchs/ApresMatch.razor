@@ -87,20 +87,20 @@ else
                             </MudText>
                         </MudItem>
                         <MudItem xs="12" sm="4">
-                            <MudSelect @bind-Value="a.SkillId" T="int?" Label="Compétence"
+                            <MudSelect Value="a.SkillId" T="int?" Label="Compétence"
+                                       ValueChanged="@(v => ChoisirCompetence(a, v))"
                                        Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
                                 <MudSelectItem T="int?" Value="@((int?)null)">— Aucune —</MudSelectItem>
-                                @foreach (var cat in _skills.GroupBy(s => s.Categorie).OrderBy(g => g.Key.ToString()))
+                                @foreach (var c in Proposees(a))
                                 {
-                                    <MudListSubheader>@CategorieLabel(cat.Key)</MudListSubheader>
-                                    @foreach (var skill in cat.OrderBy(s => s.Nom))
-                                    {
-                                        <MudSelectItem T="int?" Value="@((int?)skill.Id)">
-                                            @skill.Nom @(skill.EstElite ? "⭐" : "")
-                                        </MudSelectItem>
-                                    }
+                                    <MudSelectItem T="int?" Value="@((int?)c.Skill.Id)">
+                                        @Etiquette(c)
+                                    </MudSelectItem>
                                 }
                             </MudSelect>
+                            <MudCheckBox @bind-Value="a.HorsAcces" Size="Size.Small" Dense="true"
+                                         Color="Color.Warning"
+                                         Label="Autoriser hors accès du poste" />
                         </MudItem>
                         <MudItem xs="12" sm="2">
                             <MudNumericField @bind-Value="a.XpDepensee" Label="XP dépensée"
@@ -110,8 +110,14 @@ else
                                              HelperText="@(a.SkillId is null ? null : $"reste {a.PspTotal - a.XpDepensee}")" />
                         </MudItem>
                         <MudItem xs="12" sm="2">
-                            <MudCheckBox @bind-Value="a.EstPrincipale" Color="Color.Warning"
-                                         Label="Principale (+20k)" />
+                            @if (a.SkillId is not null)
+                            {
+                                <MudChip T="string" Size="Size.Small"
+                                         Color="@(a.EstPrincipale ? Color.Warning : Color.Default)"
+                                         Icon="@(a.EstPrincipale ? Icons.Material.Filled.Star : Icons.Material.Filled.StarBorder)">
+                                    @(a.EstPrincipale ? "Principale +20k" : "Secondaire +40k")
+                                </MudChip>
+                            }
                         </MudItem>
                     </MudGrid>
                 </MudPaper>
@@ -245,7 +251,9 @@ else
         _equipe = await TeamService.GetEquipeAsync(teamId);
         if (_equipe is null) return;
 
-        _skills = await TeamService.GetCompetencesAsync();
+        // R7 : uniquement les compétences de la version de règles de la ligue
+        _skills = await TeamService.GetCompetencesAsync(
+            rulesVersionId: _match.Division?.League?.RulesVersionId);
         _postesDisponibles = await TeamService.GetPostesDisponiblesAsync(_equipe.TeamTypeId);
 
         _ameliorations = _match.Feuille?.RecordsJoueurs
@@ -259,6 +267,7 @@ else
                 NomJoueur    = r.TeamPlayer!.Nom,
                 NomPoste     = r.TeamPlayer.PlayerPosition?.Nom ?? "",
                 PspTotal     = r.TeamPlayer.PointsStarPlayer,
+                Acces        = r.TeamPlayer.PlayerPosition?.AccesCategories?.ToList() ?? [],
             })
             .ToList() ?? [];
 
@@ -270,6 +279,48 @@ else
                 : 1;
             _numerosRecruté[pos.Id] = Math.Min(nextNum, 99);
         }
+    }
+
+    /// <summary>
+    /// Libellé d'une compétence dans la liste (R7). MudSelect ne rend pas
+    /// correctement les MudListSubheader dans son popover : on porte donc
+    /// l'information de groupe directement dans le texte de l'item.
+    /// </summary>
+    static string Etiquette(AccesCompetencesHelpers.CompetenceProposee c)
+    {
+        var cat = c.Skill.SkillCategoryDef?.Nom ?? "?";
+        var elite = c.Skill.EstElite ? " ⭐" : "";
+        var marque = c.HorsAcces ? "⚠ hors accès" : c.EstPrincipale ? "principal +20k" : "secondaire +40k";
+        return $"{c.Skill.Nom}{elite}  —  {cat} · {marque}";
+    }
+
+    // R7 — listes proposées, calculées hors du rendu du MudSelect
+    List<AccesCompetencesHelpers.CompetenceProposee> Proposees(AmeliorationData a) =>
+        AccesCompetencesHelpers.Filtrer(_skills, a.Acces, a.HorsAcces);
+
+    List<AccesCompetencesHelpers.CompetenceProposee> Principales(AmeliorationData a) =>
+        Proposees(a).Where(c => !c.HorsAcces && c.EstPrincipale).ToList();
+
+    List<AccesCompetencesHelpers.CompetenceProposee> Secondaires(AmeliorationData a) =>
+        Proposees(a).Where(c => !c.HorsAcces && !c.EstPrincipale).ToList();
+
+    List<AccesCompetencesHelpers.CompetenceProposee> HorsAcces(AmeliorationData a) =>
+        Proposees(a).Where(c => c.HorsAcces).ToList();
+
+    /// <summary>
+    /// Sélection d'une compétence (R7) : le caractère principal / secondaire est
+    /// <b>déduit</b> des accès du poste, il n'est plus coché à la main. Une
+    /// compétence prise hors accès compte comme secondaire (hausse +40k).
+    /// </summary>
+    void ChoisirCompetence(AmeliorationData a, int? skillId)
+    {
+        a.SkillId = skillId;
+
+        if (skillId is null) { a.EstPrincipale = false; return; }
+
+        var skill = _skills.FirstOrDefault(s => s.Id == skillId.Value);
+        a.EstPrincipale = skill is not null
+                       && AccesCompetencesHelpers.EstAccesPrincipal(skill, a.Acces);
     }
 
     bool DejaValide() => _match?.Feuille is { } f
@@ -346,7 +397,12 @@ else
         public string NomPoste    { get; set; } = "";
         public int    PspTotal    { get; set; }
         public int?   SkillId     { get; set; }
+        /// <summary>Déduit des accès du poste depuis R7 — plus coché à la main.</summary>
         public bool   EstPrincipale { get; set; } = true;
+        /// <summary>Accès de catégorie du poste du joueur (R7).</summary>
+        public List<PlayerPositionCategoryAccess> Acces { get; set; } = [];
+        /// <summary>Case « hors accès » : réaffiche toutes les compétences (R7).</summary>
+        public bool   HorsAcces   { get; set; }
         /// <summary>XP que le coach choisit de dépenser pour cette amélioration (R4).</summary>
         public int    XpDepensee  { get; set; }
     }

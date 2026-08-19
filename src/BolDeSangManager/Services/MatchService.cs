@@ -18,6 +18,9 @@ public class MatchService(
             .Include(m => m.EquipeDomicile).ThenInclude(e => e.TeamType)
             .Include(m => m.EquipeExterieur).ThenInclude(e => e.TeamType)
             .Include(m => m.Feuille).ThenInclude(f => f!.RecordsJoueurs).ThenInclude(r => r.TeamPlayer).ThenInclude(p => p!.PlayerPosition)
+            // R7 : accès de catégorie du poste, pour filtrer les compétences à l'après-match
+            .Include(m => m.Feuille).ThenInclude(f => f!.RecordsJoueurs).ThenInclude(r => r.TeamPlayer)
+                .ThenInclude(p => p!.PlayerPosition).ThenInclude(pp => pp!.AccesCategories)
             .Include(m => m.Division).ThenInclude(d => d!.League)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
