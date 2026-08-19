@@ -294,6 +294,25 @@ public class LeagueService(
         => await authService.PeutGererLigueAsync(userId, ligueId);
 
     /// <summary>
+    /// Enregistre le règlement (markdown) d'une ligue (R5). Réservé aux commissaires :
+    /// l'habilitation est revérifiée ici, pas seulement masquée dans l'UI.
+    /// </summary>
+    public async Task DefinirReglementAsync(int ligueId, string markdown, string userId)
+    {
+        if (!await authService.PeutGererLigueAsync(userId, ligueId))
+            throw new UnauthorizedAccessException("Seul un commissaire peut modifier le règlement.");
+
+        var ligue = await db.Leagues.FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        ligue.Reglement = markdown ?? string.Empty;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Ligue id={LigueId} : règlement mis à jour par {UserId} ({Taille} caractères)",
+            ligueId, userId, ligue.Reglement.Length);
+    }
+
+    /// <summary>
     /// Active ou désactive le mode brouillard d'une ligue (#2). Réservé aux
     /// commissaires : l'habilitation est revérifiée ici, pas seulement dans l'UI.
     /// </summary>

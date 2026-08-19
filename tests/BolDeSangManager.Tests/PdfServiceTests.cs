@@ -59,6 +59,117 @@ public class PdfServiceTests
     }
 
     [Fact]
+    public void GenererReglement_AvecMarkdown_RetournePdfNonVide()
+    {
+        var svc = new PdfService();
+        var ligue = new League
+        {
+            Nom = "Ligue de la Saison Sanglante",
+            Reglement = """
+                # Règlement officiel
+
+                ## 1. Déroulement
+
+                Les matchs se jouent le **samedi**, sauf accord entre coaches.
+
+                - Chaque équipe dispose de 4 minutes par tour
+                - Les dés doivent être lancés sur la table
+                - Un dé sorti est **relancé**
+
+                ## 2. Sanctions
+
+                > Tout comportement antisportif est sanctionné par le commissaire.
+
+                1. Premier avertissement
+                2. Match perdu par forfait
+
+                ---
+
+                *Règlement adopté en assemblée générale.*
+                """
+        };
+
+        var bytes = svc.GenererReglement(ligue);
+
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 1_000, "Le PDF devrait peser plus de 1 Ko");
+    }
+
+    [Fact]
+    public void GenererReglement_SansReglement_RetourneQuandMemeUnPdf()
+    {
+        // le bouton peut être cliqué sur une ligue neuve : pas d'exception attendue
+        var svc = new PdfService();
+        var bytes = svc.GenererReglement(new League { Nom = "Ligue vide" });
+
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 500);
+    }
+
+    [Fact]
+    public void GenererReglement_MarkdownExotique_NeFaitPasEchouerLeRendu()
+    {
+        // tableaux, images, HTML : hors du sous-ensemble supporté, doivent
+        // dégrader en texte simple sans planter
+        var svc = new PdfService();
+        var ligue = new League
+        {
+            Nom = "Ligue test",
+            Reglement = """
+                | Poste | Coût |
+                |---|---|
+                | Blitzeur | 85k |
+
+                ![image](https://exemple.fr/image.png)
+
+                <div>html brut</div>
+
+                Texte avec des *étoiles* non fermées ** et des _underscores_.
+                """
+        };
+
+        var bytes = svc.GenererReglement(ligue);
+        Assert.True(bytes.Length > 500);
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_EnPaysage_RetournePdfNonVide()
+    {
+        var svc = new PdfService();
+        var bytes = svc.GenererFeuilleEquipe(MinimalTeam(),
+            inclureDescriptionsCompetences: false, paysage: true);
+
+        Assert.NotNull(bytes);
+        Assert.True(bytes.Length > 1_000);
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_PortraitEtPaysage_ProduisentDesDocumentsDifferents()
+    {
+        var svc = new PdfService();
+        var equipe = MinimalTeam();
+
+        var portrait = svc.GenererFeuilleEquipe(equipe, false, paysage: false);
+        var paysage  = svc.GenererFeuilleEquipe(equipe, false, paysage: true);
+
+        // même contenu, mise en page différente : les octets ne peuvent pas coïncider
+        Assert.NotEqual(portrait.Length, paysage.Length);
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_ParDefaut_ResteEnPortrait()
+    {
+        // #4 : l'orientation est une option, le portrait reste le comportement par défaut
+        var svc = new PdfService();
+        var equipe = MinimalTeam();
+
+        var implicite = svc.GenererFeuilleEquipe(equipe, false);
+        var portrait  = svc.GenererFeuilleEquipe(equipe, false, paysage: false);
+
+        Assert.Equal(portrait.Length, implicite.Length);
+    }
+
+    [Fact]
     public void GenererFeuilleEquipe_SansMatch_RetournePdfNonVide()
     {
         var svc = new PdfService();

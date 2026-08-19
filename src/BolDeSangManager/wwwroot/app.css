@@ -238,3 +238,39 @@ h1:focus {
     gap: 8px;
     margin-bottom: 8px;
 }
+/* ── Rendu du règlement de ligue en markdown (R5) ───────────────────────── */
+.reglement-rendu h1,
+.reglement-rendu h2,
+.reglement-rendu h3 { margin: 1em 0 .4em; line-height: 1.25; }
+.reglement-rendu h1 { font-size: 1.6rem; color: var(--mud-palette-error); }
+.reglement-rendu h2 { font-size: 1.3rem; }
+.reglement-rendu h3 { font-size: 1.1rem; }
+.reglement-rendu p  { margin: .5em 0; line-height: 1.6; }
+.reglement-rendu ul,
+.reglement-rendu ol { margin: .5em 0 .5em 1.4em; }
+.reglement-rendu li { margin: .25em 0; }
+.reglement-rendu blockquote {
+    margin: .8em 0;
+    padding: .4em 0 .4em 1em;
+    border-left: 3px solid var(--mud-palette-lines-default);
+    color: var(--mud-palette-text-secondary);
+}
+.reglement-rendu table { border-collapse: collapse; margin: .8em 0; width: 100%; }
+.reglement-rendu th,
+.reglement-rendu td {
+    border: 1px solid var(--mud-palette-lines-default);
+    padding: .4em .6em;
+    text-align: left;
+}
+.reglement-rendu th { background: var(--mud-palette-background-grey); }
+.reglement-rendu hr {
+    border: none;
+    border-top: 1px solid var(--mud-palette-lines-default);
+    margin: 1.2em 0;
+}
+.reglement-rendu code {
+    background: var(--mud-palette-background-grey);
+    padding: .1em .35em;
+    border-radius: 3px;
+    font-size: .9em;
+}

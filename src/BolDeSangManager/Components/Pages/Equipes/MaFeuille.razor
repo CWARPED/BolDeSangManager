@@ -71,6 +71,13 @@ else
                       Disabled="@_exporting">
                 PDF avec descriptions des compétences
             </MudButton>
+            <MudDivider Vertical="true" FlexItem="true" />
+            <MudToggleGroup T="bool" @bind-Value="_pdfPaysage" Color="Color.Error"
+                            Size="Size.Small" CheckMark="true" Dense="true"
+                            SelectionMode="SelectionMode.SingleSelection">
+                <MudToggleItem Value="false" Text="Portrait" />
+                <MudToggleItem Value="true" Text="Paysage" />
+            </MudToggleGroup>
         </MudStack>
 
         @if (_matchProchain is not null)
@@ -259,6 +266,9 @@ else
             .FirstOrDefault();
     }
 
+    /// <summary>Orientation choisie pour l'export PDF (#4).</summary>
+    bool _pdfPaysage;
+
     async Task ExporterPdf(bool inclureDescriptions)
     {
         if (_equipeDetail is null) return;
@@ -267,8 +277,9 @@ else
         {
             var bytes = PdfService.GenererFeuilleEquipe(
                 _equipeDetail, inclureDescriptions,
-                _matchProchain, _urlExterne);
-            var nom = $"feuille-{_equipeDetail.Nom.ToLower().Replace(" ", "-")}.pdf";
+                _matchProchain, _urlExterne, _pdfPaysage);
+            var suffixe = _pdfPaysage ? "-paysage" : "";
+            var nom = $"feuille-{_equipeDetail.Nom.ToLower().Replace(" ", "-")}{suffixe}.pdf";
             var base64 = Convert.ToBase64String(bytes);
             await JS.InvokeVoidAsync("blazorDownloadBase64File", nom, "application/pdf", base64);
         }

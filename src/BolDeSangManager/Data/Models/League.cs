@@ -27,6 +27,13 @@ public class League
     /// </summary>
     public bool ModeBrouillard { get; set; } = false;
 
+    /// <summary>
+    /// Règlement de la ligue en markdown brut (R5). Rédigé par les commissaires,
+    /// consultable par tous les participants et exportable en PDF.
+    /// Le HTML brut est désactivé au rendu : voir MarkdownService.
+    /// </summary>
+    public string Reglement { get; set; } = string.Empty;
+
     // ── Barème d'XP de la ligue (R6) ──────────────────────────────────────────
     // Valeurs par défaut = LRB Saison 3. Le touchdown vaut 5 en Dungeon Bowl :
     // à la création, le formulaire pré-remplit selon le jeu choisi.

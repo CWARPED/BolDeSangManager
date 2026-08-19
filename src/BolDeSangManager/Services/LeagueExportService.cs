@@ -145,6 +145,7 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
             XpParElimination: ligue.XpParElimination,
             XpBonusMvp: ligue.XpBonusMvp,
             ModeBrouillard: ligue.ModeBrouillard,
+            Reglement: ligue.Reglement,
             NombreEquipesPlayoff: ligue.NombreEquipesPlayoff,
             Equipes: equipes,
             Matchs: matchs
@@ -250,6 +251,7 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
             XpParElimination  = dto.XpParElimination  ?? 2,
             XpBonusMvp        = dto.XpBonusMvp        ?? 4,
             ModeBrouillard    = dto.ModeBrouillard    ?? false,
+            Reglement         = dto.Reglement         ?? string.Empty,
             NombreEquipesPlayoff = dto.NombreEquipesPlayoff,
             Statut = LeagueStatus.Termine,
             CreeLe = DateTime.UtcNow
@@ -458,7 +460,8 @@ record LeagueExportDto(
     int? XpParInterception = null,
     int? XpParElimination = null,
     int? XpBonusMvp = null,
-    bool? ModeBrouillard = null
+    bool? ModeBrouillard = null,
+    string? Reglement = null   // règlement markdown (R5), optionnel = rétrocompat
 );
 
 record EquipeExportDto(
