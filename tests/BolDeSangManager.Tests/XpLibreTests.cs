@@ -45,6 +45,123 @@ public class XpLibreTests : IDisposable
         Assert.Equal(20, b.Calculer(touchdowns: 2, passes: 0, interceptions: 0, eliminations: 0, estMvp: true));
     }
 
+    // ── Barème porté par la version de règles, puis par la ligue (R6) ─────────
+
+    [Fact]
+    public void BaremeDeVersion_ReprendLesValeursDesRegles()
+    {
+        var version = new RulesVersion
+        {
+            XpParTouchdown = 6, XpParPasse = 2,
+            XpParInterception = 5, XpParElimination = 1, XpBonusMvp = 10
+        };
+
+        var b = XpBareme.DeVersion(version, GameType.BloodBowl);
+
+        // 1 TD (6) + 2 passes (4) + 1 interception (5) + 3 élims (3) + MVP (10)
+        Assert.Equal(6 + 4 + 5 + 3 + 10, b.Calculer(
+            touchdowns: 1, passes: 2, interceptions: 1, eliminations: 3, estMvp: true));
+    }
+
+    [Fact]
+    public void BaremeDeVersion_SansVersion_RetombeSurLeDefautDuJeu()
+    {
+        Assert.Equal(3, XpBareme.DeVersion(null, GameType.BloodBowl).ParTouchdown);
+        Assert.Equal(5, XpBareme.DeVersion(null, GameType.DungeonBowl).ParTouchdown);
+    }
+
+    [Fact]
+    public void AppliquerA_EcritLeBaremeSurLaVersionDeRegles()
+    {
+        var version = new RulesVersion();
+        new XpBareme { ParTouchdown = 7, ParPasse = 3, ParInterception = 0, ParElimination = 4, BonusMvp = 1 }
+            .AppliquerA(version);
+
+        Assert.Equal(7, version.XpParTouchdown);
+        Assert.Equal(3, version.XpParPasse);
+        Assert.Equal(0, version.XpParInterception);
+        Assert.Equal(4, version.XpParElimination);
+        Assert.Equal(1, version.XpBonusMvp);
+    }
+
+    [Fact]
+    public void BaremeDeLigue_ReprendLesValeursConfigurees()
+    {
+        var ligue = new League
+        {
+            XpParTouchdown = 6, XpParPasse = 2,
+            XpParInterception = 5, XpParElimination = 1, XpBonusMvp = 10
+        };
+
+        var b = XpBareme.DeLigue(ligue, GameType.BloodBowl);
+
+        Assert.Equal(6 + 4 + 5 + 3 + 10, b.Calculer(
+            touchdowns: 1, passes: 2, interceptions: 1, eliminations: 3, estMvp: true));
+    }
+
+    [Fact]
+    public void BaremeDeLigue_SansLigue_RetombeSurLeDefautDuJeu()
+    {
+        Assert.Equal(3, XpBareme.DeLigue(null, GameType.BloodBowl).ParTouchdown);
+        Assert.Equal(5, XpBareme.DeLigue(null, GameType.DungeonBowl).ParTouchdown);
+    }
+
+    [Fact]
+    public void BaremeDeLigue_UneLigueNeuveEstConformeAuLRB()
+    {
+        // les valeurs par défaut du modèle doivent rester la règle officielle
+        var b = XpBareme.DeLigue(new League(), GameType.BloodBowl);
+        Assert.Equal(3, b.ParTouchdown);
+        Assert.Equal(1, b.ParPasse);
+        Assert.Equal(2, b.ParInterception);
+        Assert.Equal(2, b.ParElimination);
+        Assert.Equal(4, b.BonusMvp);
+    }
+
+    [Fact]
+    public void AppliquerA_EcritLeBaremeSurLaLigue()
+    {
+        var ligue = new League();
+        new XpBareme { ParTouchdown = 7, ParPasse = 3, ParInterception = 0, ParElimination = 4, BonusMvp = 1 }
+            .AppliquerA(ligue);
+
+        Assert.Equal(7, ligue.XpParTouchdown);
+        Assert.Equal(3, ligue.XpParPasse);
+        Assert.Equal(0, ligue.XpParInterception);
+        Assert.Equal(4, ligue.XpParElimination);
+        Assert.Equal(1, ligue.XpBonusMvp);
+    }
+
+    [Fact]
+    public void BaremeDeLigue_ValeursAZero_NeuralisentUneAction()
+    {
+        // une ligue peut décider que les éliminations ne rapportent rien
+        var ligue = new League { XpParElimination = 0 };
+        var b = XpBareme.DeLigue(ligue, GameType.BloodBowl);
+
+        Assert.Equal(0, b.Calculer(touchdowns: 0, passes: 0, interceptions: 0, eliminations: 5, estMvp: false));
+    }
+
+    [Fact]
+    public async Task ModifierBaremeXp_EnregistreSurLaVersionDeRegles()
+    {
+        using var db = _factory.CreateContext();
+        var (_, version) = await DataSeeder.SeedGameAsync(db);
+
+        var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+        await svc.ModifierBaremeXpAsync(version.Id, new XpBareme
+        {
+            ParTouchdown = 8, ParPasse = 0, ParInterception = 3, ParElimination = 1, BonusMvp = 6
+        });
+
+        var relu = await db.RulesVersions.FindAsync(version.Id);
+        Assert.Equal(8, relu!.XpParTouchdown);
+        Assert.Equal(0, relu.XpParPasse);
+        Assert.Equal(3, relu.XpParInterception);
+        Assert.Equal(1, relu.XpParElimination);
+        Assert.Equal(6, relu.XpBonusMvp);
+    }
+
     // ── Cagnotte : l'amélioration débite l'XP saisie ──────────────────────────
 
     private async Task<(TeamService svc, int joueurId, int skillId)> PreparerJoueurAsync(int xpDepart)

@@ -136,7 +136,7 @@ else
     else if (_equipeDomicile is not null && _equipeExterieur is not null)
     {
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3" Icon="@Icons.Material.Filled.Info">
-            TD=3 pts · Comp=1 · Int=2 · Élim=2 · MVP=4 — n'ajoutez que les joueurs ayant marqué des stats.
+            TD=@_bareme.ParTouchdown pts · Comp=@_bareme.ParPasse · Int=@_bareme.ParInterception · Élim=@_bareme.ParElimination · MVP=@_bareme.BonusMvp — n'ajoutez que les joueurs ayant marqué des stats.
         </MudAlert>
 
         <!-- Score en direct — sticky -->
@@ -528,7 +528,8 @@ else
         if (_match is null) return;
 
         // Barème du jeu concerné (le TD vaut 5 en Dungeon Bowl, 3 sinon)
-        _bareme = XpBareme.ParDefaut(_match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
+        _bareme = XpBareme.DeLigue(_match.Division?.League,
+            _match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
 
         var estCoach = _match.EquipeDomicile?.CoachId == _userId || _match.EquipeExterieur?.CoachId == _userId;
         if (!estCoach)

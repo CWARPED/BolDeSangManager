@@ -43,6 +43,19 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     {
         await using var tx = await db.Database.BeginTransactionAsync();
 
+        // 0. Reprendre le barème d'XP de la version source (R6)
+        var vSource = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == sourceVersionId);
+        var vDest   = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == destVersionId);
+        if (vSource is not null && vDest is not null)
+        {
+            vDest.XpParTouchdown    = vSource.XpParTouchdown;
+            vDest.XpParPasse        = vSource.XpParPasse;
+            vDest.XpParInterception = vSource.XpParInterception;
+            vDest.XpParElimination  = vSource.XpParElimination;
+            vDest.XpBonusMvp        = vSource.XpBonusMvp;
+            await db.SaveChangesAsync();
+        }
+
         // 1. Cloner les catégories de compétence + map oldId → newId
         var sourceCategories = await db.SkillCategories
             .Where(c => c.RulesVersionId == sourceVersionId)
@@ -572,6 +585,24 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         logger.LogInformation("Réserve : poste {Nom} (id={Id}) du TeamType {Tt} renvoyé en Réserve (id={PoolId})",
             poste.Nom, poste.Id, poste.TeamTypeId, copie.Id);
         return copie;
+    }
+
+    /// <summary>
+    /// Modifie le barème d'XP de référence d'une version de règles (R6).
+    /// Les ligues déjà créées conservent le barème qu'elles ont enregistré.
+    /// </summary>
+    public async Task ModifierBaremeXpAsync(int versionId, XpBareme bareme)
+    {
+        var version = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == versionId)
+            ?? throw new InvalidOperationException("Version de règles introuvable");
+
+        bareme.AppliquerA(version);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Barème d'XP de la version '{Version}' : TD={Td}, passe={Passe}, int={Int}, élim={Elim}, MVP={Mvp}",
+            version.Nom, bareme.ParTouchdown, bareme.ParPasse, bareme.ParInterception,
+            bareme.ParElimination, bareme.BonusMvp);
     }
 
     // ═══════════════════ Catégories de compétence ═══════════════════

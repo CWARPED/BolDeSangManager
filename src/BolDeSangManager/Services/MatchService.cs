@@ -64,7 +64,8 @@ public class MatchService(
         // XP : depuis R4 la valeur saisie par le coach fait foi. Le barème ne sert
         // que de valeur par défaut (pré-remplie côté UI) ; on ne recalcule ici que
         // si l'appelant n'a rien fourni, pour rester compatible avec d'anciens appels.
-        var bareme = XpBareme.ParDefaut(match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
+        var bareme = XpBareme.DeLigue(match.Division?.League,
+            match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
         foreach (var record in records)
         {
             record.MatchSheetId = feuille.Id;
@@ -559,7 +560,7 @@ public class MatchService(
         feuille.NotesCommissaire       = feuilleModifiee.NotesCommissaire;
 
         var gameType = match.Division?.League?.Game?.Type ?? GameType.BloodBowl;
-        var baremeModif = XpBareme.ParDefaut(gameType);
+        var baremeModif = XpBareme.DeLigue(match.Division?.League, gameType);
         foreach (var r in nouveauxRecords)
         {
             r.MatchSheetId = feuille.Id;

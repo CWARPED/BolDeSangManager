@@ -234,6 +234,7 @@
                     <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
                     <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Ordre)">Ordre</MudTableSortLabel></MudTh>
                     <MudTh>Active</MudTh>
+                    <MudTh>Barème d'XP</MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -241,6 +242,16 @@
                     <MudTd>@context.Ordre</MudTd>
                     <MudTd>@(context.EstActive ? "Oui" : "Non")</MudTd>
                     <MudTd>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            TD @context.XpParTouchdown · Passe @context.XpParPasse ·
+                            Int @context.XpParInterception · Élim @context.XpParElimination ·
+                            MVP @context.XpBonusMvp
+                        </MudText>
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small"
+                                       title="Modifier le barème d'XP de cette version"
+                                       OnClick="@(() => EditerBareme(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Download" Size="Size.Small"
                                        title="Exporter cette version"
                                        OnClick="@(() => ExporterVersion(context.Id))" />
@@ -312,6 +323,16 @@
     }
 
     void OnCategorieChanged(int? c) => _categorieFiltre = c;
+
+    async Task EditerBareme(RulesVersion version)
+    {
+        var parameters = new DialogParameters<EditionBaremeDialog> { { x => x.Version, version } };
+        var dialog = await DialogService.ShowAsync<EditionBaremeDialog>(
+            "Barème d'XP", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+        if (result is { Canceled: false })
+            await ChargerVersionsAsync();
+    }
 
     async Task AjouterCategorie()
     {

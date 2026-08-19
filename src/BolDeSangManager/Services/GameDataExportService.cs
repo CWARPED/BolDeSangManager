@@ -95,7 +95,12 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 p.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList(),
                 p.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList()
             )).ToList(),
-            Categories: categories.Select(c => new SkillCategoryGdDto(c.Nom, c.Code)).ToList()
+            Categories: categories.Select(c => new SkillCategoryGdDto(c.Nom, c.Code)).ToList(),
+            XpParTouchdown: version.XpParTouchdown,
+            XpParPasse: version.XpParPasse,
+            XpParInterception: version.XpParInterception,
+            XpParElimination: version.XpParElimination,
+            XpBonusMvp: version.XpBonusMvp
         );
 
         var json = JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
@@ -150,7 +155,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 GameId = gameId,
                 Nom = versionNom,
                 Ordre = nextOrdre + 1,
-                EstActive = false
+                EstActive = false,
+                // Barème d'XP (R6) — un export antérieur n'a pas ces champs :
+                // on retombe alors sur les valeurs par défaut du jeu.
+                XpParTouchdown    = dto.XpParTouchdown    ?? XpBareme.ParDefaut(game.Type).ParTouchdown,
+                XpParPasse        = dto.XpParPasse        ?? 1,
+                XpParInterception = dto.XpParInterception ?? 2,
+                XpParElimination  = dto.XpParElimination  ?? 2,
+                XpBonusMvp        = dto.XpBonusMvp        ?? 4
             };
             db.RulesVersions.Add(version);
             await db.SaveChangesAsync();
@@ -485,7 +497,14 @@ record GameDataExportDto(
     List<SkillGdDto> Skills,
     List<TeamTypeGdDto> TypesEquipes,
     List<PlayerPositionGdDto>? Reserve = null,  // ← AJOUT optionnel (rétrocompat)
-    List<SkillCategoryGdDto>? Categories = null // ← AJOUT optionnel (rétrocompat, R2)
+    List<SkillCategoryGdDto>? Categories = null, // ← AJOUT optionnel (rétrocompat, R2)
+    // Barème d'XP de la version (R6). Optionnels : un export antérieur reprend
+    // les valeurs par défaut du jeu à l'import.
+    int? XpParTouchdown = null,
+    int? XpParPasse = null,
+    int? XpParInterception = null,
+    int? XpParElimination = null,
+    int? XpBonusMvp = null
 );
 
 record ReserveExportDto(
