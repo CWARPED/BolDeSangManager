@@ -25,8 +25,13 @@ public class PdfService
         FontManager.RegisterFontWithCustomName(SymbolFont2, s2);
     }
 
+    /// <param name="paysage">
+    /// Orientation du PDF (#4). En paysage la largeur utile passe de ~180 à ~267 mm :
+    /// les colonnes à largeur fixe (caractéristiques, PSP, valeur) ne bougent pas,
+    /// tout l'espace gagné va aux colonnes relatives — surtout les compétences.
+    /// </param>
     public byte[] GenererFeuilleEquipe(Team equipe, bool inclureDescriptionsCompetences,
-        Match? matchProchain = null, string? urlExterne = null)
+        Match? matchProchain = null, string? urlExterne = null, bool paysage = false)
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
@@ -34,7 +39,7 @@ public class PdfService
         {
             container.Page(page =>
             {
-                page.Size(PageSizes.A4);
+                page.Size(paysage ? PageSizes.A4.Landscape() : PageSizes.A4);
                 page.Margin(1.5f, Unit.Centimetre);
                 page.DefaultTextStyle(x => x.FontSize(9).FontFamily("Arial"));
 
@@ -369,6 +374,215 @@ public class PdfService
     // ⚕ U+2695 → Symbols1 ; ✦ U+2726 + ★ U+2605 → Symbols2
     private static string FontFor(string symbol) =>
         symbol.Contains('⚕') ? SymbolFont1 : SymbolFont2;
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  Règlement de ligue (R5)
+    // ══════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Génère le PDF du règlement d'une ligue à partir de son markdown.
+    ///
+    /// QuestPDF ne consomme pas de markdown : on interprète ici un sous-ensemble
+    /// volontairement restreint et documenté — titres (#, ##, ###), paragraphes,
+    /// listes à puces et numérotées, gras (**), italique (*), citations (&gt;),
+    /// séparateurs (---). Tout le reste est rendu comme du texte simple, ce qui
+    /// évite qu'un markdown riche fasse dérailler la mise en page.
+    /// </summary>
+    public byte[] GenererReglement(League ligue)
+    {
+        QuestPDF.Settings.License = LicenseType.Community;
+
+        var blocs = AnalyserMarkdown(ligue.Reglement ?? string.Empty);
+
+        return Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(2f, Unit.Centimetre);
+                page.DefaultTextStyle(x => x.FontSize(10).FontFamily("Arial"));
+
+                page.Header().Column(col =>
+                {
+                    col.Item().Text("Règlement").Bold().FontSize(22).FontColor(Colors.Red.Darken2);
+                    col.Item().Text(ligue.Nom).FontSize(12).FontColor(Colors.Grey.Darken2);
+                    col.Item().PaddingTop(4).LineHorizontal(1.5f).LineColor(Colors.Red.Darken2);
+                    col.Item().PaddingBottom(10);
+                });
+
+                page.Content().Column(col =>
+                {
+                    if (blocs.Count == 0)
+                    {
+                        col.Item().PaddingTop(20).Text("Aucun règlement n'a encore été rédigé pour cette ligue.")
+                            .Italic().FontColor(Colors.Grey.Darken1);
+                        return;
+                    }
+
+                    foreach (var bloc in blocs)
+                        RendreBloc(col, bloc);
+                });
+
+                page.Footer().Row(row =>
+                {
+                    row.RelativeItem().Text($"Généré le {DateTime.Now:dd/MM/yyyy HH:mm} — BolDeSangManager")
+                        .FontSize(7).FontColor(Colors.Grey.Darken1);
+                    row.ConstantItem(80).AlignRight().Text(t =>
+                    {
+                        t.DefaultTextStyle(s => s.FontSize(7).FontColor(Colors.Grey.Darken1));
+                        t.Span("Page ");
+                        t.CurrentPageNumber();
+                        t.Span(" / ");
+                        t.TotalPages();
+                    });
+                });
+            });
+        }).GeneratePdf();
+    }
+
+    private enum TypeBloc { Titre1, Titre2, Titre3, Paragraphe, Puce, Numero, Citation, Separateur }
+
+    /// <param name="Marqueur">Numéro d'une liste ordonnée (« 1. »), sinon vide.</param>
+    private record BlocMarkdown(TypeBloc Type, string Texte, string Marqueur = "");
+
+    /// <summary>
+    /// Découpe le markdown en blocs simples. Sous-ensemble assumé : voir
+    /// <see cref="GenererReglement"/>.
+    /// </summary>
+    private static List<BlocMarkdown> AnalyserMarkdown(string markdown)
+    {
+        var blocs = new List<BlocMarkdown>();
+        if (string.IsNullOrWhiteSpace(markdown)) return blocs;
+
+        var paragraphe = new System.Text.StringBuilder();
+
+        void ViderParagraphe()
+        {
+            if (paragraphe.Length == 0) return;
+            blocs.Add(new BlocMarkdown(TypeBloc.Paragraphe, paragraphe.ToString().Trim()));
+            paragraphe.Clear();
+        }
+
+        foreach (var ligneBrute in markdown.Replace("\r\n", "\n").Split('\n'))
+        {
+            var ligne = ligneBrute.TrimEnd();
+
+            if (string.IsNullOrWhiteSpace(ligne)) { ViderParagraphe(); continue; }
+
+            if (ligne.StartsWith("### ")) { ViderParagraphe(); blocs.Add(new(TypeBloc.Titre3, ligne[4..].Trim())); }
+            else if (ligne.StartsWith("## ")) { ViderParagraphe(); blocs.Add(new(TypeBloc.Titre2, ligne[3..].Trim())); }
+            else if (ligne.StartsWith("# ")) { ViderParagraphe(); blocs.Add(new(TypeBloc.Titre1, ligne[2..].Trim())); }
+            else if (ligne.TrimStart().StartsWith("- ") || ligne.TrimStart().StartsWith("* "))
+            {
+                ViderParagraphe();
+                blocs.Add(new(TypeBloc.Puce, ligne.TrimStart()[2..].Trim()));
+            }
+            else if (System.Text.RegularExpressions.Regex.IsMatch(ligne.TrimStart(), @"^\d+[\.\)]\s"))
+            {
+                ViderParagraphe();
+                var t = ligne.TrimStart();
+                var num = System.Text.RegularExpressions.Regex.Match(t, @"^(\d+)[\.\)]").Groups[1].Value;
+                blocs.Add(new(TypeBloc.Numero,
+                    System.Text.RegularExpressions.Regex.Replace(t, @"^\d+[\.\)]\s*", ""),
+                    $"{num}."));
+            }
+            else if (ligne.StartsWith("> "))
+            {
+                ViderParagraphe();
+                var texte = ligne[2..].Trim();
+                // une citation sur plusieurs lignes forme un seul bloc
+                if (blocs.Count > 0 && blocs[^1].Type == TypeBloc.Citation)
+                    blocs[^1] = blocs[^1] with { Texte = blocs[^1].Texte + " " + texte };
+                else
+                    blocs.Add(new(TypeBloc.Citation, texte));
+            }
+            else if (ligne.Trim() is "---" or "***" or "___") { ViderParagraphe(); blocs.Add(new(TypeBloc.Separateur, "")); }
+            else
+            {
+                if (paragraphe.Length > 0) paragraphe.Append(' ');
+                paragraphe.Append(ligne.Trim());
+            }
+        }
+        ViderParagraphe();
+        return blocs;
+    }
+
+    private static void RendreBloc(ColumnDescriptor col, BlocMarkdown bloc)
+    {
+        switch (bloc.Type)
+        {
+            case TypeBloc.Titre1:
+                col.Item().PaddingTop(12).PaddingBottom(4)
+                   .Text(t => RendreInline(t, bloc.Texte, 16, true, Colors.Red.Darken2));
+                break;
+
+            case TypeBloc.Titre2:
+                col.Item().PaddingTop(10).PaddingBottom(3)
+                   .Text(t => RendreInline(t, bloc.Texte, 13, true, Colors.Grey.Darken4));
+                break;
+
+            case TypeBloc.Titre3:
+                col.Item().PaddingTop(8).PaddingBottom(2)
+                   .Text(t => RendreInline(t, bloc.Texte, 11, true, Colors.Grey.Darken3));
+                break;
+
+            case TypeBloc.Paragraphe:
+                col.Item().PaddingBottom(5)
+                   .Text(t => RendreInline(t, bloc.Texte, 10, false, Colors.Black));
+                break;
+
+            case TypeBloc.Puce:
+                col.Item().PaddingLeft(12).PaddingBottom(2).Row(row =>
+                {
+                    row.ConstantItem(12).Text("•").FontSize(10);
+                    row.RelativeItem().Text(t => RendreInline(t, bloc.Texte, 10, false, Colors.Black));
+                });
+                break;
+
+            case TypeBloc.Numero:
+                col.Item().PaddingLeft(12).PaddingBottom(2).Row(row =>
+                {
+                    row.ConstantItem(18).Text(bloc.Marqueur).FontSize(10);
+                    row.RelativeItem().Text(t => RendreInline(t, bloc.Texte, 10, false, Colors.Black));
+                });
+                break;
+
+            case TypeBloc.Citation:
+                col.Item().PaddingBottom(5).PaddingLeft(8)
+                   .BorderLeft(3).BorderColor(Colors.Grey.Lighten1)
+                   .PaddingLeft(8).PaddingVertical(3)
+                   .Text(t => RendreInline(t, bloc.Texte, 10, false, Colors.Grey.Darken2));
+                break;
+
+            case TypeBloc.Separateur:
+                col.Item().PaddingVertical(8).LineHorizontal(1).LineColor(Colors.Grey.Lighten1);
+                break;
+        }
+    }
+
+    /// <summary>Gère le gras (**texte**) et l'italique (*texte*) dans une ligne.</summary>
+    private static void RendreInline(TextDescriptor t, string texte, float taille, bool gras, string couleur)
+    {
+        t.DefaultTextStyle(s =>
+        {
+            var style = s.FontSize(taille).FontColor(couleur);
+            return gras ? style.Bold() : style;
+        });
+
+        // **gras** puis *italique*
+        var morceaux = System.Text.RegularExpressions.Regex.Split(texte, @"(\*\*[^*]+\*\*|\*[^*]+\*)");
+        foreach (var m in morceaux)
+        {
+            if (string.IsNullOrEmpty(m)) continue;
+
+            if (m.StartsWith("**") && m.EndsWith("**") && m.Length > 4)
+                t.Span(m[2..^2]).Bold();
+            else if (m.StartsWith('*') && m.EndsWith('*') && m.Length > 2)
+                t.Span(m[1..^1]).Italic();
+            else
+                t.Span(m);
+        }
+    }
 
     private static void IconLegend(TextDescriptor t, string icon, string label, string color)
     {

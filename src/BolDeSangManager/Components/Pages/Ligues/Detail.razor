@@ -7,6 +7,9 @@
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
 @inject BolDeSangManager.Services.IAuthorizationService Auth
+@inject MarkdownService Markdown
+@inject PdfService PdfService
+@inject IJSRuntime JS
 
 <PageTitle>@(_ligue?.Nom ?? "Ligue") — BolDeSang Manager</PageTitle>
 
@@ -242,6 +245,83 @@ else
                 }
             </MudGrid>
         </MudTabPanel>
+
+        <!-- Règlement de la ligue (R5) -->
+        <MudTabPanel Text="Règlement" Icon="@Icons.Material.Filled.Gavel">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
+                <MudText Typo="Typo.subtitle1"><b>Règlement</b></MudText>
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.PictureAsPdf"
+                               OnClick="ExporterReglementPdf"
+                               Disabled="@(_exportReglement || string.IsNullOrWhiteSpace(_ligue.Reglement))">
+                        @(_exportReglement ? "Génération…" : "Exporter en PDF")
+                    </MudButton>
+                    @if (_estCommissaire)
+                    {
+                        @if (!_editionReglement)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Edit"
+                                       OnClick="DemarrerEditionReglement">Modifier</MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Text" Size="Size.Small"
+                                       OnClick="@(() => _editionReglement = false)">Annuler</MudButton>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Save"
+                                       OnClick="EnregistrerReglement"
+                                       Disabled="@_sauvegardeReglement">
+                                @(_sauvegardeReglement ? "Enregistrement…" : "Sauvegarder")
+                            </MudButton>
+                        }
+                    }
+                </MudStack>
+            </MudStack>
+
+            @if (_editionReglement)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    Mise en forme <b>markdown</b> : <code># Titre</code>, <code>## Sous-titre</code>,
+                    <code>- liste</code>, <code>**gras**</code>, <code>*italique*</code>,
+                    <code>&gt; citation</code>, <code>---</code> pour un séparateur.
+                </MudAlert>
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" md="6">
+                        <MudTextField @bind-Value="_reglementBrouillon" Label="Règlement (markdown)"
+                                      Variant="Variant.Outlined" Lines="22" AutoGrow="false"
+                                      Immediate="true" />
+                    </MudItem>
+                    <MudItem xs="12" md="6">
+                        <MudPaper Outlined="true" Class="pa-4" Style="min-height:520px">
+                            <MudText Typo="Typo.overline" Color="Color.Secondary">Aperçu</MudText>
+                            <div class="reglement-rendu">
+                                @((MarkupString)Markdown.VersHtml(_reglementBrouillon))
+                            </div>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            }
+            else if (string.IsNullOrWhiteSpace(_ligue.Reglement))
+            {
+                <MudAlert Severity="Severity.Normal" Dense="true">
+                    Aucun règlement n'a encore été rédigé pour cette ligue.
+                    @if (_estCommissaire)
+                    {
+                        <text> Cliquez sur « Modifier » pour le rédiger.</text>
+                    }
+                </MudAlert>
+            }
+            else
+            {
+                <MudPaper Outlined="true" Class="pa-4">
+                    <div class="reglement-rendu">
+                        @((MarkupString)Markdown.VersHtml(_ligue.Reglement))
+                    </div>
+                </MudPaper>
+            }
+        </MudTabPanel>
     </MudTabs>
 }
 
@@ -365,6 +445,55 @@ else
     static IEnumerable<Team> GetEquipesSorted(Division d) =>
         d.Equipes.OrderByDescending(e => e.PointsLigue)
                  .ThenByDescending(e => e.TouchdownsMarques - e.TouchdownsConcedes);
+
+    // ── Règlement de la ligue (R5) ────────────────────────────────────────────
+
+    bool _editionReglement;
+    bool _sauvegardeReglement;
+    bool _exportReglement;
+    string _reglementBrouillon = "";
+
+    void DemarrerEditionReglement()
+    {
+        _reglementBrouillon = _ligue?.Reglement ?? "";
+        _editionReglement = true;
+    }
+
+    async Task EnregistrerReglement()
+    {
+        if (_ligue is null || !_estCommissaire) return;
+        _sauvegardeReglement = true;
+        try
+        {
+            await LeagueService.DefinirReglementAsync(_ligue.Id, _reglementBrouillon, _currentUserId);
+            _ligue.Reglement = _reglementBrouillon;
+            _editionReglement = false;
+            Snackbar.Add("Règlement enregistré.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _sauvegardeReglement = false; }
+    }
+
+    async Task ExporterReglementPdf()
+    {
+        if (_ligue is null) return;
+        _exportReglement = true;
+        try
+        {
+            var bytes = PdfService.GenererReglement(_ligue);
+            var nom = $"reglement-{_ligue.Nom.ToLower().Replace(" ", "-")}.pdf";
+            await JS.InvokeVoidAsync("blazorDownloadBase64File", nom, "application/pdf",
+                Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur PDF : {ex.Message}", Severity.Error);
+        }
+        finally { _exportReglement = false; }
+    }
 
     /// <summary>Active/désactive le mode brouillard sur une ligue existante (#2).</summary>
     async Task BasculerBrouillard(bool actif)

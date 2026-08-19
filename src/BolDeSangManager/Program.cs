@@ -77,6 +77,7 @@ builder.Services.AddScoped<LeagueService>();
 builder.Services.AddScoped<TeamService>();
 builder.Services.AddScoped<MatchService>();
 builder.Services.AddScoped<PdfService>();
+builder.Services.AddScoped<MarkdownService>();
 builder.Services.AddScoped<LeagueExportService>();
 builder.Services.AddScoped<GameDataExportService>();
 builder.Services.AddScoped<SettingsService>();
