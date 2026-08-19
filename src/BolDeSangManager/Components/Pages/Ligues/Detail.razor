@@ -57,6 +57,10 @@ else
                         Clôturer la ligue
                     </MudButton>
                 }
+                <MudTooltip Text="Les coaches ne voient que leur prochain match et les matchs déjà joués.">
+                    <MudSwitch T="bool" Value="_ligue.ModeBrouillard" ValueChanged="BasculerBrouillard"
+                               Color="Color.Error" Size="Size.Small" Label="Mode brouillard" />
+                </MudTooltip>
             }
             @if (_ligue.Statut == LeagueStatus.Inscription)
             {
@@ -149,11 +153,18 @@ else
 
         <!-- Pool de matchs -->
         <MudTabPanel Text="Matchs" Icon="@Icons.Material.Filled.SportsSoccer">
+            @if (_ligue.ModeBrouillard && !_estCommissaire)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    <b>Mode brouillard</b> — vous ne voyez que votre prochain match et les
+                    rencontres déjà jouées. Le reste du calendrier apparaîtra au fur et à mesure.
+                </MudAlert>
+            }
             @foreach (var division in _ligue.Divisions.OrderBy(d => d.Ordre))
             {
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>@division.Nom</b></MudText>
 
-                @foreach (var ronde in division.Matchs.GroupBy(m => m.Ronde).OrderBy(g => g.Key))
+                @foreach (var ronde in MatchsVisibles(division).GroupBy(m => m.Ronde).OrderBy(g => g.Key))
                 {
                     <MudText Typo="Typo.subtitle2" Color="Color.Secondary" Class="mb-1">
                         @(ronde.Key >= 100 ? $"Play-off — Tour {ronde.Key - 99}" : $"Ronde {ronde.Key}")
@@ -355,4 +366,38 @@ else
         d.Equipes.OrderByDescending(e => e.PointsLigue)
                  .ThenByDescending(e => e.TouchdownsMarques - e.TouchdownsConcedes);
 
+    /// <summary>Active/désactive le mode brouillard sur une ligue existante (#2).</summary>
+    async Task BasculerBrouillard(bool actif)
+    {
+        if (_ligue is null || !_estCommissaire) return;
+        try
+        {
+            await LeagueService.DefinirModeBrouillardAsync(_ligue.Id, actif, _currentUserId);
+            _ligue.ModeBrouillard = actif;
+            Snackbar.Add(actif
+                ? "Mode brouillard activé : les coaches ne voient que leur prochain match."
+                : "Mode brouillard désactivé : tout le calendrier est visible.", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Matchs de la division visibles par l'utilisateur courant (#2 mode brouillard).
+    /// Hors brouillard — ou pour un commissaire — la liste complète est renvoyée.
+    /// </summary>
+    IEnumerable<Match> MatchsVisibles(Division division)
+    {
+        if (_ligue is null) return division.Matchs;
+
+        var mesEquipes = _ligue.Equipes
+            .Where(e => e.CoachId == _currentUserId)
+            .Select(e => e.Id)
+            .ToHashSet();
+
+        return BrouillardHelpers.FiltrerVisibles(
+            division.Matchs, mesEquipes, _ligue.ModeBrouillard, _estCommissaire);
+    }
 }

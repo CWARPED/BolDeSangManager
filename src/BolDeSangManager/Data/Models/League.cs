@@ -17,6 +17,16 @@ public class League
     public LeagueStatus Statut { get; set; } = LeagueStatus.Creation;
     public int BudgetDepart { get; set; } = 1_000_000;
     public int NombreEquipesPlayoff { get; set; } = 4;
+
+    /// <summary>
+    /// Mode brouillard (#2) : masque le calendrier à venir aux coaches.
+    /// Un coach ne voit alors que son prochain match programmé et l'ensemble des
+    /// matchs déjà joués (les siens comme ceux des autres). But : éviter qu'on
+    /// joue un match en anticipant les rencontres suivantes.
+    /// Les commissaires ne sont jamais concernés.
+    /// </summary>
+    public bool ModeBrouillard { get; set; } = false;
+
     public DateTime CreeLe { get; set; } = DateTime.UtcNow;
 
     public ICollection<Division> Divisions { get; set; } = [];
