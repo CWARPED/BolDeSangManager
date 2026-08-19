@@ -300,13 +300,16 @@ public class TeamServiceTests : IDisposable
         await db.SaveChangesAsync();
 
         var service = new TeamService(db, NullLogger<TeamService>.Instance);
-        await service.AppliquerAmeliorationAsync(joueur.Id, ImprovementType.SelectionPrimaire, skillId: skill.Id);
+        // R4 : l'XP dépensée est saisie par le coach et débitée de la cagnotte
+        await service.AppliquerAmeliorationAsync(joueur.Id, ImprovementType.SelectionPrimaire,
+            skillId: skill.Id, xpDepensee: 6);
 
         var maj = await db.TeamPlayers.Include(j => j.Improvements).Include(j => j.Competences).FirstAsync(j => j.Id == joueur.Id);
         Assert.Single(maj.Improvements);
         Assert.Equal(1, maj.Improvements.First().Palier);
         Assert.Equal(ImprovementType.SelectionPrimaire, maj.Improvements.First().Type);
         Assert.Equal(70_000, maj.ValeurActuelle); // 50_000 + 20_000
+        Assert.Equal(0, maj.PointsStarPlayer);    // 6 XP dépensés sur 6
         Assert.Contains(maj.Competences, c => c.SkillId == skill.Id && !c.EstCompetenceDepart);
     }
 

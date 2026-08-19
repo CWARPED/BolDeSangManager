@@ -227,14 +227,26 @@ else
                         <HeaderContent>
                             <MudTh>#</MudTh>
                             <MudTh>Joueur</MudTh>
-                            <MudTh Style="text-align:center">PSP</MudTh>
+                            <MudTh Style="text-align:center">XP</MudTh>
                             <MudTh Style="text-align:center">Amél.</MudTh>
+                            @if (_estCommissaire)
+                            {
+                                <MudTh Style="text-align:center"></MudTh>
+                            }
                         </HeaderContent>
                         <RowTemplate Context="j">
                             <MudTd>@j.Numero</MudTd>
                             <MudTd>@j.Nom</MudTd>
                             <MudTd Style="text-align:center"><b>@j.PointsStarPlayer</b></MudTd>
                             <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
+                            @if (_estCommissaire)
+                            {
+                                <MudTd Style="text-align:center">
+                                    <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small"
+                                                   title="Corriger l'XP de ce joueur"
+                                                   OnClick="@(() => CorrigerXp(j))" />
+                                </MudTd>
+                            }
                         </RowTemplate>
                     </MudTable>
                 </MudItem>
@@ -249,6 +261,7 @@ else
     Team? _equipe;
     int _vea;
     string _userId = "";
+    bool _estCommissaire;
 
     bool _peutEditer =>
         _equipe is not null
@@ -263,6 +276,32 @@ else
         _equipe = await TeamService.GetEquipeAsync(Id);
         if (_equipe is not null)
             _vea = TeamService.CalculerVEA(_equipe);
+
+        // Correction d'XP (R4) : réservée au commissaire de la ligue et aux grands commissaires.
+        _estCommissaire = authState.User.IsInRole("Commissaire")
+                       || authState.User.IsInRole("GrandCommissaire")
+                       || authState.User.IsInRole("Admin")
+                       || (_equipe?.League?.CommissaireId is { } cid && cid == _userId);
+    }
+
+    async Task CorrigerXp(TeamPlayer joueur)
+    {
+        var parameters = new DialogParameters<CorrectionXpDialog>
+        {
+            { x => x.Joueur, joueur },
+            { x => x.CommissaireId, _userId }
+        };
+        var dialog = await DialogService.ShowAsync<CorrectionXpDialog>(
+            "Corriger l'XP", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false })
+        {
+            _equipe = await TeamService.GetEquipeAsync(Id);
+            if (_equipe is not null)
+                _vea = TeamService.CalculerVEA(_equipe);
+            StateHasChanged();
+        }
     }
 
     async Task ConfirmerSuppression()

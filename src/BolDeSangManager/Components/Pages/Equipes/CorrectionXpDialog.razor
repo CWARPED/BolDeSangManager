@@ -1,0 +1,97 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject TeamService TeamService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle1" Class="mb-1"><b>@Joueur.Nom</b></MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            XP actuelle : <b>@Joueur.PointsStarPlayer</b>
+        </MudText>
+
+        <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+            Cette correction est enregistrée avec votre nom et reste consultable par les coaches.
+        </MudAlert>
+
+        <MudNumericField @bind-Value="_nouvelleValeur" Label="Nouvelle XP"
+                         Min="0" Max="999" Variant="Variant.Outlined"
+                         FullWidth="true" Class="mb-3" />
+
+        <MudTextField @bind-Value="_motif" Label="Motif de la correction"
+                      Variant="Variant.Outlined" FullWidth="true"
+                      Lines="2"
+                      HelperText="Obligatoire — ex. « erreur de saisie sur la feuille du match 3 »" />
+
+        @if (_historique.Count > 0)
+        {
+            <MudText Typo="Typo.caption" Class="mt-4 mb-1 d-block"><b>Corrections précédentes</b></MudText>
+            @foreach (var c in _historique)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                    @c.CorrigeLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm") —
+                    @c.AncienneValeur → @c.NouvelleValeur
+                    (@(c.CorrigePar?.PseudoCoach ?? c.CorrigePar?.UserName ?? "compte supprimé")) :
+                    @c.Motif
+                </MudText>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   OnClick="Enregistrer" Disabled="@_enCours"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @(_enCours ? "Enregistrement…" : "Corriger l'XP")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public TeamPlayer Joueur { get; set; } = default!;
+    [Parameter] public string CommissaireId { get; set; } = "";
+
+    int _nouvelleValeur;
+    string _motif = "";
+    bool _enCours;
+    List<XpCorrection> _historique = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        _nouvelleValeur = Joueur.PointsStarPlayer;
+        _historique = await TeamService.GetCorrectionsXpAsync(Joueur.Id);
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Enregistrer()
+    {
+        if (string.IsNullOrWhiteSpace(_motif))
+        {
+            Snackbar.Add("Le motif est obligatoire.", Severity.Warning);
+            return;
+        }
+        if (_nouvelleValeur == Joueur.PointsStarPlayer)
+        {
+            Snackbar.Add("La valeur est inchangée.", Severity.Info);
+            return;
+        }
+
+        _enCours = true;
+        try
+        {
+            // capturer l'ancienne valeur AVANT l'appel : l'entité est mise à jour en place
+            var ancienne = Joueur.PointsStarPlayer;
+            await TeamService.CorrigerXpAsync(Joueur.Id, _nouvelleValeur, _motif, CommissaireId);
+            Snackbar.Add($"XP de {Joueur.Nom} corrigée : {ancienne} → {_nouvelleValeur}", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _enCours = false; }
+    }
+}

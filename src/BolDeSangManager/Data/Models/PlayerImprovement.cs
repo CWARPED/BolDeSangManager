@@ -8,8 +8,14 @@ public class PlayerImprovement
     public int TeamPlayerId { get; set; }
     public TeamPlayer TeamPlayer { get; set; } = null!;
 
-    public int Palier { get; set; }              // 1..6 (correspond aux seuils 6/16/31/51/76/176 PSP)
+    public int Palier { get; set; }              // rang de l'amélioration (1, 2, 3… dans l'ordre d'acquisition)
     public ImprovementType Type { get; set; }
+
+    /// <summary>
+    /// XP retirée de la cagnotte du joueur pour cette amélioration (R4).
+    /// Saisie par le coach à l'après-match. Restituée si la feuille est annulée.
+    /// </summary>
+    public int XpDepensee { get; set; }
 
     // Skill acquise (si Type = AleaPrimaire/SelectionPrimaire/AleaSecondaire/SelectionSecondaire)
     public int? SkillId { get; set; }

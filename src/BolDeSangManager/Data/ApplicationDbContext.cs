@@ -29,6 +29,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<MatchPlayerRecord> MatchPlayerRecords => Set<MatchPlayerRecord>();
     public DbSet<AppConfig> AppConfigs => Set<AppConfig>();
     public DbSet<PlayerImprovement> PlayerImprovements => Set<PlayerImprovement>();
+    public DbSet<XpCorrection> XpCorrections => Set<XpCorrection>();
     public DbSet<PhaseDeReposValidation> PhaseDeReposValidations => Set<PhaseDeReposValidation>();
     public DbSet<LeagueAward> LeagueAwards => Set<LeagueAward>();
     public DbSet<TeamTypeKeywordLimit> TeamTypeKeywordLimits => Set<TeamTypeKeywordLimit>();
@@ -144,6 +145,22 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(pi => pi.SkillId)
             .IsRequired(false)
             .OnDelete(DeleteBehavior.SetNull);
+
+        // XpCorrection → TeamPlayer (cascade) : la trace suit le joueur
+        builder.Entity<XpCorrection>()
+            .HasOne(c => c.TeamPlayer)
+            .WithMany()
+            .HasForeignKey(c => c.TeamPlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // XpCorrection → auteur : on garde la trace même si le compte est supprimé
+        builder.Entity<XpCorrection>()
+            .HasOne(c => c.CorrigePar)
+            .WithMany()
+            .HasForeignKey(c => c.CorrigeParId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<XpCorrection>().Ignore(c => c.Ecart);
 
         // PhaseDeReposValidation → League (cascade)
         builder.Entity<PhaseDeReposValidation>()
