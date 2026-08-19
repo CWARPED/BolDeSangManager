@@ -319,9 +319,16 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         return totalJoueurs + coutRelances + coutFans + coutCoachsAssistants + coutCheerleaders + coutApothicaire;
     }
 
-    public async Task<List<Skill>> GetCompetencesAsync(string? categorie = null)
+    /// <param name="rulesVersionId">
+    /// Version de règles (R7) : sans ce filtre la liste mélange les versions, et
+    /// les catégories d'une autre version ne correspondent à aucun accès de poste.
+    /// </param>
+    public async Task<List<Skill>> GetCompetencesAsync(string? categorie = null, int? rulesVersionId = null)
     {
-        var query = db.Skills.AsQueryable();
+        // R7 : la catégorie est nécessaire pour filtrer selon les accès du poste
+        var query = db.Skills.Include(s => s.SkillCategoryDef).AsQueryable();
+        if (rulesVersionId is int vid)
+            query = query.Where(s => s.RulesVersionId == vid);
         if (!string.IsNullOrEmpty(categorie) && Enum.TryParse<SkillCategory>(categorie, out var cat))
             query = query.Where(s => s.Categorie == cat);
         return await query.OrderBy(s => s.Nom).ToListAsync();
