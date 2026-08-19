@@ -65,7 +65,7 @@
                         <MudTh Style="width:18%; text-align:center">M / F / AG / CP / AR</MudTh>
                         <MudTh Style="width:14%">P / S</MudTh>
                         <MudTh Style="width:14%">Skills départ</MudTh>
-                        <MudTh Style="width:6%">Actions</MudTh>
+                        <MudTh Style="width:9%">Actions</MudTh>
                     </HeaderContent>
                     <RowTemplate>
                         <MudTd>
@@ -107,8 +107,13 @@
                         </MudTd>
                         <MudTd>
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                           title="Éditer ce poste"
                                            OnClick="@(() => EditerPoste(context))" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Inventory2" Size="Size.Small" Color="Color.Secondary"
+                                           title="Renvoyer une copie de ce poste dans la Réserve"
+                                           OnClick="@(() => RenvoyerVersReserve(context))" />
                             <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                           title="Supprimer ce poste"
                                            OnClick="@(() => SupprimerPoste(context))" />
                         </MudTd>
                     </RowTemplate>
@@ -229,6 +234,28 @@
         catch (InvalidOperationException ex)
         {
             Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    async Task RenvoyerVersReserve(PlayerPosition p)
+    {
+        var ok = await DialogService.ShowMessageBox(
+            "Renvoyer dans la Réserve",
+            $"Copier « {p.Nom} » dans la Réserve de cette version de règles ? Le poste reste dans cette équipe.",
+            "Copier", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.ExporterPosteVersReserveAsync(p.Id);
+            Snackbar.Add($"« {p.Nom} » copié dans la Réserve", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
         }
     }
 

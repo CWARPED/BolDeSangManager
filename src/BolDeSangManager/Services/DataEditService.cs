@@ -403,8 +403,59 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         logger.LogInformation("Réserve : {N} poste(s) importé(s) dans TeamType {Id}", pools.Count, teamTypeId);
     }
 
-    // ═══════════════════ Skill ═══════════════════
+    /// <summary>
+    /// Chemin inverse de <see cref="ImporterReserveVersTeamTypeAsync"/> : copie un poste d'un
+    /// TeamType vers la Réserve de sa version de règles. Copie indépendante (le poste d'origine
+    /// reste en place). Refuse si un poste de réserve porte déjà le même nom dans cette version.
+    /// </summary>
+    public async Task<PoolPosition> ExporterPosteVersReserveAsync(int playerPositionId)
+    {
+        var poste = await db.PlayerPositions
+            .Include(p => p.CompetencesDepart)
+            .Include(p => p.TeamType)
+            .FirstOrDefaultAsync(p => p.Id == playerPositionId)
+            ?? throw new InvalidOperationException("Poste introuvable");
 
+        var versionId = poste.TeamType.RulesVersionId;
+
+        var nomsExistants = await db.PoolPositions
+            .Where(p => p.RulesVersionId == versionId)
+            .Select(p => p.Nom)
+            .ToListAsync();
+
+        if (nomsExistants.Any(n => string.Equals(n, poste.Nom, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException(
+                $"Un poste « {poste.Nom} » existe déjà dans la Réserve de cette version. Renommez-le avant de le renvoyer.");
+
+        var copie = new PoolPosition
+        {
+            RulesVersionId = versionId,
+            Nom = poste.Nom, QuantiteMax = poste.QuantiteMax, Cout = poste.Cout,
+            Mouvement = poste.Mouvement, Force = poste.Force, Agilite = poste.Agilite,
+            CapacitePasse = poste.CapacitePasse, Armure = poste.Armure,
+            CompetencesPrincipales = poste.CompetencesPrincipales,
+            CompetencesSecondaires = poste.CompetencesSecondaires, MotsCles = poste.MotsCles
+        };
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        db.PoolPositions.Add(copie);
+        await db.SaveChangesAsync();
+
+        foreach (var pps in poste.CompetencesDepart)
+            db.PoolPositionSkills.Add(new PoolPositionSkill
+            {
+                PoolPositionId = copie.Id,
+                SkillId = pps.SkillId
+            });
+        await db.SaveChangesAsync();
+        await tx.CommitAsync();
+
+        logger.LogInformation("Réserve : poste {Nom} (id={Id}) du TeamType {Tt} renvoyé en Réserve (id={PoolId})",
+            poste.Nom, poste.Id, poste.TeamTypeId, copie.Id);
+        return copie;
+    }
+
+    // ═══════════════════ Skill ═══════════════════
     public async Task<List<Skill>> GetSkillsAsync(int versionId) =>
         await db.Skills
             .Where(s => s.RulesVersionId == versionId)
