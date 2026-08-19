@@ -209,6 +209,7 @@ else
                                 @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
                                 @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
                             </div>
+                            @XpSection(r)
                             @InjurySection(r)
                         </div>
                     </MudPaper>
@@ -272,6 +273,7 @@ else
                                 @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
                                 @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
                             </div>
+                            @XpSection(r)
                             @InjurySection(r)
                         </div>
                     </MudPaper>
@@ -428,6 +430,52 @@ else
             </div>
         </div>;
 
+    /// <summary>Barème du match — sert à pré-remplir l'XP (R4).</summary>
+    XpBareme _bareme = XpBareme.ParDefaut(GameType.BloodBowl);
+
+    /// <summary>XP proposée par le barème pour ce joueur.</summary>
+    int XpCalculee(PlayerMatchData r) =>
+        _bareme.Calculer(r.Touchdowns, r.Passes, r.Interceptions, r.EliminationsInfligees, r.EstMVP);
+
+    /// <summary>XP retenue : la saisie du coach si elle existe, sinon le calcul.</summary>
+    int XpDe(PlayerMatchData r) => r.XpSaisie ?? XpCalculee(r);
+
+    RenderFragment XpSection(PlayerMatchData r)
+    {
+        int calc = XpCalculee(r);
+        int val  = XpDe(r);
+        int ecart = val - calc;
+        return @<div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:8px">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIcon Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small" Color="Color.Warning" />
+                    <MudText Typo="Typo.caption"><b>XP</b></MudText>
+                </MudStack>
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    @if (ecart != 0)
+                    {
+                        <MudTooltip Text="@($"Barème : {calc} XP")">
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                     Style="height:18px;font-size:10px">
+                                @(ecart > 0 ? "+" : "")@ecart
+                            </MudChip>
+                        </MudTooltip>
+                    }
+                    <MudNumericField T="int" Value="val" Min="0" Max="99"
+                                     ValueChanged="@(v => r.XpSaisie = v)"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense"
+                                     Style="width:90px" HideSpinButtons="false" />
+                    @if (r.XpSaisie is not null)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Restore" Size="Size.Small"
+                                       title="Revenir à la valeur du barème"
+                                       OnClick="@(() => r.XpSaisie = null)" />
+                    }
+                </MudStack>
+            </MudStack>
+        </div>;
+    }
+
     RenderFragment InjurySection(PlayerMatchData r)
     {
         bool ouvert = _blessuresOuvertes.Contains(r.TeamPlayerId) || r.Blessure.HasValue;
@@ -478,6 +526,9 @@ else
 
         _match = await MatchService.GetMatchAsync(Id);
         if (_match is null) return;
+
+        // Barème du jeu concerné (le TD vaut 5 en Dungeon Bowl, 3 sinon)
+        _bareme = XpBareme.ParDefaut(_match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
 
         var estCoach = _match.EquipeDomicile?.CoachId == _userId || _match.EquipeExterieur?.CoachId == _userId;
         if (!estCoach)
@@ -536,7 +587,8 @@ else
                     EliminationsInfligees = r.EliminationsInfligees,
                     EstMVP                = r.EstMVP,
                     Blessure              = r.Blessure,
-                    StatAffectee          = r.Blessure == InjuryType.BlessurePersistante ? r.StatAffectee : null
+                    StatAffectee          = r.Blessure == InjuryType.BlessurePersistante ? r.StatAffectee : null,
+                    PspGagnes             = XpDe(r)
                 }).ToList();
 
             await MatchService.SaisirFeuilleMatchAsync(_match.Id, feuille, records, _userId);
@@ -591,5 +643,8 @@ else
         public int           EliminationsInfligees { get; set; }
         public InjuryType?   Blessure              { get; set; }
         public AffectedStat? StatAffectee          { get; set; }
+
+        /// <summary>XP saisie par le coach (R4). null = suivre la valeur calculée.</summary>
+        public int?          XpSaisie              { get; set; }
     }
 }

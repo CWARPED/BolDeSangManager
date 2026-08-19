@@ -213,7 +213,7 @@ public class LeagueService(
     public async Task ValiderApresMatchReposAsync(
         int ligueId,
         int teamId,
-        List<(int joueurId, int skillId, bool estPrincipale)> competences,
+        List<(int joueurId, int skillId, bool estPrincipale, int xpDepensee)> competences,
         List<(int positionId, string nom, int numero)> nouveauxJoueurs,
         int nouvellesRelances,
         TeamService teamService)
@@ -228,10 +228,11 @@ public class LeagueService(
         if (dejaValide)
             throw new InvalidOperationException("Cette équipe a déjà validé sa phase de repos.");
 
-        foreach (var (joueurId, skillId, estPrincipale) in competences)
+        foreach (var (joueurId, skillId, estPrincipale, xpDepensee) in competences)
         {
             var type = estPrincipale ? ImprovementType.SelectionPrimaire : ImprovementType.SelectionSecondaire;
-            await teamService.AppliquerAmeliorationAsync(joueurId, type, skillId: skillId, matchSheetId: null);
+            await teamService.AppliquerAmeliorationAsync(joueurId, type, skillId: skillId,
+                matchSheetId: null, xpDepensee: xpDepensee);
         }
 
         foreach (var (positionId, nom, numero) in nouveauxJoueurs)

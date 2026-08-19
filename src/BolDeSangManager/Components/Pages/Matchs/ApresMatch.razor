@@ -73,7 +73,8 @@ else
                 <b>Améliorations disponibles</b>
             </MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
-                Chaque joueur avec ≥ 6 PSP peut recevoir une compétence. Principale +20 000 po de valeur, secondaire +40 000 po.
+                Le coach choisit l'XP dépensée pour chaque compétence, dans la limite de l'XP disponible du joueur.
+                Principale +20 000 po de valeur, secondaire +40 000 po.
             </MudText>
             @foreach (var a in _ameliorations)
             {
@@ -82,10 +83,10 @@ else
                         <MudItem xs="12" sm="4">
                             <MudText><b>@a.NomJoueur</b></MudText>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @a.NomPoste — @a.PspTotal PSP
+                                @a.NomPoste — <b>@a.PspTotal XP</b> disponibles
                             </MudText>
                         </MudItem>
-                        <MudItem xs="12" sm="5">
+                        <MudItem xs="12" sm="4">
                             <MudSelect @bind-Value="a.SkillId" T="int?" Label="Compétence"
                                        Variant="Variant.Outlined" Clearable="true" Margin="Margin.Dense">
                                 <MudSelectItem T="int?" Value="@((int?)null)">— Aucune —</MudSelectItem>
@@ -101,7 +102,14 @@ else
                                 }
                             </MudSelect>
                         </MudItem>
-                        <MudItem xs="12" sm="3">
+                        <MudItem xs="12" sm="2">
+                            <MudNumericField @bind-Value="a.XpDepensee" Label="XP dépensée"
+                                             Min="0" Max="@a.PspTotal"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense"
+                                             Disabled="@(a.SkillId is null)"
+                                             HelperText="@(a.SkillId is null ? null : $"reste {a.PspTotal - a.XpDepensee}")" />
+                        </MudItem>
+                        <MudItem xs="12" sm="2">
                             <MudCheckBox @bind-Value="a.EstPrincipale" Color="Color.Warning"
                                          Label="Principale (+20k)" />
                         </MudItem>
@@ -243,7 +251,7 @@ else
         _ameliorations = _match.Feuille?.RecordsJoueurs
             .Where(r => r.TeamPlayer is not null
                      && r.EstCoteDomicile == _estDomicile
-                     && r.TeamPlayer.PointsStarPlayer >= 6)
+                     && r.TeamPlayer.PointsStarPlayer > 0)
             .OrderByDescending(r => r.TeamPlayer!.PointsStarPlayer)
             .Select(r => new AmeliorationData
             {
@@ -293,7 +301,7 @@ else
         {
             var competences = _ameliorations
                 .Where(a => a.SkillId.HasValue)
-                .Select(a => (a.TeamPlayerId, a.SkillId!.Value, a.EstPrincipale))
+                .Select(a => (a.TeamPlayerId, a.SkillId!.Value, a.EstPrincipale, a.XpDepensee))
                 .ToList();
 
             var nouveauxJoueurs = _recrutesEnAttente
@@ -339,6 +347,8 @@ else
         public int    PspTotal    { get; set; }
         public int?   SkillId     { get; set; }
         public bool   EstPrincipale { get; set; } = true;
+        /// <summary>XP que le coach choisit de dépenser pour cette amélioration (R4).</summary>
+        public int    XpDepensee  { get; set; }
     }
 
     sealed class RecrueData

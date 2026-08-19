@@ -327,22 +327,33 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         return await query.OrderBy(s => s.Nom).ToListAsync();
     }
 
+    /// <summary>
+    /// Applique une amélioration à un joueur en débitant sa cagnotte d'XP (R4).
+    ///
+    /// Depuis R4 les paliers LRB (6/16/31…) ne commandent plus les améliorations :
+    /// le coach saisit lui-même l'XP qu'il consomme, et peut prendre autant
+    /// d'améliorations que sa cagnotte le permet.
+    /// </summary>
+    /// <param name="xpDepensee">XP retirée de la cagnotte. Doit être &gt; 0 et ≤ XP disponible.</param>
     public async Task AppliquerAmeliorationAsync(
         int joueurId,
         ImprovementType type,
         int? skillId = null,
         AffectedStat? statAmelioree = null,
-        int? matchSheetId = null)
+        int? matchSheetId = null,
+        int xpDepensee = 0)
     {
         var joueur = await db.TeamPlayers
             .Include(j => j.Improvements)
             .FirstOrDefaultAsync(j => j.Id == joueurId)
             ?? throw new InvalidOperationException("Joueur introuvable");
 
-        var palierDispo = ImprovementThresholds.PalierAtteint(joueur.PointsStarPlayer) - joueur.Improvements.Count;
-        if (palierDispo <= 0)
+        if (xpDepensee <= 0)
+            throw new InvalidOperationException("L'XP dépensée doit être supérieure à zéro.");
+
+        if (xpDepensee > joueur.PointsStarPlayer)
             throw new InvalidOperationException(
-                $"Aucun palier d'amélioration disponible (PSP={joueur.PointsStarPlayer}, déjà consommés={joueur.Improvements.Count}).");
+                $"XP insuffisante : {joueur.Nom} dispose de {joueur.PointsStarPlayer} XP, {xpDepensee} demandés.");
 
         // Validation du type vs paramètres fournis
         bool requiertSkill = type is ImprovementType.AleaPrimaire or ImprovementType.SelectionPrimaire
@@ -357,6 +368,9 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         var prochainPalier = joueur.Improvements.Count + 1;
         var hausse = ImprovementThresholds.HausseValeur(type, statAmelioree);
 
+        // Débit de la cagnotte
+        joueur.PointsStarPlayer -= xpDepensee;
+
         var improvement = new PlayerImprovement
         {
             TeamPlayerId = joueurId,
@@ -365,6 +379,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             SkillId = skillId,
             StatAmelioree = statAmelioree,
             ValeurHausse = hausse,
+            XpDepensee = xpDepensee,
             MatchSheetId = matchSheetId
         };
         db.PlayerImprovements.Add(improvement);
@@ -398,9 +413,52 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         await db.SaveChangesAsync();
 
         logger.LogInformation(
-            "Joueur id={JoueurId} : amélioration palier {Palier} (type={Type}, skill={SkillId}, stat={Stat}, hausse={Hausse})",
-            joueurId, prochainPalier, type, skillId, statAmelioree, hausse);
+            "Joueur id={JoueurId} : amélioration palier {Palier} (type={Type}, skill={SkillId}, stat={Stat}, hausse={Hausse}, xp dépensée={Xp})",
+            joueurId, prochainPalier, type, skillId, statAmelioree, hausse, xpDepensee);
     }
+
+    /// <summary>
+    /// Corrige manuellement l'XP d'un joueur (R4) — réservé aux commissaires.
+    /// La correction est journalisée dans <see cref="XpCorrection"/> pour rester
+    /// auditable auprès des coaches.
+    /// </summary>
+    public async Task CorrigerXpAsync(int joueurId, int nouvelleValeur, string motif, string commissaireId)
+    {
+        var joueur = await db.TeamPlayers.FirstOrDefaultAsync(j => j.Id == joueurId)
+            ?? throw new InvalidOperationException("Joueur introuvable");
+
+        if (nouvelleValeur < 0)
+            throw new InvalidOperationException("L'XP ne peut pas être négative.");
+
+        if (string.IsNullOrWhiteSpace(motif))
+            throw new InvalidOperationException("Un motif est requis pour corriger l'XP d'un joueur.");
+
+        var ancienne = joueur.PointsStarPlayer;
+        if (ancienne == nouvelleValeur) return;
+
+        joueur.PointsStarPlayer = nouvelleValeur;
+        db.XpCorrections.Add(new XpCorrection
+        {
+            TeamPlayerId   = joueurId,
+            AncienneValeur = ancienne,
+            NouvelleValeur = nouvelleValeur,
+            Motif          = motif.Trim(),
+            CorrigeParId   = commissaireId
+        });
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "XP corrigée par commissaire {Commissaire} : joueur id={JoueurId} {Ancienne} → {Nouvelle} ({Motif})",
+            commissaireId, joueurId, ancienne, nouvelleValeur, motif);
+    }
+
+    /// <summary>Historique des corrections d'XP d'un joueur, plus récente d'abord.</summary>
+    public async Task<List<XpCorrection>> GetCorrectionsXpAsync(int joueurId) =>
+        await db.XpCorrections
+            .Include(c => c.CorrigePar)
+            .Where(c => c.TeamPlayerId == joueurId)
+            .OrderByDescending(c => c.CorrigeLe)
+            .ToListAsync();
 
     public async Task<List<PlayerPosition>> GetPostesDisponiblesAsync(int teamTypeId) =>
         await db.PlayerPositions

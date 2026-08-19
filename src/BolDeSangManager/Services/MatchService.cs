@@ -48,11 +48,15 @@ public class MatchService(
         db.MatchSheets.Add(feuille);
         await db.SaveChangesAsync();
 
-        // Calculer les PSP pour chaque joueur
+        // XP : depuis R4 la valeur saisie par le coach fait foi. Le barème ne sert
+        // que de valeur par défaut (pré-remplie côté UI) ; on ne recalcule ici que
+        // si l'appelant n'a rien fourni, pour rester compatible avec d'anciens appels.
+        var bareme = XpBareme.ParDefaut(match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
         foreach (var record in records)
         {
             record.MatchSheetId = feuille.Id;
-            record.PspGagnes = CalculerPSP(record, match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
+            if (record.PspGagnes <= 0)
+                record.PspGagnes = bareme.Calculer(record);
             db.MatchPlayerRecords.Add(record);
         }
         await db.SaveChangesAsync();
@@ -338,7 +342,7 @@ public class MatchService(
 
     public async Task ValiderApresMatchCoachAsync(
         int matchId, int teamId,
-        List<(int joueurId, int skillId, bool estPrincipale)> competences,
+        List<(int joueurId, int skillId, bool estPrincipale, int xpDepensee)> competences,
         List<(int positionId, string nom, int numero)> nouveauxJoueurs,
         int nouvellesRelances,
         TeamService teamService)
@@ -367,10 +371,11 @@ public class MatchService(
             throw new InvalidOperationException("L'après-match a déjà été validé pour cette équipe.");
 
         // Améliorations (Sélection Primaire si principale, Secondaire sinon)
-        foreach (var (joueurId, skillId, estPrincipale) in competences)
+        foreach (var (joueurId, skillId, estPrincipale, xpDepensee) in competences)
         {
             var type = estPrincipale ? ImprovementType.SelectionPrimaire : ImprovementType.SelectionSecondaire;
-            await teamService.AppliquerAmeliorationAsync(joueurId, type, skillId: skillId, matchSheetId: feuille.Id);
+            await teamService.AppliquerAmeliorationAsync(joueurId, type, skillId: skillId,
+                matchSheetId: feuille.Id, xpDepensee: xpDepensee);
         }
 
         // Recruter nouveaux joueurs
@@ -470,6 +475,10 @@ public class MatchService(
             // Inverser la hausse de valeur
             j.ValeurActuelle = Math.Max(0, j.ValeurActuelle - imp.ValeurHausse);
 
+            // R4 : restituer l'XP dépensée pour cette amélioration, sinon elle
+            // serait perdue (l'XP gagnée du match est retirée par ailleurs).
+            j.PointsStarPlayer += imp.XpDepensee;
+
             // Inverser le mod de stat éventuel
             if (imp.StatAmelioree.HasValue)
             {
@@ -537,10 +546,12 @@ public class MatchService(
         feuille.NotesCommissaire       = feuilleModifiee.NotesCommissaire;
 
         var gameType = match.Division?.League?.Game?.Type ?? GameType.BloodBowl;
+        var baremeModif = XpBareme.ParDefaut(gameType);
         foreach (var r in nouveauxRecords)
         {
             r.MatchSheetId = feuille.Id;
-            r.PspGagnes    = CalculerPSP(r, gameType);
+            if (r.PspGagnes <= 0)
+                r.PspGagnes = baremeModif.Calculer(r);
             db.MatchPlayerRecords.Add(r);
         }
         await db.SaveChangesAsync();
