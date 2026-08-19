@@ -9,10 +9,10 @@
         <MudGrid>
             <MudItem xs="12" sm="8"><MudTextField @bind-Value="_data.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
             <MudItem xs="12" sm="4">
-                <MudSelect T="SkillCategory" @bind-Value="_data.Categorie" Label="Catégorie" Variant="Variant.Outlined">
-                    @foreach (var c in Enum.GetValues<SkillCategory>())
+                <MudSelect T="int" @bind-Value="_data.SkillCategoryDefId" Label="Catégorie" Variant="Variant.Outlined">
+                    @foreach (var c in _categories)
                     {
-                        <MudSelectItem Value="@c">@c</MudSelectItem>
+                        <MudSelectItem T="int" Value="@c.Id">@c.Nom (@c.Code)</MudSelectItem>
                     }
                 </MudSelect>
             </MudItem>
@@ -32,17 +32,25 @@
     [Parameter] public int VersionId { get; set; }
     [Parameter] public Skill? Existant { get; set; }
 
-    Skill _data = new() { Nom = "", Description = "", Categorie = SkillCategory.Generale };
+    Skill _data = new() { Nom = "", Description = "" };
+    List<SkillCategoryDef> _categories = [];
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
+        _categories = await DataEditService.GetCategoriesAsync(VersionId);
+
         if (Existant is not null)
         {
             _data = new Skill
             {
-                Id = Existant.Id, Nom = Existant.Nom, Categorie = Existant.Categorie,
+                Id = Existant.Id, Nom = Existant.Nom,
+                SkillCategoryDefId = Existant.SkillCategoryDefId,
                 Description = Existant.Description, EstElite = Existant.EstElite, EstTrait = Existant.EstTrait
             };
+        }
+        else if (_categories.Count > 0)
+        {
+            _data.SkillCategoryDefId = _categories[0].Id;
         }
     }
 
@@ -50,12 +58,17 @@
 
     async Task Sauvegarder()
     {
+        if (_data.SkillCategoryDefId == 0)
+        {
+            Snackbar.Add("Créez d'abord au moins une catégorie de compétence.", Severity.Warning);
+            return;
+        }
         try
         {
             if (Existant is null)
                 await DataEditService.CreerSkillAsync(VersionId, _data);
             else
-                await DataEditService.ModifierSkillAsync(Existant.Id, _data.Nom, _data.Categorie, _data.Description, _data.EstElite, _data.EstTrait);
+                await DataEditService.ModifierSkillAsync(Existant.Id, _data.Nom, _data.SkillCategoryDefId, _data.Description, _data.EstElite, _data.EstTrait);
             Snackbar.Add("Compétence sauvegardée", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }

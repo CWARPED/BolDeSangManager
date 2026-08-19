@@ -15,6 +15,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<PoolPosition> PoolPositions => Set<PoolPosition>();
     public DbSet<PoolPositionSkill> PoolPositionSkills => Set<PoolPositionSkill>();
     public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<SkillCategoryDef> SkillCategories => Set<SkillCategoryDef>();
     public DbSet<League> Leagues => Set<League>();
     public DbSet<Division> Divisions => Set<Division>();
     public DbSet<Team> Teams => Set<Team>();
@@ -226,6 +227,28 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(s => s.RulesVersion)
             .WithMany()
             .HasForeignKey(s => s.RulesVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // SkillCategoryDef → RulesVersion (cascade : les catégories suivent leur version)
+        builder.Entity<SkillCategoryDef>()
+            .HasOne(c => c.RulesVersion)
+            .WithMany()
+            .HasForeignKey(c => c.RulesVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Unicité du nom et du code au sein d'une même version
+        builder.Entity<SkillCategoryDef>()
+            .HasIndex(c => new { c.RulesVersionId, c.Nom })
+            .IsUnique();
+        builder.Entity<SkillCategoryDef>()
+            .HasIndex(c => new { c.RulesVersionId, c.Code })
+            .IsUnique();
+
+        // Skill → SkillCategoryDef : Restrict, une catégorie utilisée ne peut pas être supprimée
+        builder.Entity<Skill>()
+            .HasOne(s => s.SkillCategoryDef)
+            .WithMany(c => c.Competences)
+            .HasForeignKey(s => s.SkillCategoryDefId)
             .OnDelete(DeleteBehavior.Restrict);
     }
 }

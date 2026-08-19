@@ -40,6 +40,23 @@ public static class DataSeeder
         return (game, version);
     }
 
+    /// <summary>
+    /// Renvoie l'identifiant de la catégorie <paramref name="nom"/> pour cette version,
+    /// en la créant au besoin. Les compétences exigent une catégorie depuis R2.
+    /// </summary>
+    public static async Task<int> GetOrCreateCategorieAsync(
+        ApplicationDbContext db, int versionId, string nom = "Générale", string code = "G", int ordre = 3)
+    {
+        var existante = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+            .FirstOrDefaultAsync(db.SkillCategories.Where(c => c.RulesVersionId == versionId && c.Nom == nom));
+        if (existante is not null) return existante.Id;
+
+        var cat = new SkillCategoryDef { RulesVersionId = versionId, Nom = nom, Code = code, Ordre = ordre };
+        db.SkillCategories.Add(cat);
+        await db.SaveChangesAsync();
+        return cat.Id;
+    }
+
     public static async Task<(TeamType teamType, PlayerPosition position)> SeedTeamTypeAsync(
         ApplicationDbContext db, int gameId)
     {
@@ -82,11 +99,15 @@ public static class DataSeeder
         var versionId = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
             .FirstAsync(db.RulesVersions.Select(v => v.Id));
 
+        var catGenerale = await GetOrCreateCategorieAsync(db, versionId, "Générale", "G", 3);
+        var catScelerate = await GetOrCreateCategorieAsync(db, versionId, "Scélérate", "S", 6);
+
         var normal = new Skill
         {
             RulesVersionId = versionId,
             Nom = "Blocage",
             Categorie = SkillCategory.Generale,
+            SkillCategoryDefId = catGenerale,
             Description = "Compétence de blocage.",
             EstElite = false,
             EstTrait = false
@@ -96,6 +117,7 @@ public static class DataSeeder
             RulesVersionId = versionId,
             Nom = "Meurtre Prémédité",
             Categorie = SkillCategory.Scelerate,
+            SkillCategoryDefId = catScelerate,
             Description = "Compétence élite.",
             EstElite = true,
             EstTrait = false

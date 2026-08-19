@@ -6,7 +6,17 @@ public class Skill
 {
     public int Id { get; set; }
     public string Nom { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Ancienne catégorie figée (enum). Conservée le temps de la migration vers
+    /// <see cref="SkillCategoryDefId"/> ; ne plus lire ce champ dans du code neuf.
+    /// </summary>
     public SkillCategory Categorie { get; set; }
+
+    /// <summary>Catégorie de la compétence, définie au niveau de la version de règles.</summary>
+    public int SkillCategoryDefId { get; set; }
+    public SkillCategoryDef SkillCategoryDef { get; set; } = null!;
+
     public string Description { get; set; } = string.Empty;
     public bool EstElite { get; set; } = false;
     public bool EstTrait { get; set; } = false;

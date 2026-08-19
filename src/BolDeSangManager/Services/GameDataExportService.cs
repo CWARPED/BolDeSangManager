@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Data.Seeding;
 using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
@@ -28,8 +29,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             ?? throw new InvalidOperationException("Version de règles introuvable");
 
         var skills = await db.Skills
+            .Include(s => s.SkillCategoryDef)
             .Where(s => s.RulesVersionId == rulesVersionId)
-            .OrderBy(s => s.Categorie).ThenBy(s => s.Nom)
+            .OrderBy(s => s.SkillCategoryDef.Ordre).ThenBy(s => s.Nom)
             .ToListAsync();
 
         var teamTypes = await db.TeamTypes
@@ -45,13 +47,19 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .OrderBy(p => p.Nom)
             .ToListAsync();
 
+        var categories = await db.SkillCategories
+            .Where(c => c.RulesVersionId == rulesVersionId)
+            .OrderBy(c => c.Ordre)
+            .ToListAsync();
+
         var dto = new GameDataExportDto(
             Jeu: version.Game.Nom,
             Version: version.Nom,
             Ordre: version.Ordre,
             EstActive: version.EstActive,
             Skills: skills.Select(s => new SkillGdDto(
-                s.Nom, s.Categorie, s.Description, s.EstElite, s.EstTrait)).ToList(),
+                s.Nom, s.Categorie, s.Description, s.EstElite, s.EstTrait,
+                CategorieNom: s.SkillCategoryDef?.Nom)).ToList(),
             TypesEquipes: teamTypes.Select(tt => new TeamTypeGdDto(
                 tt.Nom,
                 tt.Categorie,
@@ -79,7 +87,8 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 p.CapacitePasse, p.Armure, p.CompetencesPrincipales, p.CompetencesSecondaires,
                 p.MotsCles,
                 p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList()
-            )).ToList()
+            )).ToList(),
+            Categories: categories.Select(c => new SkillCategoryGdDto(c.Nom, c.Code, c.Ordre)).ToList()
         );
 
         var json = JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
@@ -139,15 +148,49 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             db.RulesVersions.Add(version);
             await db.SaveChangesAsync();
 
-            // 2. Compétences
+            // 2. Catégories de compétence
+            // Fichier récent → on reprend ses catégories. Fichier antérieur à R2
+            // (Categories absent) → on matérialise les 6 catégories standard, et les
+            // compétences sont rattachées via leur ancien enum.
+            var categorieMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var categoriesDto = dto.Categories is { Count: > 0 }
+                ? dto.Categories
+                : StandardSkillCategories.Toutes
+                    .Select(t => new SkillCategoryGdDto(t.Nom, t.Code, t.Ordre)).ToList();
+
+            foreach (var c in categoriesDto)
+            {
+                var cat = new SkillCategoryDef
+                {
+                    RulesVersionId = version.Id,
+                    Nom = c.Nom,
+                    Code = c.Code,
+                    Ordre = c.Ordre
+                };
+                db.SkillCategories.Add(cat);
+                await db.SaveChangesAsync();
+                categorieMap[c.Nom] = cat.Id;
+            }
+
+            // 3. Compétences
             var skillMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
             foreach (var s in dto.Skills)
             {
+                // Résolution par nom de catégorie ; repli sur l'ancien enum pour les
+                // fichiers exportés avant R2.
+                var nomCategorie = s.CategorieNom ?? StandardSkillCategories.Nom(s.Categorie);
+                if (!categorieMap.TryGetValue(nomCategorie, out var categorieId))
+                {
+                    errors.Add($"Catégorie « {nomCategorie} » introuvable pour la compétence « {s.Nom} ».");
+                    continue;
+                }
+
                 var skill = new Skill
                 {
                     RulesVersionId = version.Id,
                     Nom = s.Nom,
                     Categorie = s.Categorie,
+                    SkillCategoryDefId = categorieId,
                     Description = s.Description,
                     EstElite = s.EstElite,
                     EstTrait = s.EstTrait
@@ -157,7 +200,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 skillMap[s.Nom] = skill.Id;
             }
 
-            // 3. TypesEquipes + Postes + Limites
+            // 4. TypesEquipes + Postes + Limites
             foreach (var ttDto in dto.TypesEquipes)
             {
                 var tt = new TeamType
@@ -374,7 +417,8 @@ record GameDataExportDto(
     bool EstActive,
     List<SkillGdDto> Skills,
     List<TeamTypeGdDto> TypesEquipes,
-    List<PlayerPositionGdDto>? Reserve = null   // ← AJOUT optionnel (rétrocompat)
+    List<PlayerPositionGdDto>? Reserve = null,  // ← AJOUT optionnel (rétrocompat)
+    List<SkillCategoryGdDto>? Categories = null // ← AJOUT optionnel (rétrocompat, R2)
 );
 
 record ReserveExportDto(
@@ -388,7 +432,17 @@ record SkillGdDto(
     SkillCategory Categorie,
     string Description,
     bool EstElite,
-    bool EstTrait
+    bool EstTrait,
+    // Nom de la catégorie (catégories devenues éditables). Null sur les exports
+    // antérieurs : on retombe alors sur le champ Categorie (ancien enum).
+    string? CategorieNom = null
+);
+
+/// <summary>Catégorie de compétence exportée. Absent des fichiers antérieurs à R2.</summary>
+record SkillCategoryGdDto(
+    string Nom,
+    string Code,
+    int Ordre
 );
 
 record TeamTypeGdDto(

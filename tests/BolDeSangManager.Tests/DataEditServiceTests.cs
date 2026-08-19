@@ -55,7 +55,8 @@ public class DataEditServiceTests
         {
             var (gameId, vId) = SeedVersion(db);
             versionId = vId;
-            var skill = new Skill { Nom = "Châtaigne", Categorie = SkillCategory.Generale, RulesVersionId = versionId };
+            var catId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId);
+            var skill = new Skill { Nom = "Châtaigne", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = versionId };
             db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
 
             var tt = new TeamType { GameId = gameId, RulesVersionId = versionId, Nom = "Humains" };
@@ -109,7 +110,8 @@ public class DataEditServiceTests
         {
             var (gameId, vId) = SeedVersion(db);
             versionId = vId;
-            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, RulesVersionId = versionId };
+            var catId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId);
+            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = versionId };
             db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
 
             var tt = new TeamType { GameId = gameId, RulesVersionId = versionId, Nom = "Humains" };
@@ -240,7 +242,8 @@ public class DataEditServiceTests
         {
             var (gId, vId) = SeedVersion(db);
             gameId = gId; srcVersionId = vId;
-            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, RulesVersionId = srcVersionId };
+            var catId = await DataSeeder.GetOrCreateCategorieAsync(db, srcVersionId);
+            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = srcVersionId };
             db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
             var pool = new PoolPosition { RulesVersionId = srcVersionId, Nom = "Troll", Force = 5 };
             db.PoolPositions.Add(pool); db.SaveChanges(); poolId = pool.Id;

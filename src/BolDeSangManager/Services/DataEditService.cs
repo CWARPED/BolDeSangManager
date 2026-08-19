@@ -43,7 +43,26 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     {
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        // 1. Cloner les Skills + map oldId → newSkill
+        // 1. Cloner les catégories de compétence + map oldId → newId
+        var sourceCategories = await db.SkillCategories
+            .Where(c => c.RulesVersionId == sourceVersionId)
+            .ToListAsync();
+        var categorieMap = new Dictionary<int, SkillCategoryDef>();
+        foreach (var srcCat in sourceCategories)
+        {
+            var copieCat = new SkillCategoryDef
+            {
+                RulesVersionId = destVersionId,
+                Nom = srcCat.Nom,
+                Code = srcCat.Code,
+                Ordre = srcCat.Ordre
+            };
+            db.SkillCategories.Add(copieCat);
+            categorieMap[srcCat.Id] = copieCat;
+        }
+        await db.SaveChangesAsync();
+
+        // 2. Cloner les Skills + map oldId → newSkill (en rattachant à la catégorie clonée)
         var sourceSkills = await db.Skills.Where(s => s.RulesVersionId == sourceVersionId).ToListAsync();
         var skillMap = new Dictionary<int, Skill>();
         foreach (var src in sourceSkills)
@@ -52,6 +71,9 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             {
                 Nom = src.Nom,
                 Categorie = src.Categorie,
+                SkillCategoryDefId = categorieMap.TryGetValue(src.SkillCategoryDefId, out var newCat)
+                    ? newCat.Id
+                    : src.SkillCategoryDefId,
                 Description = src.Description,
                 EstElite = src.EstElite,
                 EstTrait = src.EstTrait,
@@ -62,7 +84,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
-        // 2. Cloner les TeamTypes + map
+        // 3. Cloner les TeamTypes + map
         var sourceTypes = await db.TeamTypes
             .Include(t => t.Postes).ThenInclude(p => p.CompetencesDepart)
             .Include(t => t.LimitesMotsCles)
@@ -87,7 +109,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
-        // 3. Cloner les PlayerPositions + leurs CompetencesDepart (avec mapping skill)
+        // 4. Cloner les PlayerPositions + leurs CompetencesDepart (avec mapping skill)
         foreach (var src in sourceTypes)
         {
             var destType = teamTypeMap[src.Id];
@@ -192,6 +214,10 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
             var skills = await db.Skills.Where(s => s.RulesVersionId == id).ToListAsync();
             db.Skills.RemoveRange(skills);
+            await db.SaveChangesAsync();
+
+            var categories = await db.SkillCategories.Where(c => c.RulesVersionId == id).ToListAsync();
+            db.SkillCategories.RemoveRange(categories);
             await db.SaveChangesAsync();
 
             db.RulesVersions.Remove(version);
@@ -455,11 +481,104 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         return copie;
     }
 
+    // ═══════════════════ Catégories de compétence ═══════════════════
+
+    /// <summary>Longueur maximale du code d'affichage d'une catégorie.</summary>
+    public const int CodeCategorieMaxLength = 2;
+
+    public async Task<List<SkillCategoryDef>> GetCategoriesAsync(int versionId) =>
+        await db.SkillCategories
+            .Where(c => c.RulesVersionId == versionId)
+            .OrderBy(c => c.Ordre).ThenBy(c => c.Nom)
+            .ToListAsync();
+
+    public async Task<SkillCategoryDef> CreerCategorieAsync(int versionId, string nom, string code, int ordre)
+    {
+        var (nomNet, codeNet) = ValiderCategorie(nom, code);
+        await VerifierUniciteCategorieAsync(versionId, nomNet, codeNet, categorieExclue: null);
+
+        var cat = new SkillCategoryDef
+        {
+            RulesVersionId = versionId,
+            Nom = nomNet,
+            Code = codeNet,
+            Ordre = ordre
+        };
+        db.SkillCategories.Add(cat);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Catégorie créée : {Nom} ({Code}) sur version {V}", nomNet, codeNet, versionId);
+        return cat;
+    }
+
+    /// <summary>
+    /// Renomme / recode une catégorie. Autorisé même si elle est utilisée : les compétences
+    /// pointent vers son identifiant, pas vers son libellé.
+    /// </summary>
+    public async Task ModifierCategorieAsync(int id, string nom, string code, int ordre)
+    {
+        var cat = await db.SkillCategories.FindAsync(id)
+            ?? throw new InvalidOperationException("Catégorie introuvable");
+
+        var (nomNet, codeNet) = ValiderCategorie(nom, code);
+        await VerifierUniciteCategorieAsync(cat.RulesVersionId, nomNet, codeNet, categorieExclue: id);
+
+        cat.Nom = nomNet;
+        cat.Code = codeNet;
+        cat.Ordre = ordre;
+        await db.SaveChangesAsync();
+        logger.LogInformation("Catégorie modifiée : {Nom} ({Code}) id={Id}", nomNet, codeNet, id);
+    }
+
+    /// <summary>Supprime une catégorie. Refusé si au moins une compétence l'utilise.</summary>
+    public async Task SupprimerCategorieAsync(int id)
+    {
+        var cat = await db.SkillCategories.FindAsync(id)
+            ?? throw new InvalidOperationException("Catégorie introuvable");
+
+        var nbSkills = await db.Skills.CountAsync(s => s.SkillCategoryDefId == id);
+        if (nbSkills > 0)
+            throw new InvalidOperationException(
+                $"{nbSkills} compétence(s) utilisent la catégorie « {cat.Nom} ». Réaffectez-les avant de la supprimer.");
+
+        db.SkillCategories.Remove(cat);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Catégorie supprimée : {Nom} (id={Id})", cat.Nom, id);
+    }
+
+    private static (string nom, string code) ValiderCategorie(string nom, string code)
+    {
+        var nomNet = (nom ?? "").Trim();
+        var codeNet = (code ?? "").Trim().ToUpperInvariant();
+
+        if (string.IsNullOrWhiteSpace(nomNet))
+            throw new InvalidOperationException("Le nom de la catégorie est obligatoire.");
+        if (string.IsNullOrWhiteSpace(codeNet))
+            throw new InvalidOperationException("Le code de la catégorie est obligatoire.");
+        if (codeNet.Length > CodeCategorieMaxLength)
+            throw new InvalidOperationException($"Le code doit faire 1 ou {CodeCategorieMaxLength} caractère(s) (reçu : « {codeNet} »).");
+
+        return (nomNet, codeNet);
+    }
+
+    private async Task VerifierUniciteCategorieAsync(int versionId, string nom, string code, int? categorieExclue)
+    {
+        var existantes = await db.SkillCategories
+            .Where(c => c.RulesVersionId == versionId && (categorieExclue == null || c.Id != categorieExclue))
+            .Select(c => new { c.Nom, c.Code })
+            .ToListAsync();
+
+        if (existantes.Any(c => string.Equals(c.Nom, nom, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Une catégorie « {nom} » existe déjà dans cette version.");
+        if (existantes.Any(c => string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException($"Le code « {code} » est déjà utilisé par une autre catégorie de cette version.");
+    }
+
     // ═══════════════════ Skill ═══════════════════
     public async Task<List<Skill>> GetSkillsAsync(int versionId) =>
         await db.Skills
+            .Include(s => s.SkillCategoryDef)
             .Where(s => s.RulesVersionId == versionId)
-            .OrderBy(s => s.Categorie).ThenBy(s => s.Nom)
+            .OrderBy(s => s.SkillCategoryDef.Ordre).ThenBy(s => s.Nom)
             .ToListAsync();
 
     public async Task<Skill> CreerSkillAsync(int versionId, Skill data)
@@ -470,11 +589,11 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         return data;
     }
 
-    public async Task ModifierSkillAsync(int id, string nom, SkillCategory categorie, string description, bool estElite, bool estTrait)
+    public async Task ModifierSkillAsync(int id, string nom, int categorieId, string description, bool estElite, bool estTrait)
     {
         var s = await db.Skills.FindAsync(id) ?? throw new InvalidOperationException("Skill introuvable");
         s.Nom = nom;
-        s.Categorie = categorie;
+        s.SkillCategoryDefId = categorieId;
         s.Description = description;
         s.EstElite = estElite;
         s.EstTrait = estTrait;

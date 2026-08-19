@@ -27,11 +27,14 @@ public class GameDataExportServiceTests : IDisposable
 
         var (game, version) = await DataSeeder.SeedGameAsync(db);
 
+        var catId = await DataSeeder.GetOrCreateCategorieAsync(db, version.Id);
+
         var skill = new Skill
         {
             RulesVersionId = version.Id,
             Nom = "Blocage",
             Categorie = SkillCategory.Generale,
+            SkillCategoryDefId = catId,
             Description = "Permet de relancer les dés d'attaque."
         };
         db.Skills.Add(skill);
@@ -267,7 +270,8 @@ public class GameDataExportServiceTests : IDisposable
             var cible = new RulesVersion { GameId = game.Id, Nom = "Saison 4", Ordre = 2, EstActive = false };
             db.RulesVersions.Add(cible);
             await db.SaveChangesAsync();
-            db.Skills.Add(new Skill { RulesVersionId = cible.Id, Nom = "Blocage", Categorie = SkillCategory.Generale });
+            var catCible = await DataSeeder.GetOrCreateCategorieAsync(db, cible.Id);
+            db.Skills.Add(new Skill { RulesVersionId = cible.Id, Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catCible });
             await db.SaveChangesAsync();
             cibleId = cible.Id;
         }

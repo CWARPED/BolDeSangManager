@@ -446,7 +446,9 @@ public class LeagueServiceTests : IDisposable
             Nom = "J1", Numero = 1, ValeurActuelle = 50_000, PointsStarPlayer = 6
         };
         db.TeamPlayers.Add(joueur);
-        var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, RulesVersionId = (await db.RulesVersions.FirstAsync()).Id };
+        var vId = (await db.RulesVersions.FirstAsync()).Id;
+        var catId = await DataSeeder.GetOrCreateCategorieAsync(db, vId);
+        var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = vId };
         db.Skills.Add(skill);
         await db.SaveChangesAsync();
 
