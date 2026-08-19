@@ -31,6 +31,19 @@ public class MatchService(
             .OrderBy(m => m.Ronde)
             .ToListAsync();
 
+    /// <summary>
+    /// Tous les matchs d'une ligue (#2) — sert à évaluer la règle du mode brouillard
+    /// côté serveur, y compris sur accès direct à une page de match.
+    /// </summary>
+    public async Task<List<Match>> GetMatchsLigueAsync(int ligueId) =>
+        await db.Matches
+            .Include(m => m.EquipeDomicile)
+            .Include(m => m.EquipeExterieur)
+            .Include(m => m.Division)
+            .Where(m => m.Division!.LeagueId == ligueId)
+            .OrderBy(m => m.Ronde)
+            .ToListAsync();
+
     public async Task<MatchSheet> SaisirFeuilleMatchAsync(int matchId, MatchSheet feuille,
         List<MatchPlayerRecord> records, string saisiParId)
     {

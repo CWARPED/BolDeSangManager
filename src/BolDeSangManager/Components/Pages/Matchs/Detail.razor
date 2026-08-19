@@ -6,6 +6,7 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject UserManager<ApplicationUser> UserManager
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
 
 <PageTitle>Résultat du match — BolDeSang Manager</PageTitle>
 
@@ -361,6 +362,30 @@ else
 
         _estCoachDuMatch = _match?.EquipeDomicile?.CoachId == userId
                         || _match?.EquipeExterieur?.CoachId == userId;
+
+        // #2 mode brouillard : le masquage doit tenir côté serveur, pas seulement
+        // dans la liste des matchs — sinon l'URL directe contourne la règle.
+        if (_match is not null && !_estCommissaire && !_estCoachDuMatch)
+        {
+            var ligue = _match.Division?.League;
+            if (ligue is { ModeBrouillard: true })
+            {
+                var matchsLigue = await MatchService.GetMatchsLigueAsync(ligue.Id);
+                var mesEquipes = matchsLigue
+                    .SelectMany(m => new[] { m.EquipeDomicile, m.EquipeExterieur })
+                    .Where(e => e is not null && e.CoachId == userId)
+                    .Select(e => e!.Id)
+                    .ToHashSet();
+
+                if (!BrouillardHelpers.EstVisible(_match, matchsLigue, mesEquipes,
+                        modeBrouillard: true, estCommissaire: false))
+                {
+                    Snackbar.Add("Ce match n'est pas encore visible (mode brouillard).", Severity.Info);
+                    Nav.NavigateTo($"/ligues/{ligue.Id}");
+                    return;
+                }
+            }
+        }
     }
 
     void ToggleEdition()

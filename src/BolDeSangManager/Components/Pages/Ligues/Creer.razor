@@ -74,6 +74,14 @@
                     </MudSelect>
                 }
 
+                <MudCheckBox @bind-Value="_modeBrouillard" Color="Color.Error" Class="mb-1"
+                             Label="Mode brouillard" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block" Style="margin-left:32px">
+                    Les coaches ne voient que leur prochain match et les matchs déjà joués.
+                    Le reste du calendrier à venir est masqué, pour qu'on ne joue pas une
+                    rencontre en anticipant les suivantes. Les commissaires voient tout.
+                </MudText>
+
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4" Spacing="2">
                     <MudButton Href="/ligues" Variant="Variant.Text" Disabled="@_saving">
                         Annuler
@@ -126,6 +134,8 @@
     const string Playoff2 = "2 équipes";
     const string Playoff4 = "4 équipes (recommandé)";
     const string Playoff8 = "8 équipes";
+
+    bool _modeBrouillard;
 
     List<Game> _games = [];
     List<RulesVersion> _versions = [];
@@ -205,6 +215,7 @@
                                              : LeagueFormat.RoundRobin,
                 BudgetDepart           = _budget,
                 NombreEquipesPlayoff   = nbPlayoff,
+                ModeBrouillard         = _modeBrouillard,
             };
 
             await LeagueService.CreerLigueAsync(ligue, userId);

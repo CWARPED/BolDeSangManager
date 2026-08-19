@@ -293,6 +293,25 @@ public class LeagueService(
     public async Task<bool> EstCommissaireAsync(int ligueId, string userId)
         => await authService.PeutGererLigueAsync(userId, ligueId);
 
+    /// <summary>
+    /// Active ou désactive le mode brouillard d'une ligue (#2). Réservé aux
+    /// commissaires : l'habilitation est revérifiée ici, pas seulement dans l'UI.
+    /// </summary>
+    public async Task DefinirModeBrouillardAsync(int ligueId, bool actif, string userId)
+    {
+        if (!await authService.PeutGererLigueAsync(userId, ligueId))
+            throw new UnauthorizedAccessException("Seul un commissaire peut modifier ce réglage.");
+
+        var ligue = await db.Leagues.FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        ligue.ModeBrouillard = actif;
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Ligue id={LigueId} : mode brouillard {Etat} par {UserId}",
+            ligueId, actif ? "activé" : "désactivé", userId);
+    }
+
     public async Task<List<TeamPlayer>> GetTopJoueursParPspAsync(int ligueId, int limit = 10) =>
         await db.TeamPlayers
             .Include(j => j.Team)
