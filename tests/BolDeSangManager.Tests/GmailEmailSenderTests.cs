@@ -21,6 +21,35 @@ public class GmailEmailSenderTests : IDisposable
     private static ApplicationUser FakeUser(string email) =>
         new() { Email = email, UserName = email };
 
+    // ── 0. Détection de configuration (R8 : éviter le faux succès) ─────────────
+
+    [Fact]
+    public async Task EstConfigureAsync_SansAucunReglage_RenvoieFalse()
+    {
+        await using var db = _factory.CreateContext();
+        Assert.False(await CreateSender(db).EstConfigureAsync());
+    }
+
+    [Fact]
+    public async Task EstConfigureAsync_AvecExpediteurMaisSansMotDePasse_RenvoieFalse()
+    {
+        await using var db = _factory.CreateContext();
+        var settings = new SettingsService(db);
+        await settings.SetAsync(SettingsService.CleEmailExpediteur, "ligue@exemple.com");
+        // pas de mot de passe d'application → configuration incomplète
+        Assert.False(await CreateSender(db).EstConfigureAsync());
+    }
+
+    [Fact]
+    public async Task EstConfigureAsync_AvecExpediteurEtMotDePasse_RenvoieTrue()
+    {
+        await using var db = _factory.CreateContext();
+        var settings = new SettingsService(db);
+        await settings.SetAsync(SettingsService.CleEmailExpediteur, "ligue@exemple.com");
+        await settings.SetAsync(SettingsService.CleEmailMotDePasse, "mdp-application-16");
+        Assert.True(await CreateSender(db).EstConfigureAsync());
+    }
+
     // ── 1. Not configured → silently skipped (no exception) ────────────────────
 
     [Fact]

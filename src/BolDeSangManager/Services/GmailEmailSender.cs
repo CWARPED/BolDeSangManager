@@ -31,6 +31,18 @@ public class GmailEmailSender(SettingsService settings, ILogger<GmailEmailSender
         string? footer = null) =>
         SendAsync(to, subject, BuildEmail(titre, texte, lien, bouton, footer));
 
+    /// <summary>
+    /// Indique si le compte d'envoi Gmail est configuré (expéditeur + mot de passe d'application).
+    /// À appeler AVANT d'annoncer un envoi à l'utilisateur : sans configuration, <see cref="SendAsync"/>
+    /// ignore le message silencieusement, ce qui produirait un faux succès.
+    /// </summary>
+    public async Task<bool> EstConfigureAsync()
+    {
+        var senderEmail = await settings.GetAsync(SettingsService.CleEmailExpediteur);
+        var password    = await settings.GetAsync(SettingsService.CleEmailMotDePasse);
+        return !string.IsNullOrWhiteSpace(senderEmail) && !string.IsNullOrWhiteSpace(password);
+    }
+
     private async Task SendAsync(string to, string subject, string htmlBody)
     {
         var senderEmail = await settings.GetAsync(SettingsService.CleEmailExpediteur);
