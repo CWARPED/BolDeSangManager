@@ -16,7 +16,14 @@ public class Match
     public Team EquipeExterieur { get; set; } = null!;
 
     public MatchStatus Statut { get; set; } = MatchStatus.Programme;
+    /// <summary>
+    /// Date et heure convenues pour le match (#1). Stockée en UTC, affichée en
+    /// heure locale. Fixée librement par l'un ou l'autre coach, ou le commissaire.
+    /// </summary>
     public DateTime? DateProgrammee { get; set; }
+
+    /// <summary>Lieu convenu pour le match (#1) — texte libre.</summary>
+    public string Lieu { get; set; } = string.Empty;
     public DateTime? DateJouee { get; set; }
 
     public int? ScoreDomicile { get; set; }

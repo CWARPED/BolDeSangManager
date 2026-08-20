@@ -10,6 +10,7 @@
 @inject MarkdownService Markdown
 @inject PdfService PdfService
 @inject IJSRuntime JS
+@inject CalendrierService CalendrierService
 
 <PageTitle>@(_ligue?.Nom ?? "Ligue") — BolDeSang Manager</PageTitle>
 
@@ -156,6 +157,19 @@ else
 
         <!-- Pool de matchs -->
         <MudTabPanel Text="Matchs" Icon="@Icons.Material.Filled.SportsSoccer">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @NbAvecDate() match(s) sur @NbMatchsVisibles() ont une date fixée
+                </MudText>
+                @if (NbAvecDate() > 0)
+                {
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.CalendarMonth"
+                               OnClick="TelechargerCalendrierLigue">
+                        Calendrier (.ics)
+                    </MudButton>
+                }
+            </MudStack>
             @if (_ligue.ModeBrouillard && !_estCommissaire)
             {
                 <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
@@ -206,6 +220,24 @@ else
                                                     Size="Size.Small">
                                                 @MatchLabel(match.Statut)
                                             </MudChip>
+                                            @if (match.DateProgrammee.HasValue)
+                                            {
+                                                <MudText Typo="Typo.caption" Align="Align.Center">
+                                                    @DateLocale(match.DateProgrammee.Value)
+                                                </MudText>
+                                                @if (!string.IsNullOrWhiteSpace(match.Lieu))
+                                                {
+                                                    <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                                                        @match.Lieu
+                                                    </MudText>
+                                                }
+                                            }
+                                            else if (match.Statut is MatchStatus.Programme or MatchStatus.AJouer)
+                                            {
+                                                <MudText Typo="Typo.caption" Color="Color.Warning" Align="Align.Center">
+                                                    Date à convenir
+                                                </MudText>
+                                            }
                                             @if (match.Statut == MatchStatus.Programme || match.Statut == MatchStatus.AJouer || match.Statut == MatchStatus.FeuilleEnSaisie)
                                             {
                                                 <MudButton Size="Size.Small" Variant="Variant.Text"
@@ -445,6 +477,30 @@ else
     static IEnumerable<Team> GetEquipesSorted(Division d) =>
         d.Equipes.OrderByDescending(e => e.PointsLigue)
                  .ThenByDescending(e => e.TouchdownsMarques - e.TouchdownsConcedes);
+
+    // ── Calendrier (#1) ───────────────────────────────────────────────────────
+
+    /// <summary>Date UTC stockée → affichage en heure locale du lecteur.</summary>
+    static string DateLocale(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime()
+            .ToString("ddd d MMM 'à' HH'h'mm");
+
+    int NbMatchsVisibles() =>
+        _ligue?.Divisions.SelectMany(d => MatchsVisibles(d)).Count() ?? 0;
+
+    int NbAvecDate() =>
+        _ligue?.Divisions.SelectMany(d => MatchsVisibles(d)).Count(m => m.DateProgrammee.HasValue) ?? 0;
+
+    async Task TelechargerCalendrierLigue()
+    {
+        if (_ligue is null) return;
+        // on n'exporte que ce que l'utilisateur a le droit de voir (mode brouillard)
+        var matchs = _ligue.Divisions.SelectMany(d => MatchsVisibles(d)).ToList();
+        var bytes = CalendrierService.GenererIcs(matchs, $"{_ligue.Nom} — BolDeSang");
+        await JS.InvokeVoidAsync("blazorDownloadBase64File",
+            $"calendrier-{_ligue.Nom.ToLower().Replace(" ", "-")}.ics",
+            "text/calendar", Convert.ToBase64String(bytes));
+    }
 
     // ── Règlement de la ligue (R5) ────────────────────────────────────────────
 

@@ -1,0 +1,117 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject MatchService MatchService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle1" Class="mb-1">
+            <b>@Match.EquipeDomicile?.Nom</b> vs <b>@Match.EquipeExterieur?.Nom</b>
+        </MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4 d-block">
+            @(Match.Ronde >= 100 ? $"Play-off — Tour {Match.Ronde - 99}" : $"Ronde {Match.Ronde}")
+        </MudText>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            Les deux coaches et les commissaires peuvent modifier ces informations.
+            Mettez-vous d'accord entre vous avant de les saisir.
+        </MudAlert>
+
+        <MudDatePicker @bind-Date="_date" Label="Date du match"
+                       Variant="Variant.Outlined" Class="mb-3"
+                       Clearable="true" Editable="true"
+                       DateFormat="dd/MM/yyyy" />
+
+        <MudTimePicker @bind-Time="_heure" Label="Heure"
+                       Variant="Variant.Outlined" Class="mb-3"
+                       Editable="true" AmPm="false" />
+
+        <MudTextField @bind-Value="_lieu" Label="Lieu"
+                      Variant="Variant.Outlined" Class="mb-1"
+                      Placeholder="Ex : Le Repaire du Troll, salle du fond"
+                      MaxLength="200" Immediate="true" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary">
+            Texte libre — adresse, nom du bar, « chez Marc »…
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Annuler</MudButton>
+        @if (Match.DateProgrammee.HasValue)
+        {
+            <MudButton Color="Color.Error" Variant="Variant.Text"
+                       OnClick="Effacer" Disabled="@_enCours">
+                Effacer la date
+            </MudButton>
+        }
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Enregistrer" Disabled="@_enCours">
+            @(_enCours ? "Enregistrement…" : "Enregistrer")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    [Parameter] public Match Match { get; set; } = default!;
+    [Parameter] public string UserId { get; set; } = "";
+    [Parameter] public bool EstCommissaire { get; set; }
+
+    DateTime? _date;
+    TimeSpan? _heure;
+    string _lieu = "";
+    bool _enCours;
+
+    protected override void OnInitialized()
+    {
+        // stocké en UTC, présenté en heure locale
+        if (Match.DateProgrammee is DateTime utc)
+        {
+            var locale = DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime();
+            _date = locale.Date;
+            _heure = locale.TimeOfDay;
+        }
+        else
+        {
+            _heure = new TimeSpan(20, 0, 0);   // 20 h : créneau le plus courant
+        }
+        _lieu = Match.Lieu ?? "";
+    }
+
+    async Task Enregistrer()
+    {
+        if (_date is null)
+        {
+            Snackbar.Add("Choisissez une date, ou utilisez « Effacer la date ».", Severity.Warning);
+            return;
+        }
+
+        // heure locale saisie → UTC stocké
+        var locale = _date.Value.Date + (_heure ?? TimeSpan.Zero);
+        var utc = DateTime.SpecifyKind(locale, DateTimeKind.Local).ToUniversalTime();
+
+        await Sauver(utc);
+    }
+
+    Task Effacer() => Sauver(null);
+
+    async Task Sauver(DateTime? utc)
+    {
+        _enCours = true;
+        try
+        {
+            await MatchService.ProgrammerMatchAsync(Match.Id, utc, _lieu, UserId, EstCommissaire);
+            Match.DateProgrammee = utc;
+            Match.Lieu = _lieu.Trim();
+            Snackbar.Add(utc.HasValue
+                ? $"Match programmé le {utc.Value.ToLocalTime():dddd d MMMM yyyy à HH'h'mm}."
+                : "Date effacée.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _enCours = false; }
+    }
+}
