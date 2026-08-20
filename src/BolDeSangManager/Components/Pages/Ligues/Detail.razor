@@ -240,6 +240,24 @@ else
                                             }
                                             @if (match.Statut == MatchStatus.Programme || match.Statut == MatchStatus.AJouer || match.Statut == MatchStatus.FeuilleEnSaisie)
                                             {
+                                                @if (PeutProgrammer(match))
+                                                {
+                                                    <div @onclick:stopPropagation="true">
+                                                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                                                  StartIcon="@Icons.Material.Filled.EditCalendar"
+                                                                  OnClick="@(() => Programmer(match))">
+                                                            @(match.DateProgrammee.HasValue ? "Modifier la date" : "Fixer la date")
+                                                        </MudButton>
+                                                    </div>
+                                                }
+                                                @if (match.DateProgrammee.HasValue)
+                                                {
+                                                    <div @onclick:stopPropagation="true">
+                                                        <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small"
+                                                                       title="Ajouter à mon agenda (.ics)"
+                                                                       OnClick="@(() => TelechargerIcsMatch(match))" />
+                                                    </div>
+                                                }
                                                 <MudButton Size="Size.Small" Variant="Variant.Text"
                                                           Color="Color.Error"
                                                           Href="@($"/matchs/{match.Id}/feuille")"
@@ -487,6 +505,37 @@ else
 
     int NbMatchsVisibles() =>
         _ligue?.Divisions.SelectMany(d => MatchsVisibles(d)).Count() ?? 0;
+
+    /// <summary>
+    /// Qui peut fixer la date d'un match (#1) : ses deux coaches et les
+    /// commissaires. Le service revérifie de toute façon côté serveur.
+    /// </summary>
+    bool PeutProgrammer(Match match) =>
+        _estCommissaire
+        || match.EquipeDomicile?.CoachId == _currentUserId
+        || match.EquipeExterieur?.CoachId == _currentUserId;
+
+    async Task Programmer(Match match)
+    {
+        var parametres = new DialogParameters<BolDeSangManager.Components.Pages.Matchs.ProgrammationDialog>
+        {
+            { x => x.Match, match },
+            { x => x.UserId, _currentUserId },
+            { x => x.EstCommissaire, _estCommissaire },
+        };
+        var dialog = await DialogService.ShowAsync<BolDeSangManager.Components.Pages.Matchs.ProgrammationDialog>(
+            "Date et lieu du match", parametres,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+
+        if (await dialog.Result is { Canceled: false }) StateHasChanged();
+    }
+
+    async Task TelechargerIcsMatch(Match match)
+    {
+        var bytes = CalendrierService.GenererIcs(match);
+        await JS.InvokeVoidAsync("blazorDownloadBase64File",
+            $"match-{match.Id}.ics", "text/calendar", Convert.ToBase64String(bytes));
+    }
 
     int NbAvecDate() =>
         _ligue?.Divisions.SelectMany(d => MatchsVisibles(d)).Count(m => m.DateProgrammee.HasValue) ?? 0;
