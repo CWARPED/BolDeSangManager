@@ -296,6 +296,115 @@ else
             </MudGrid>
         </MudTabPanel>
 
+        <!-- Calendrier mensuel (#1) -->
+        <MudTabPanel Text="Calendrier" Icon="@Icons.Material.Filled.CalendarMonth">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small"
+                                   title="Mois précédent" OnClick="@(() => ChangerMois(-1))" />
+                    <MudText Typo="Typo.subtitle1" Style="min-width:190px;text-align:center">
+                        <b>@MoisAffiche()</b>
+                    </MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                                   title="Mois suivant" OnClick="@(() => ChangerMois(1))" />
+                    @if (_moisCourant != PremierDuMois(DateTime.Today))
+                    {
+                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="RevenirAujourdhui">
+                            Aujourd'hui
+                        </MudButton>
+                    }
+                </MudStack>
+                @if (NbAvecDate() > 0)
+                {
+                    <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.CalendarMonth"
+                               OnClick="TelechargerCalendrierLigue">
+                        Calendrier (.ics)
+                    </MudButton>
+                }
+            </MudStack>
+
+            @if (_ligue.ModeBrouillard && !_estCommissaire)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    Mode brouillard : vous ne voyez que vos matchs joués et votre prochaine rencontre.
+                </MudAlert>
+            }
+
+            @{
+                var matchsDuMois = MatchsDuMois();
+            }
+            @if (matchsDuMois.Count == 0)
+            {
+                <MudAlert Severity="Severity.Normal" Dense="true" Class="mb-3">
+                    Aucun match programmé en @MoisAffiche().
+                </MudAlert>
+            }
+
+            <!-- grille du mois -->
+            <div class="calendrier-grille">
+                @foreach (var jour in new[] { "lun", "mar", "mer", "jeu", "ven", "sam", "dim" })
+                {
+                    <div class="calendrier-entete">@jour</div>
+                }
+                @foreach (var jour in JoursAffiches())
+                {
+                    var duJour = matchsDuMois.Where(m => DateLocaleDe(m).Date == jour.Date).ToList();
+                    var horsMois = jour.Month != _moisCourant.Month;
+                    <div class="calendrier-case @(horsMois ? "hors-mois" : "") @(jour.Date == DateTime.Today ? "aujourdhui" : "")">
+                        <div class="calendrier-numero">@jour.Day</div>
+                        @foreach (var m in duJour)
+                        {
+                            <div class="calendrier-match" @onclick="@(() => Nav.NavigateTo($"/matchs/{m.Id}/detail"))"
+                                 title="@($"{m.EquipeDomicile?.Nom} vs {m.EquipeExterieur?.Nom}{(string.IsNullOrWhiteSpace(m.Lieu) ? "" : $" — {m.Lieu}")}")">
+                                <b>@DateLocaleDe(m).ToString("HH'h'mm")</b>
+                                @($"{Abrege(m.EquipeDomicile?.Nom)} – {Abrege(m.EquipeExterieur?.Nom)}")
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- détail sous la grille : lisible sur mobile -->
+            @if (matchsDuMois.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><b>Détail du mois</b></MudText>
+                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <tbody>
+                        @foreach (var m in matchsDuMois.OrderBy(DateLocaleDe))
+                        {
+                            <tr style="cursor:pointer" @onclick="@(() => Nav.NavigateTo($"/matchs/{m.Id}/detail"))">
+                                <td style="white-space:nowrap">
+                                    <b>@DateLocaleDe(m).ToString("ddd d MMM")</b><br />
+                                    <span style="color:#9e9e9e">@DateLocaleDe(m).ToString("HH'h'mm")</span>
+                                </td>
+                                <td>
+                                    @m.EquipeDomicile?.Nom <span style="color:#9e9e9e">vs</span> @m.EquipeExterieur?.Nom
+                                    @if (!string.IsNullOrWhiteSpace(m.Lieu))
+                                    {
+                                        <br />
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@m.Lieu</MudText>
+                                    }
+                                </td>
+                                <td style="white-space:nowrap">
+                                    <MudChip T="string" Size="Size.Small" Color="@MatchColor(m.Statut)">
+                                        @MatchLabel(m.Statut)
+                                    </MudChip>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+
+            @if (NbSansDate() > 0)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-4">
+                    @NbSansDate() match(s) de la ligue n'ont pas encore de date fixée.
+                </MudAlert>
+            }
+        </MudTabPanel>
+
         <!-- Règlement de la ligue (R5) -->
         <MudTabPanel Text="Règlement" Icon="@Icons.Material.Filled.Gavel">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3" Wrap="Wrap.Wrap">
@@ -549,6 +658,62 @@ else
         await JS.InvokeVoidAsync("blazorDownloadBase64File",
             $"calendrier-{_ligue.Nom.ToLower().Replace(" ", "-")}.ics",
             "text/calendar", Convert.ToBase64String(bytes));
+    }
+
+    // ── Vue calendrier mensuelle (#1) ─────────────────────────────────────────
+
+    DateTime _moisCourant = PremierDuMois(DateTime.Today);
+
+    static DateTime PremierDuMois(DateTime d) => new(d.Year, d.Month, 1);
+
+    void ChangerMois(int delta) => _moisCourant = _moisCourant.AddMonths(delta);
+    void RevenirAujourdhui() => _moisCourant = PremierDuMois(DateTime.Today);
+
+    string MoisAffiche()
+    {
+        var s = _moisCourant.ToString("MMMM yyyy");
+        return char.ToUpper(s[0]) + s[1..];
+    }
+
+    /// <summary>Date du match convertie en heure locale (stockage UTC).</summary>
+    static DateTime DateLocaleDe(Match m) =>
+        DateTime.SpecifyKind(m.DateProgrammee!.Value, DateTimeKind.Utc).ToLocalTime();
+
+    /// <summary>
+    /// Matchs datés du mois affiché, filtrés par le mode brouillard (#2) :
+    /// le calendrier ne doit pas révéler ce que l'onglet Matchs masque.
+    /// </summary>
+    List<Match> MatchsDuMois() =>
+        _ligue is null ? []
+        : _ligue.Divisions.SelectMany(d => MatchsVisibles(d))
+            .Where(m => m.DateProgrammee.HasValue)
+            .Where(m => DateLocaleDe(m).Year == _moisCourant.Year
+                     && DateLocaleDe(m).Month == _moisCourant.Month)
+            .ToList();
+
+    int NbSansDate() =>
+        _ligue?.Divisions.SelectMany(d => MatchsVisibles(d))
+            .Count(m => !m.DateProgrammee.HasValue
+                     && m.Statut is MatchStatus.Programme or MatchStatus.AJouer) ?? 0;
+
+    /// <summary>
+    /// Les 42 cases de la grille (6 semaines) : le mois affiché, complété par
+    /// les jours débordant du mois précédent et du suivant pour que chaque
+    /// ligne fasse une semaine pleine, lundi en premier.
+    /// </summary>
+    List<DateTime> JoursAffiches()
+    {
+        // DayOfWeek met dimanche à 0 ; on décale pour commencer le lundi
+        var decalage = ((int)_moisCourant.DayOfWeek + 6) % 7;
+        var debut = _moisCourant.AddDays(-decalage);
+        return Enumerable.Range(0, 42).Select(i => debut.AddDays(i)).ToList();
+    }
+
+    /// <summary>Nom d'équipe raccourci pour tenir dans une case du calendrier.</summary>
+    static string Abrege(string? nom)
+    {
+        if (string.IsNullOrWhiteSpace(nom)) return "?";
+        return nom.Length <= 12 ? nom : nom[..11] + "…";
     }
 
     // ── Règlement de la ligue (R5) ────────────────────────────────────────────
