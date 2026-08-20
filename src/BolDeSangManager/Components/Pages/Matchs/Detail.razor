@@ -57,15 +57,26 @@ else
     </MudStack>
 
     <!-- Score -->
+    @* Responsive (R9f) : en xs=5/2/5 la colonne centrale ne fait que 56px
+       sur un écran de 360px — le score « 2 – 1 » en Typo.h4 s'y empile
+       verticalement sur 126px de haut et le nom du coach se coupe.
+       Sur téléphone on passe donc en pleine largeur : les deux équipes
+       côte à côte (xs=6) et le score sur sa propre ligne en dessous. *@
     <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudGrid>
-            <MudItem xs="5" Class="text-center">
+        <MudGrid Class="score-grid">
+            <MudItem xs="6" sm="5" Class="text-center">
                 <MudText Typo="Typo.subtitle1"><b>@_match.EquipeDomicile?.Nom</b></MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     @(_match.EquipeDomicile?.Coach?.PseudoCoach ?? _match.EquipeDomicile?.Coach?.UserName)
                 </MudText>
             </MudItem>
-            <MudItem xs="2" Class="text-center">
+            <MudItem xs="6" sm="5" Class="text-center score-away">
+                <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(_match.EquipeExterieur?.Coach?.PseudoCoach ?? _match.EquipeExterieur?.Coach?.UserName)
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" sm="2" Class="text-center score-value">
                 <MudText Typo="Typo.h4" Color="Color.Error">
                     <b>@_match.ScoreDomicile – @_match.ScoreExterieur</b>
                 </MudText>
@@ -75,12 +86,6 @@ else
                         @_match.DateJouee.Value.ToLocalTime().ToString("dd/MM/yyyy")
                     </MudText>
                 }
-            </MudItem>
-            <MudItem xs="5" Class="text-center">
-                <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @(_match.EquipeExterieur?.Coach?.PseudoCoach ?? _match.EquipeExterieur?.Coach?.UserName)
-                </MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>

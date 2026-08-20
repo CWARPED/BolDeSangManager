@@ -147,7 +147,10 @@ h1:focus {
 /* Barre de budget collante : reste en haut au scroll, le fond fait jauge. */
 .budget-sticky {
     position: sticky;
-    top: 64px; /* hauteur de la MudAppBar ; passer à 0 si pas d'AppBar fixe */
+    /* Hauteur réelle de la MudAppBar. Elle est en mode Dense : 48px sur
+       téléphone, 64px à partir de sm. Le 64px codé en dur laissait un trou
+       de 16px sous la barre sur mobile (R9f). */
+    top: 64px;
     z-index: 1200;
     margin-bottom: 16px;
     padding: 10px 16px;
@@ -351,9 +354,21 @@ h1:focus {
    boutons d'action hors de l'écran. On empêche tout wrap et on autorise
    le titre à se rétrécir (min-width:0 est indispensable en flex). */
 @media (max-width: 599.98px) {
+    /* Le <header class="mud-appbar"> lui-même s'élargit au contenu de sa
+       toolbar (505px mesurés sur /admin/donnees). C'est LUI qu'il faut
+       contraindre : agir seulement sur la toolbar laissait le header
+       déborder et le défilement horizontal parasite revenait dès que le
+       garde-fou overflow-x était retiré. */
+    .mud-appbar {
+        max-width: 100vw;
+        width: 100%;
+        box-sizing: border-box;
+    }
+
     .mud-appbar .mud-toolbar {
         flex-wrap: nowrap;
         overflow: hidden;
+        max-width: 100%;
     }
 
     .mud-appbar .mud-toolbar > .appbar-title {
@@ -375,8 +390,13 @@ h1:focus {
         flex-shrink: 0;
     }
 
-    /* garde-fou global : plus aucun défilement horizontal parasite */
-    html, body {
+    /* garde-fou global : plus aucun défilement horizontal parasite.
+       ATTENTION — à poser sur html SEULEMENT, jamais sur body :
+       `overflow-x:hidden` sur body calcule `overflow: hidden auto`, ce qui
+       fait du body un conteneur de défilement et casse TOUS les
+       `position:sticky` de la page (constaté sur la barre de budget de
+       /equipes/rejoindre, qui partait à -372px au défilement). */
+    html {
         overflow-x: hidden;
     }
 }
@@ -566,5 +586,146 @@ h1:focus {
        confortables au pouce */
     .mud-popover .mud-list-item {
         min-height: 44px;
+    }
+}
+
+/* ------------------------------------------------------------
+   R9f — bloc de score de /matchs/{id}/detail
+   Défaut D'ORIGINE (commit initial 1988cd0, pas une régression
+   des commits responsive) : la grille xs=5/2/5 donnait 56px à la
+   colonne du score sur un écran de 360px. Le « 2 – 1 » en Typo.h4
+   s'y empilait verticalement sur 126px de haut et le pseudo du
+   coach se coupait en deux.
+
+   Le markup a été réordonné (domicile / extérieur / score) pour
+   que le score passe naturellement sur sa propre ligne en mobile.
+   En DESKTOP il doit revenir AU MILIEU : on le remet à sa place
+   avec `order`, sans toucher au HTML.
+   ------------------------------------------------------------ */
+@media (min-width: 600px) {
+    .score-grid .score-value { order: 2; }
+    .score-grid .score-away  { order: 3; }
+}
+
+@media (max-width: 599.98px) {
+    /* le score en pleine largeur : plus rien ne l'empile */
+    .score-grid .score-value {
+        padding-top: 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.09);
+        margin-top: 8px;
+    }
+
+    /* les noms d'équipe et pseudos de coach ne doivent plus être
+       coupés au milieu d'un mot */
+    .score-grid .mud-typography {
+        overflow-wrap: break-word;
+        hyphens: auto;
+    }
+}
+
+/* ------------------------------------------------------------
+   R9f — écrans restés hors périmètre de l'audit R9
+   ------------------------------------------------------------ */
+@media (max-width: 599.98px) {
+
+    /* Barre de budget collante (/equipes/rejoindre) : la MudAppBar est
+       Dense, donc 48px sur téléphone et non 64px. Le décalage codé en dur
+       laissait un trou de 16px par lequel le contenu défilait. */
+    .budget-sticky {
+        top: 48px;
+    }
+
+    /* Liens texte (« Retour aux ligues », « S'inscrire », « Mot de passe
+       oublié ») : 19-20px de haut, sous le seuil tactile. On élargit la
+       zone touchable par le padding vertical.
+       PIÈGE — ne PAS utiliser inline-block + line-height ici : sur les
+       liens du tiroir et le bouton de titre, cela fait exploser le
+       scrollWidth (2520px mesurés) et .mud-layout déborde à 505px, ce qui
+       ramenait le défilement horizontal parasite. Le padding seul, sans
+       toucher au display, donne la même surface tactile sans effet de
+       bord. */
+    .mud-main-content .mud-link:not(.mud-table-cell .mud-link),
+    .account-page a,
+    form[method="post"] a {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+}
+
+/* ------------------------------------------------------------
+   R9f — MudStack Row sans Wrap (débordement d'/admin/donnees)
+   Les barres d'outils d'Admin → Données (sélecteurs Jeu / Saison,
+   en-têtes d'onglets avec compteur + boutons) sont des
+   `MudStack Row="true"` sans Wrap : sur 360px leur contenu mesure
+   408 à 481px et pousse .mud-main-content à 505px.
+   C'était la VRAIE cause des 145px de débordement, pas l'AppBar —
+   le garde-fou `overflow-x` le masquait seulement.
+   Sur téléphone on autorise donc le retour à la ligne.
+   ------------------------------------------------------------ */
+@media (max-width: 599.98px) {
+    /* NB : MudStack Row ne génère PAS `.mud-stack-row` mais les classes
+       utilitaires `d-flex flex-row` — vérifié dans le DOM après une
+       première tentative infructueuse sur le mauvais sélecteur. */
+    .mud-main-content .d-flex.flex-row {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    /* les enfants d'une barre d'outils ne doivent pas imposer leur
+       largeur intrinsèque (un MudSelect de 200px sur 312 disponibles) */
+    .mud-main-content .d-flex.flex-row > * {
+        min-width: 0;
+        max-width: 100%;
+    }
+}
+
+/* ------------------------------------------------------------
+   R9f — bandeau pleine largeur de l'accueil
+   Les marges négatives annulent le padding horizontal du
+   MudContainer. Ce padding est de 16px à partir de sm mais de 8px
+   sur téléphone (MainLayout : Class="px-2 px-sm-4"), d'où un
+   débordement de 8px avec un -16px codé en dur.
+   ------------------------------------------------------------ */
+.home-bandeau {
+    --bandeau-gutter: 16px;
+    margin: calc(-1 * var(--bandeau-gutter)) calc(-1 * var(--bandeau-gutter)) 24px;
+    overflow: hidden;
+    border-radius: 0 0 8px 8px;
+    max-height: 220px;
+}
+
+@media (max-width: 599.98px) {
+    .home-bandeau {
+        --bandeau-gutter: 8px;
+        max-height: 140px;
+    }
+}
+
+/* ------------------------------------------------------------
+   R9f — cases à cocher des pages Account (SSR)
+   Ces pages n'utilisent pas MudBlazor (InputText + CSS custom) :
+   la case « Se souvenir de moi » est un <input type=checkbox> nu
+   de 16x16px, largement sous le seuil tactile.
+   ------------------------------------------------------------ */
+@media (max-width: 599.98px) {
+    /* Le sélecteur doit être AU MOINS aussi spécifique que
+       `.account-checkbox-row input[type="checkbox"]` (défini plus haut,
+       16x16px) — une règle sur `input[type=checkbox]` seul est battue.
+       Vérifié dans le DOM après un premier essai sans effet. */
+    .account-checkbox-row input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        margin: 11px 0;
+    }
+
+    /* la ligne entière devient une cible confortable */
+    .account-checkbox-row {
+        min-height: 44px;
+    }
+
+    .account-checkbox-row label {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
     }
 }
