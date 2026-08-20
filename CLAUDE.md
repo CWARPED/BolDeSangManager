@@ -122,6 +122,8 @@ Les formats **Libre** délèguent la composition du calendrier au commissaire : 
 
 L'appariement de « Compléter » n'est pas un simple parcours dans l'ordre : il choisit, parmi les équipes libres, celles qui se sont le moins souvent affrontées (puis les moins servies), et inverse domicile/extérieur par rapport à la dernière confrontation.
 
+**Mode brouillard — périmètre exact** (`BrouillardHelpers`) : le secret porte sur **l'appariement**, pas sur les effectifs. Les fiches d'équipe sont **publiques par choix** (cf. #5, fermé comme comportement voulu) ; en mode brouillard on masque donc uniquement (a) le calendrier à venir au-delà du prochain match (`FiltrerVisibles` / `EstVisible`, accès direct à une page de match compris) et (b) la **fiche du prochain adversaire** (`PeutVoirFicheEquipe`, contrôle au chargement de `Equipes/Detail.razor`, pas un masquage visuel). Restent visibles : ses propres équipes, les adversaires déjà affrontés, ceux des rondes ultérieures, et tout pour un commissaire.
+
 **GmailEmailSender** : implémente `IEmailSender<ApplicationUser>` (Scoped). Lit les credentials à chaque envoi depuis `SettingsService` — pas besoin de redémarrer après modification en admin. Si `EmailExpediteur` ou `EmailMotDePasse` manque, log un warning et ignore silencieusement. Nécessite un **Mot de passe d'application** Gmail (16 chars, généré sur myaccount.google.com) — pas le mot de passe du compte. SMTP : `smtp.gmail.com:587 StartTls`. Clés `SettingsService` :
 - `SettingsService.CleEmailExpediteur`    → adresse Gmail de l'expéditeur
 - `SettingsService.CleEmailNomExpediteur` → nom affiché dans la boîte de réception
