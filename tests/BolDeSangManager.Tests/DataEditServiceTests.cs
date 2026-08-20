@@ -1,5 +1,6 @@
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Data.Seeding;
 using BolDeSangManager.Services;
 using BolDeSangManager.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -277,6 +278,315 @@ public class DataEditServiceTests
             var skillCloneId = pools[0].CompetencesDepart.Single().SkillId;
             var skillClone = await db.Skills.FindAsync(skillCloneId);
             Assert.Equal(newVersionId, skillClone!.RulesVersionId);
+        }
+    }
+
+    [Fact]
+    public async Task SupprimerVersion_SupprimeAussiLaReserveEtSesCompetences()
+    {
+        using var factory = new TestDbFactory();
+        int versionId, skillId, poolId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (_, vId) = SeedVersion(db);
+            versionId = vId;
+            // version non active : on ne peut pas supprimer la version active
+            var v = await db.RulesVersions.FindAsync(versionId);
+            v!.EstActive = false;
+            var catId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId);
+            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = versionId };
+            db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
+            var pool = new PoolPosition { RulesVersionId = versionId, Nom = "Troll", Force = 5 };
+            db.PoolPositions.Add(pool); db.SaveChanges(); poolId = pool.Id;
+            db.PoolPositionSkills.Add(new PoolPositionSkill { PoolPositionId = poolId, SkillId = skillId });
+            db.PoolPositionCategoryAccesses.Add(new PoolPositionCategoryAccess
+            {
+                PoolPositionId = poolId,
+                SkillCategoryDefId = catId,
+                EstPrincipale = true
+            });
+            db.SaveChanges();
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.SupprimerVersionAsync(versionId);
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            Assert.Null(await db.RulesVersions.FindAsync(versionId));
+            Assert.Empty(await db.PoolPositions.Where(p => p.RulesVersionId == versionId).ToListAsync());
+            Assert.Empty(await db.PoolPositionSkills.Where(s => s.PoolPositionId == poolId).ToListAsync());
+            Assert.Empty(await db.PoolPositionCategoryAccesses.Where(a => a.PoolPositionId == poolId).ToListAsync());
+            Assert.Empty(await db.Skills.Where(s => s.RulesVersionId == versionId).ToListAsync());
+            Assert.Empty(await db.SkillCategories.Where(c => c.RulesVersionId == versionId).ToListAsync());
+        }
+    }
+
+    [Fact]
+    public async Task SupprimerVersion_RefuseSiUneLigueLUtilise()
+    {
+        using var factory = new TestDbFactory();
+        int versionId, gameId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);
+            versionId = vId; gameId = gId;
+            var v = await db.RulesVersions.FindAsync(versionId);
+            v!.EstActive = false;
+            var user = new Data.ApplicationUser { UserName = "commish", Email = "c@x.fr", PseudoCoach = "Commish" };
+            db.Users.Add(user);
+            db.SaveChanges();
+            db.Leagues.Add(new League
+            {
+                Nom = "Ligue test",
+                GameId = gameId,
+                RulesVersionId = versionId,
+                CommissaireId = user.Id
+            });
+            db.SaveChanges();
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.SupprimerVersionAsync(versionId));
+            Assert.Contains("ligue", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.NotNull(await db.RulesVersions.FindAsync(versionId));
+    }
+
+    [Fact]
+    public async Task ClonerVersion_SupporteUneCompetenceRattacheeAUneCategorieEtrangere()
+    {
+        // Reproduit la donnée corrompue trouvée en base réelle : un Skill de la
+        // version A pointe vers une catégorie appartenant à une autre version.
+        using var factory = new TestDbFactory();
+        int gameId, srcVersionId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);
+            gameId = gId; srcVersionId = vId;
+
+            var autreVersion = new RulesVersion { GameId = gameId, Nom = "Autre", Ordre = 9 };
+            db.RulesVersions.Add(autreVersion);
+            db.SaveChanges();
+
+            // catégories normales de la version source
+            await DataSeeder.GetOrCreateCategorieAsync(db, srcVersionId);
+            foreach (var (_, nom, code) in StandardSkillCategories.Toutes)
+                if (!db.SkillCategories.Any(c => c.RulesVersionId == srcVersionId && c.Nom == nom))
+                    db.SkillCategories.Add(new SkillCategoryDef { RulesVersionId = srcVersionId, Nom = nom, Code = code });
+
+            // catégorie appartenant à l'AUTRE version
+            var catEtrangere = new SkillCategoryDef { RulesVersionId = autreVersion.Id, Nom = "Agilité", Code = "A" };
+            db.SkillCategories.Add(catEtrangere);
+            db.SaveChanges();
+
+            db.Skills.Add(new Skill
+            {
+                Nom = "Balle Collante",
+                Categorie = SkillCategory.Agilite,
+                SkillCategoryDefId = catEtrangere.Id,   // ← incohérent
+                RulesVersionId = srcVersionId
+            });
+            db.SaveChanges();
+        }
+
+        int newVersionId;
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            var nouvelle = await svc.CreerVersionAsync(gameId, "Clone repare", 2, false, srcVersionId);
+            newVersionId = nouvelle.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var clone = await db.Skills
+                .SingleAsync(s => s.RulesVersionId == newVersionId && s.Nom == "Balle Collante");
+            var cat = await db.SkillCategories.FindAsync(clone.SkillCategoryDefId);
+            // la copie doit pointer vers une catégorie de SA version, nommée comme l'originale
+            Assert.Equal(newVersionId, cat!.RulesVersionId);
+            Assert.Equal("Agilité", cat.Nom);
+        }
+    }
+
+    [Fact]
+    public async Task ModifierSkill_RefuseUneCategorieDUneAutreVersion()
+    {
+        using var factory = new TestDbFactory();
+        int versionId, skillId, catEtrangereId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gameId, vId) = SeedVersion(db);
+            versionId = vId;
+            var catId = await DataSeeder.GetOrCreateCategorieAsync(db, versionId);
+
+            var autreVersion = new RulesVersion { GameId = gameId, Nom = "Autre", Ordre = 9 };
+            db.RulesVersions.Add(autreVersion);
+            db.SaveChanges();
+            var catEtrangere = new SkillCategoryDef { RulesVersionId = autreVersion.Id, Nom = "Force", Code = "F" };
+            db.SkillCategories.Add(catEtrangere);
+            db.SaveChanges();
+            catEtrangereId = catEtrangere.Id;
+
+            var skill = new Skill { Nom = "Blocage", Categorie = SkillCategory.Generale, SkillCategoryDefId = catId, RulesVersionId = versionId };
+            db.Skills.Add(skill); db.SaveChanges(); skillId = skill.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.ModifierSkillAsync(skillId, "Blocage", catEtrangereId, "", false, false));
+        }
+    }
+
+    [Fact]
+    public async Task CreerVersion_SiLeClonageEchoue_AucuneVersionResiduelle()
+    {
+        using var factory = new TestDbFactory();
+        int gameId, srcVersionId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);
+            gameId = gId; srcVersionId = vId;
+
+            // Une compétence dont la catégorie est introuvable ET dont aucune
+            // catégorie standard homonyme n'existe → le clonage doit échouer.
+            var autreVersion = new RulesVersion { GameId = gameId, Nom = "Autre", Ordre = 9 };
+            db.RulesVersions.Add(autreVersion);
+            db.SaveChanges();
+            var catEtrangere = new SkillCategoryDef { RulesVersionId = autreVersion.Id, Nom = "Agilité", Code = "A" };
+            db.SkillCategories.Add(catEtrangere);
+            db.SaveChanges();
+
+            db.Skills.Add(new Skill
+            {
+                Nom = "Cassée",
+                Categorie = SkillCategory.Agilite,
+                SkillCategoryDefId = catEtrangere.Id,
+                RulesVersionId = srcVersionId
+            });
+            db.SaveChanges();
+            // NOTE : la version source n'a AUCUNE catégorie → pas de repli possible
+        }
+
+        int versionsAvant;
+        using (var db = factory.CreateContext())
+            versionsAvant = await db.RulesVersions.CountAsync();
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.CreerVersionAsync(gameId, "Doit disparaitre", 2, false, srcVersionId));
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            Assert.Equal(versionsAvant, await db.RulesVersions.CountAsync());
+            Assert.Empty(await db.RulesVersions.Where(v => v.Nom == "Doit disparaitre").ToListAsync());
+        }
+    }
+
+    [Fact]
+    public async Task ActiverVersion_RendActiveEtDesactiveLautreDuMemeJeu()
+    {
+        using var factory = new TestDbFactory();
+        int gameId, v1Id, v2Id;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);   // v1 : active
+            gameId = gId; v1Id = vId;
+            var v2 = new RulesVersion { GameId = gameId, Nom = "Saison 4", Ordre = 2, EstActive = false };
+            db.RulesVersions.Add(v2); db.SaveChanges(); v2Id = v2.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.ActiverVersionAsync(v2Id);
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            Assert.True((await db.RulesVersions.FindAsync(v2Id))!.EstActive);
+            Assert.False((await db.RulesVersions.FindAsync(v1Id))!.EstActive);
+            // exactement une version active pour ce jeu
+            Assert.Equal(1, await db.RulesVersions.CountAsync(v => v.GameId == gameId && v.EstActive));
+        }
+    }
+
+    [Fact]
+    public async Task ActiverVersion_NaffectePasLautreJeu()
+    {
+        using var factory = new TestDbFactory();
+        int autreJeuVersionId, v2Id;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gameId, _) = SeedVersion(db);  // Blood Bowl, v1 active
+
+            var v2 = new RulesVersion { GameId = gameId, Nom = "Saison 4", Ordre = 2, EstActive = false };
+            db.RulesVersions.Add(v2);
+
+            // Un autre jeu, avec sa propre version active
+            var autreJeu = new Game { Nom = "Dungeon Bowl", Type = GameType.DungeonBowl };
+            db.Games.Add(autreJeu); db.SaveChanges();
+            var vAutre = new RulesVersion { GameId = autreJeu.Id, Nom = "Edition 2022", Ordre = 1, EstActive = true };
+            db.RulesVersions.Add(vAutre);
+            db.SaveChanges();
+            v2Id = v2.Id; autreJeuVersionId = vAutre.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.ActiverVersionAsync(v2Id);
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            // la version active de l'AUTRE jeu doit rester active
+            Assert.True((await db.RulesVersions.FindAsync(autreJeuVersionId))!.EstActive);
+        }
+    }
+
+    [Fact]
+    public async Task ActiverVersion_DejaActive_EstSansEffet()
+    {
+        using var factory = new TestDbFactory();
+        int gameId, v1Id;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);
+            gameId = gId; v1Id = vId;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.ActiverVersionAsync(v1Id);   // déjà active : idempotent
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            Assert.True((await db.RulesVersions.FindAsync(v1Id))!.EstActive);
+            Assert.Equal(1, await db.RulesVersions.CountAsync(v => v.GameId == gameId && v.EstActive));
         }
     }
 }

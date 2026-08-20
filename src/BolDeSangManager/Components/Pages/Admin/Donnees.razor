@@ -241,7 +241,16 @@
                 <RowTemplate>
                     <MudTd DataLabel="Nom">@context.Nom</MudTd>
                     <MudTd DataLabel="Ordre">@context.Ordre</MudTd>
-                    <MudTd DataLabel="Active">@(context.EstActive ? "Oui" : "Non")</MudTd>
+                    <MudTd DataLabel="Active">
+                        @if (context.EstActive)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Filled">Oui</MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">Non</MudText>
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Barème d'XP">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             TD @context.XpParTouchdown · Passe @context.XpParPasse ·
@@ -263,6 +272,13 @@
                         }
                     </MudTd>
                     <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small"
+                                       Color="@(context.EstActive ? Color.Success : Color.Default)"
+                                       Disabled="@context.EstActive"
+                                       title="@(context.EstActive
+                                           ? "Version déjà active — utilisée par défaut pour les nouvelles ligues"
+                                           : "Définir comme version active (utilisée par défaut pour les nouvelles ligues)")"
+                                       OnClick="@(() => ActiverVersion(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small"
                                        title="Modifier le barème d'XP de cette version"
                                        OnClick="@(() => EditerBareme(context))" />
@@ -505,6 +521,33 @@
         var dialog = await DialogService.ShowAsync<CreerVersionDialog>("Créer une nouvelle version", parameters);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled) await ChargerVersionsAsync();
+    }
+
+    async Task ActiverVersion(RulesVersion v)
+    {
+        var actuelle = _versions.FirstOrDefault(x => x.EstActive && x.Id != v.Id);
+        var message = actuelle is null
+            ? $"Rendre « {v.Nom} » active ? Elle sera utilisée par défaut pour les nouvelles ligues."
+            : $"Rendre « {v.Nom} » active ? « {actuelle.Nom} » ne le sera plus. "
+              + "Les ligues et équipes existantes ne sont pas modifiées.";
+
+        var ok = await DialogService.ShowMessageBox("Changer la version active", message, "Activer", "Annuler");
+        if (ok != true) return;
+
+        try
+        {
+            await DataEditService.ActiverVersionAsync(v.Id);
+            Snackbar.Add($"« {v.Nom} » est maintenant la version active.", Severity.Success);
+            await ChargerVersionsAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible de changer la version active.", Severity.Error);
+        }
     }
 
     async Task SupprimerVersion(RulesVersion v)

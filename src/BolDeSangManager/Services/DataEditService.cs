@@ -1,6 +1,7 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Data.Seeding;
 using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
@@ -21,27 +22,41 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
     public async Task<RulesVersion> CreerVersionAsync(int gameId, string nom, int ordre, bool estActive, int? cloneFromVersionId)
     {
-        // Si estActive, désactiver les autres versions actives du même jeu
-        if (estActive)
+        // Tout est fait dans UNE transaction : si le clonage échoue, la version
+        // ne doit pas rester en base à moitié remplie (sinon la liste se pollue
+        // de versions vides après chaque erreur).
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
         {
-            var actives = await db.RulesVersions.Where(v => v.GameId == gameId && v.EstActive).ToListAsync();
-            foreach (var a in actives) a.EstActive = false;
+            // Si estActive, désactiver les autres versions actives du même jeu
+            if (estActive)
+            {
+                var actives = await db.RulesVersions.Where(v => v.GameId == gameId && v.EstActive).ToListAsync();
+                foreach (var a in actives) a.EstActive = false;
+            }
+
+            var nouvelle = new RulesVersion { GameId = gameId, Nom = nom, Ordre = ordre, EstActive = estActive };
+            db.RulesVersions.Add(nouvelle);
+            await db.SaveChangesAsync();
+
+            if (cloneFromVersionId is int srcId)
+                await ClonerVersionAsync(srcId, nouvelle.Id);
+
+            await tx.CommitAsync();
+            logger.LogInformation("Version créée : {Nom} (id={Id}) sur Game={GameId} (cloneFrom={Clone})", nom, nouvelle.Id, gameId, cloneFromVersionId);
+            return nouvelle;
         }
-
-        var nouvelle = new RulesVersion { GameId = gameId, Nom = nom, Ordre = ordre, EstActive = estActive };
-        db.RulesVersions.Add(nouvelle);
-        await db.SaveChangesAsync();
-
-        if (cloneFromVersionId is int srcId)
-            await ClonerVersionAsync(srcId, nouvelle.Id);
-
-        logger.LogInformation("Version créée : {Nom} (id={Id}) sur Game={GameId} (cloneFrom={Clone})", nom, nouvelle.Id, gameId, cloneFromVersionId);
-        return nouvelle;
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
     private async Task ClonerVersionAsync(int sourceVersionId, int destVersionId)
     {
-        await using var tx = await db.Database.BeginTransactionAsync();
+        // Pas de transaction ici : l'appelant en ouvre une (transactions
+        // imbriquées interdites par EF Core sur SQLite).
 
         // 0. Reprendre le barème d'XP de la version source (R6)
         var vSource = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == sourceVersionId);
@@ -76,16 +91,38 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
         // 2. Cloner les Skills + map oldId → newSkill (en rattachant à la catégorie clonée)
         var sourceSkills = await db.Skills.Where(s => s.RulesVersionId == sourceVersionId).ToListAsync();
+
+        // Repli par NOM : si une compétence source pointe vers une catégorie qui
+        // n'appartient pas à la version source (donnée héritée d'un incident), on
+        // la rattache à la catégorie clonée portant le nom standard de son enum.
+        // Sans cela on recopiait l'id étranger tel quel → FOREIGN KEY constraint failed.
+        var categoriesParNom = categorieMap.Values
+            .ToDictionary(c => c.Nom, c => c, StringComparer.OrdinalIgnoreCase);
+
         var skillMap = new Dictionary<int, Skill>();
         foreach (var src in sourceSkills)
         {
+            SkillCategoryDef? cible;
+            if (!categorieMap.TryGetValue(src.SkillCategoryDefId, out cible))
+            {
+                var nomStandard = StandardSkillCategories.Nom(src.Categorie);
+                if (!categoriesParNom.TryGetValue(nomStandard, out cible))
+                    throw new InvalidOperationException(
+                        $"La compétence « {src.Nom} » référence une catégorie absente de sa version " +
+                        $"et aucune catégorie « {nomStandard} » n'existe pour la remplacer. " +
+                        "Corrigez la catégorie de cette compétence avant de cloner.");
+
+                logger.LogWarning(
+                    "Clonage : compétence « {Nom} » rattachée à une catégorie étrangère (id={Id}), " +
+                    "repli sur « {Cible} » de la version clonée.",
+                    src.Nom, src.SkillCategoryDefId, cible.Nom);
+            }
+
             var copie = new Skill
             {
                 Nom = src.Nom,
                 Categorie = src.Categorie,
-                SkillCategoryDefId = categorieMap.TryGetValue(src.SkillCategoryDefId, out var newCat)
-                    ? newCat.Id
-                    : src.SkillCategoryDefId,
+                SkillCategoryDefId = cible.Id,
                 Description = src.Description,
                 EstElite = src.EstElite,
                 EstTrait = src.EstTrait,
@@ -223,8 +260,41 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
-        await tx.CommitAsync();
         logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count);
+    }
+
+    /// <summary>
+    /// Rend une version active pour son jeu. Une seule version active par jeu :
+    /// les autres sont désactivées dans la même transaction.
+    /// C'est la version utilisée par défaut à la création d'une ligue.
+    /// </summary>
+    public async Task ActiverVersionAsync(int id)
+    {
+        var version = await db.RulesVersions.FindAsync(id)
+            ?? throw new InvalidOperationException("Version introuvable");
+
+        if (version.EstActive)
+            return; // déjà active : rien à faire (idempotent)
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var autres = await db.RulesVersions
+                .Where(v => v.GameId == version.GameId && v.EstActive && v.Id != id)
+                .ToListAsync();
+            foreach (var a in autres) a.EstActive = false;
+
+            version.EstActive = true;
+            await db.SaveChangesAsync();
+
+            await tx.CommitAsync();
+            logger.LogInformation("Version activée : {Nom} (id={Id}) pour Game={GameId}", version.Nom, id, version.GameId);
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
     }
 
     public async Task SupprimerVersionAsync(int id)
@@ -239,11 +309,24 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         if (nbEquipes > 0)
             throw new InvalidOperationException($"{nbEquipes} équipe(s) utilisent un type de cette version. Supprimez ces équipes d'abord.");
 
+        // League → RulesVersion est en cascade par convention EF : sans ce garde-fou,
+        // supprimer une version effacerait silencieusement les ligues qui s'en servent.
+        var nbLigues = await db.Leagues.CountAsync(l => l.RulesVersionId == id);
+        if (nbLigues > 0)
+            throw new InvalidOperationException($"{nbLigues} ligue(s) utilisent cette version. Supprimez ces ligues d'abord.");
+
         await using var tx = await db.Database.BeginTransactionAsync();
         try
         {
             var teamTypes = await db.TeamTypes.Where(t => t.RulesVersionId == id).ToListAsync();
             db.TeamTypes.RemoveRange(teamTypes);
+            await db.SaveChangesAsync();
+
+            // La Réserve doit partir AVANT les compétences et les catégories :
+            // PoolPositionSkill → Skill et PoolPositionCategoryAccess → SkillCategoryDef
+            // sont en Restrict avec une FK non nullable.
+            var poolPositions = await db.PoolPositions.Where(p => p.RulesVersionId == id).ToListAsync();
+            db.PoolPositions.RemoveRange(poolPositions);
             await db.SaveChangesAsync();
 
             var skills = await db.Skills.Where(s => s.RulesVersionId == id).ToListAsync();
@@ -705,6 +788,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
     public async Task<Skill> CreerSkillAsync(int versionId, Skill data)
     {
+        await VerifierCategorieDeLaVersionAsync(versionId, data.SkillCategoryDefId);
         data.RulesVersionId = versionId;
         db.Skills.Add(data);
         await db.SaveChangesAsync();
@@ -714,12 +798,26 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     public async Task ModifierSkillAsync(int id, string nom, int categorieId, string description, bool estElite, bool estTrait)
     {
         var s = await db.Skills.FindAsync(id) ?? throw new InvalidOperationException("Skill introuvable");
+        await VerifierCategorieDeLaVersionAsync(s.RulesVersionId, categorieId);
         s.Nom = nom;
         s.SkillCategoryDefId = categorieId;
         s.Description = description;
         s.EstElite = estElite;
         s.EstTrait = estTrait;
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Une compétence ne peut pointer que vers une catégorie de SA PROPRE version.
+    /// Garde-fou contre la corruption silencieuse qui casse ensuite le clonage.
+    /// </summary>
+    private async Task VerifierCategorieDeLaVersionAsync(int versionId, int categorieId)
+    {
+        var ok = await db.SkillCategories
+            .AnyAsync(c => c.Id == categorieId && c.RulesVersionId == versionId);
+        if (!ok)
+            throw new InvalidOperationException(
+                "La catégorie choisie n'appartient pas à cette version de règles.");
     }
 
     public async Task SupprimerSkillAsync(int id)

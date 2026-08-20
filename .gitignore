@@ -13,3 +13,6 @@ tests/**/obj/
 .env
 .env.*
 !.env.example
+
+# Artefacts de travail de l'assistant (plans, captures d'audit)
+.hermes/
