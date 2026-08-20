@@ -35,7 +35,7 @@
                                  Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
             </MudItem>
             <MudItem xs="6">
-                <MudNumericField T="int" @bind-Value="_mvp" Label="Bonus MVP"
+                <MudNumericField T="int" @bind-Value="_mvp" Label="@($"Bonus {DisplayHelpers.LabelMvp}")"
                                  Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
             </MudItem>
         </MudGrid>

@@ -1153,6 +1153,16 @@ public class LeagueServiceTests : IDisposable
         Assert.Equal(12, stockee.Hour);                          // midi : marge de 12h
     }
 
+    [Fact]
+    public void LabelMvp_EstLeTermeFrancaisJPV()
+    {
+        // L'association dit « JPV », pas « MVP ». Le libellé est centralisé
+        // dans DisplayHelpers : c'est le seul point à traduire.
+        Assert.Equal("JPV", DisplayHelpers.LabelMvp);
+        Assert.Contains("JPV", DisplayHelpers.LabelMvpLong);
+        Assert.Contains("Valeureux", DisplayHelpers.LabelMvpLong);
+    }
+
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService
     {

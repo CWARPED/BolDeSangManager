@@ -102,7 +102,7 @@ else
         </MudAlert>
 
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3">
-            PSP : TD=3 pts | Passe=1 pt | Interception=2 pts | Élimination=2 pts | MVP=4 pts
+            PSP : TD=3 pts | Passe=1 pt | Interception=2 pts | Élimination=2 pts | @DisplayHelpers.LabelMvp=4 pts
         </MudText>
 
         <!-- Table domicile -->
@@ -118,7 +118,7 @@ else
                     <MudTh Style="text-align:center;min-width:60px">Passes</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Int</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Élim</MudTh>
-                    <MudTh Style="text-align:center;min-width:50px">MVP</MudTh>
+                    <MudTh Style="text-align:center;min-width:50px">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="min-width:160px">Blessure</MudTh>
                     <MudTh Style="min-width:120px">Stat</MudTh>
                 </HeaderContent>
@@ -129,7 +129,7 @@ else
                     <MudTd DataLabel="Passes"><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd DataLabel="Interceptions"><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd DataLabel="Éliminations"><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="MVP" Style="text-align:center">
+                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">
                         <MudCheckBox Value="@(r.TeamPlayerId == _mvpDomId)" Color="Color.Warning"
                                      ValueChanged="@((bool v) => { if (v) _mvpDomId = r.TeamPlayerId; else if (_mvpDomId == r.TeamPlayerId) _mvpDomId = null; })" />
                     </MudTd>
@@ -171,7 +171,7 @@ else
                     <MudTh Style="text-align:center;min-width:60px">Passes</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Int</MudTh>
                     <MudTh Style="text-align:center;min-width:60px">Élim</MudTh>
-                    <MudTh Style="text-align:center;min-width:50px">MVP</MudTh>
+                    <MudTh Style="text-align:center;min-width:50px">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="min-width:160px">Blessure</MudTh>
                     <MudTh Style="min-width:120px">Stat</MudTh>
                 </HeaderContent>
@@ -182,7 +182,7 @@ else
                     <MudTd DataLabel="Passes"><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd DataLabel="Interceptions"><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
                     <MudTd DataLabel="Éliminations"><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="MVP" Style="text-align:center">
+                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">
                         <MudCheckBox Value="@(r.TeamPlayerId == _mvpExtId)" Color="Color.Warning"
                                      ValueChanged="@((bool v) => { if (v) _mvpExtId = r.TeamPlayerId; else if (_mvpExtId == r.TeamPlayerId) _mvpExtId = null; })" />
                     </MudTd>
@@ -285,7 +285,7 @@ else
                     <MudTh Style="text-align:center">Passes</MudTh>
                     <MudTh Style="text-align:center">Int</MudTh>
                     <MudTh Style="text-align:center">Élim</MudTh>
-                    <MudTh Style="text-align:center">MVP</MudTh>
+                    <MudTh Style="text-align:center">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="text-align:center">PSP</MudTh>
                     <MudTh>Blessure</MudTh>
                 </HeaderContent>
@@ -297,7 +297,7 @@ else
                     <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
                     <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
                     <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
-                    <MudTd DataLabel="MVP" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
+                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
                     <MudTd DataLabel="PSP" Style="text-align:center">
                         @if (r.PspGagnes > 0)
                         {

@@ -98,7 +98,7 @@ else
                     <MudTh Style="text-align:center">Passes</MudTh>
                     <MudTh Style="text-align:center">Int</MudTh>
                     <MudTh Style="text-align:center">Élim</MudTh>
-                    <MudTh Style="text-align:center">MVP</MudTh>
+                    <MudTh Style="text-align:center">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="text-align:center">PSP match</MudTh>
                     <MudTh Style="text-align:center">PSP total</MudTh>
                     <MudTh>Blessure</MudTh>
@@ -115,7 +115,7 @@ else
                     <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
                     <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
                     <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
-                    <MudTd DataLabel="MVP" Style="text-align:center">@(r.EstMVP ? "★" : "—")</MudTd>
+                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">@(r.EstMVP ? "★" : "—")</MudTd>
                     <MudTd DataLabel="PSP match" Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
                     <MudTd DataLabel="PSP total" Style="text-align:center">
                         <b>@(r.TeamPlayer?.PointsStarPlayer ?? 0)</b>

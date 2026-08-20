@@ -791,3 +791,14 @@ h1:focus {
         max-width: calc(100vw - 24px) !important;
     }
 }
+
+/* Libellé « JPV » accolé à l'étoile de la feuille de match : l'icône seule
+   n'était pas explicite. Collé à l'étoile (l'IconButton porte déjà ses
+   marges) et cliquable, comme l'étoile. */
+.mvp-label {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    margin-left: -6px;
+    margin-right: 2px;
+    user-select: none;
+}

@@ -108,7 +108,9 @@ Dans les deux sens la copie est **indépendante** (modifier ou supprimer l'un n'
 
 **DbSeeder** : s'exécute à chaque démarrage via `DbSeeder.SeedAsync(app.Services)`. Il est idempotent (vérifie `!db.Games.Any()` avant d'insérer). Appelle aussi `db.Database.MigrateAsync()` — les nouvelles migrations sont donc appliquées automatiquement au démarrage.
 
-**DisplayHelpers** : `Helpers/DisplayHelpers.cs` centralise les méthodes `LeagueColor`, `LeagueLabel`, `LeagueFormatLabel`, `EstFormatLibre`, `AvecPlayoffs`, `MatchColor`, `MatchLabel`, `MatchBorderStyle`. Importées globalement via `@using static BolDeSangManager.Helpers.DisplayHelpers` dans `Components/_Imports.razor` — appeler directement sans qualificateur dans tous les composants.
+**DisplayHelpers** : `Helpers/DisplayHelpers.cs` centralise les méthodes `LeagueColor`, `LeagueLabel`, `LeagueFormatLabel`, `EstFormatLibre`, `AvecPlayoffs`, `MatchColor`, `MatchLabel`, `MatchBorderStyle`, ainsi que les constantes `LabelMvp` / `LabelMvpLong`. Importées globalement via `@using static BolDeSangManager.Helpers.DisplayHelpers` dans `Components/_Imports.razor` — appeler directement sans qualificateur dans tous les composants.
+
+⚠️ **Vocabulaire : on dit « JPV » (Joueur le Plus Valeureux), pas « MVP ».** Le libellé affiché vient de `DisplayHelpers.LabelMvp` — ne jamais réécrire « MVP » en dur dans une vue. Les identifiants du code (`EstMVP`, `AwardType.MVP`, `BonusMvp`, `XpBonusMvp`) gardent en revanche leur nom : ce sont des noms techniques, persistés en base pour certains. Plus généralement, tout nouveau libellé destiné à être traduit un jour passe par un helper plutôt que par du texte en dur (cf. ticket #7, i18n).
 
 **Formats de ligue** (`LeagueFormat`) : `RoundRobin`, `RoundRobinAvecPlayoffs`, `Libre`, `LibreAvecPlayoffs`. ⚠️ Ces valeurs sont **persistées en int** : ne jamais réordonner l'enum, toute nouvelle entrée s'ajoute **à la fin** (un test le verrouille). Ne pas comparer les formats à la main dans les composants : utiliser `DisplayHelpers.EstFormatLibre(...)` et `DisplayHelpers.AvecPlayoffs(...)`.
 

@@ -105,7 +105,7 @@ else
                     <MudTh Style="text-align:center">Passes</MudTh>
                     <MudTh Style="text-align:center">Int</MudTh>
                     <MudTh Style="text-align:center">Élim</MudTh>
-                    <MudTh Style="text-align:center">MVP</MudTh>
+                    <MudTh Style="text-align:center">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="text-align:center">PSP</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
@@ -114,7 +114,7 @@ else
                     <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
                     <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
                     <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
-                    <MudTd DataLabel="MVP" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
+                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
                     <MudTd DataLabel="PSP" Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
                 </RowTemplate>
             </MudTable>
@@ -136,7 +136,7 @@ else
     else if (_equipeDomicile is not null && _equipeExterieur is not null)
     {
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3" Icon="@Icons.Material.Filled.Info">
-            TD=@_bareme.ParTouchdown pts · Comp=@_bareme.ParPasse · Int=@_bareme.ParInterception · Élim=@_bareme.ParElimination · MVP=@_bareme.BonusMvp — n'ajoutez que les joueurs ayant marqué des stats.
+            TD=@_bareme.ParTouchdown pts · Comp=@_bareme.ParPasse · Int=@_bareme.ParInterception · Élim=@_bareme.ParElimination · @DisplayHelpers.LabelMvp=@_bareme.BonusMvp — n'ajoutez que les joueurs ayant marqué des stats.
         </MudAlert>
 
         <!-- Score en direct — sticky -->
@@ -197,8 +197,14 @@ else
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                                     <MudIconButton Icon="@(r.EstMVP ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
                                                    Color="@(r.EstMVP ? Color.Warning : Color.Default)"
-                                                   Size="Size.Medium" title="MVP"
+                                                   Size="Size.Medium" title="@($"Désigner comme {DisplayHelpers.LabelMvpLong}")"
                                                    OnClick="@(() => ToggleMvp(_recordsDomicile, r))" />
+                                    <MudText Typo="Typo.caption" Class="mvp-label"
+                                             Color="@(r.EstMVP ? Color.Warning : Color.Secondary)"
+                                             Style="cursor:pointer"
+                                             @onclick="@(() => ToggleMvp(_recordsDomicile, r))">
+                                        @DisplayHelpers.LabelMvp
+                                    </MudText>
                                     <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
                                                    title="Retirer" OnClick="@(() => RetirerDomicile(r))" />
                                 </MudStack>
@@ -261,8 +267,14 @@ else
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
                                     <MudIconButton Icon="@(r.EstMVP ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
                                                    Color="@(r.EstMVP ? Color.Warning : Color.Default)"
-                                                   Size="Size.Medium" title="MVP"
+                                                   Size="Size.Medium" title="@($"Désigner comme {DisplayHelpers.LabelMvpLong}")"
                                                    OnClick="@(() => ToggleMvp(_recordsExterieur, r))" />
+                                    <MudText Typo="Typo.caption" Class="mvp-label"
+                                             Color="@(r.EstMVP ? Color.Warning : Color.Secondary)"
+                                             Style="cursor:pointer"
+                                             @onclick="@(() => ToggleMvp(_recordsExterieur, r))">
+                                        @DisplayHelpers.LabelMvp
+                                    </MudText>
                                     <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
                                                    title="Retirer" OnClick="@(() => RetirerExterieur(r))" />
                                 </MudStack>

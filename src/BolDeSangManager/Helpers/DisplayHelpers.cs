@@ -5,6 +5,21 @@ namespace BolDeSangManager.Helpers;
 
 public static class DisplayHelpers
 {
+    /// <summary>
+    /// Libellé du meilleur joueur d'un match : « JPV » (Joueur le Plus Valeureux),
+    /// terme français employé par l'association plutôt que l'anglais « MVP ».
+    ///
+    /// Centralisé ici — et non recopié dans chaque vue — pour rester le seul
+    /// point à modifier, ce qui prépare l'internationalisation de l'interface.
+    /// Le code, lui, conserve les identifiants d'origine (`EstMVP`,
+    /// `AwardType.MVP`, `BonusMvp`) : ce sont des noms techniques, pas de
+    /// l'affichage, et les renommer toucherait la base et les tests sans gain.
+    /// </summary>
+    public const string LabelMvp = "JPV";
+
+    /// <summary>Forme longue, pour les infobulles et les textes d'aide.</summary>
+    public const string LabelMvpLong = "JPV (Joueur le Plus Valeureux)";
+
     public static Color LeagueColor(LeagueStatus s) => s switch
     {
         LeagueStatus.EnCours     => Color.Success,
