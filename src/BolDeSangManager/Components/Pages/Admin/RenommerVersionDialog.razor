@@ -1,0 +1,59 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_nom" Label="Nom de la version" Variant="Variant.Outlined"
+                      MaxLength="100" Immediate="true" AutoFocus="true"
+                      HelperText="Ex : Saison 4, Édition 2026 — doit être unique pour ce jeu." />
+        <MudText Typo="Typo.caption" Style="color:#9e9e9e" Class="mt-2">
+            Renommer est sans risque : les ligues, équipes et joueurs restent rattachés à cette
+            version. Seul le libellé affiché change.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="Valider"
+                   Disabled="@(string.IsNullOrWhiteSpace(_nom) || _saving)">
+            @(_saving ? "Enregistrement…" : "Renommer")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public RulesVersion Version { get; set; } = default!;
+
+    string _nom = "";
+    bool _saving;
+
+    protected override void OnInitialized() => _nom = Version.Nom;
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Valider()
+    {
+        _saving = true;
+        try
+        {
+            await DataEditService.RenommerVersionAsync(Version.Id, _nom);
+            Snackbar.Add("Version renommée.", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible de renommer cette version.", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

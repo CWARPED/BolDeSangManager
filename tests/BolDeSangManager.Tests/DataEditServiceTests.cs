@@ -589,4 +589,138 @@ public class DataEditServiceTests
             Assert.Equal(1, await db.RulesVersions.CountAsync(v => v.GameId == gameId && v.EstActive));
         }
     }
+
+    [Fact]
+    public async Task RenommerVersion_ChangeLeNomSansToucherAuReste()
+    {
+        using var factory = new TestDbFactory();
+        int versionId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (_, vId) = SeedVersion(db);
+            versionId = vId;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.RenommerVersionAsync(versionId, "  Édition 2026 — Saison 1  ");
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var v = await db.RulesVersions.FindAsync(versionId);
+            Assert.Equal("Édition 2026 — Saison 1", v!.Nom);   // trim appliqué
+            Assert.True(v.EstActive);                           // statut préservé
+            Assert.Equal(1, v.Ordre);                           // ordre préservé
+        }
+    }
+
+    [Fact]
+    public async Task RenommerVersion_RefuseUnNomVide()
+    {
+        using var factory = new TestDbFactory();
+        int versionId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (_, vId) = SeedVersion(db);
+            versionId = vId;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.RenommerVersionAsync(versionId, "   "));
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.Equal("Saison 3", (await db.RulesVersions.FindAsync(versionId))!.Nom);
+    }
+
+    [Fact]
+    public async Task RenommerVersion_RefuseUnNomDejaPrisDansLeMemeJeu()
+    {
+        using var factory = new TestDbFactory();
+        int v2Id;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gameId, _) = SeedVersion(db);      // "Saison 3"
+            var v2 = new RulesVersion { GameId = gameId, Nom = "Saison 4", Ordre = 2 };
+            db.RulesVersions.Add(v2); db.SaveChanges(); v2Id = v2.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            // casse différente : le doublon doit quand même être détecté
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.RenommerVersionAsync(v2Id, "saison 3"));
+            Assert.Contains("s'appelle déjà", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.Equal("Saison 4", (await db.RulesVersions.FindAsync(v2Id))!.Nom);
+    }
+
+    [Fact]
+    public async Task RenommerVersion_AutoriseLeMemeNomDansUnAutreJeu()
+    {
+        using var factory = new TestDbFactory();
+        int vAutreJeuId;
+
+        using (var db = factory.CreateContext())
+        {
+            SeedVersion(db);   // Blood Bowl / "Saison 3"
+
+            var autreJeu = new Game { Nom = "Dungeon Bowl", Type = GameType.DungeonBowl };
+            db.Games.Add(autreJeu); db.SaveChanges();
+            var v = new RulesVersion { GameId = autreJeu.Id, Nom = "Edition 2022", Ordre = 1 };
+            db.RulesVersions.Add(v); db.SaveChanges(); vAutreJeuId = v.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            // "Saison 3" existe déjà, mais pour l'AUTRE jeu → autorisé
+            await svc.RenommerVersionAsync(vAutreJeuId, "Saison 3");
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.Equal("Saison 3", (await db.RulesVersions.FindAsync(vAutreJeuId))!.Nom);
+    }
+
+    [Fact]
+    public async Task RenommerVersion_NeCassePasLesLiguesQuiLUtilisent()
+    {
+        using var factory = new TestDbFactory();
+        int versionId, leagueId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gameId, vId) = SeedVersion(db);
+            versionId = vId;
+            var user = new Data.ApplicationUser { UserName = "c", Email = "c@x.fr", PseudoCoach = "C" };
+            db.Users.Add(user); db.SaveChanges();
+            var league = new League { Nom = "Ligue", GameId = gameId, RulesVersionId = versionId, CommissaireId = user.Id };
+            db.Leagues.Add(league); db.SaveChanges(); leagueId = league.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.RenommerVersionAsync(versionId, "Nouveau nom");
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            // la ligue pointe toujours sur la même version, désormais renommée
+            var league = await db.Leagues.FindAsync(leagueId);
+            Assert.Equal(versionId, league!.RulesVersionId);
+            Assert.Equal("Nouveau nom", (await db.RulesVersions.FindAsync(versionId))!.Nom);
+        }
+    }
 }

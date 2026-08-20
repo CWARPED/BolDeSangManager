@@ -264,6 +264,40 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     }
 
     /// <summary>
+    /// Renomme une version de règles. Le nom doit être non vide et unique
+    /// au sein du même jeu (comparaison insensible à la casse).
+    /// Renommer est TOUJOURS autorisé, même sur une version active ou utilisée
+    /// par des ligues : tout est lié par id, jamais par libellé.
+    /// </summary>
+    public async Task RenommerVersionAsync(int id, string nouveauNom)
+    {
+        var version = await db.RulesVersions.FindAsync(id)
+            ?? throw new InvalidOperationException("Version introuvable");
+
+        var nom = (nouveauNom ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom de la version est obligatoire.");
+        if (nom.Length > 100)
+            throw new InvalidOperationException("Le nom de la version ne peut pas dépasser 100 caractères.");
+
+        if (string.Equals(nom, version.Nom, StringComparison.Ordinal))
+            return; // aucun changement
+
+        var doublon = await db.RulesVersions
+            .AnyAsync(v => v.GameId == version.GameId
+                        && v.Id != id
+                        && v.Nom.ToLower() == nom.ToLower());
+        if (doublon)
+            throw new InvalidOperationException(
+                $"Une autre version de ce jeu s'appelle déjà « {nom} ».");
+
+        var ancien = version.Nom;
+        version.Nom = nom;
+        await db.SaveChangesAsync();
+        logger.LogInformation("Version renommée : « {Ancien} » → « {Nouveau} » (id={Id})", ancien, nom, id);
+    }
+
+    /// <summary>
     /// Rend une version active pour son jeu. Une seule version active par jeu :
     /// les autres sont désactivées dans la même transaction.
     /// C'est la version utilisée par défaut à la création d'une ligue.

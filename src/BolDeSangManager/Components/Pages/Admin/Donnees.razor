@@ -236,7 +236,7 @@
                     <MudTh>Active</MudTh>
                     <MudTh>Barème d'XP</MudTh>
                     <MudTh>Révision</MudTh>
-                    <MudTh>Actions</MudTh>
+                    <MudTh Style="width:16%; white-space:nowrap">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Nom">@context.Nom</MudTd>
@@ -279,6 +279,9 @@
                                            ? "Version déjà active — utilisée par défaut pour les nouvelles ligues"
                                            : "Définir comme version active (utilisée par défaut pour les nouvelles ligues)")"
                                        OnClick="@(() => ActiverVersion(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       title="Renommer cette version"
+                                       OnClick="@(() => RenommerVersion(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small"
                                        title="Modifier le barème d'XP de cette version"
                                        OnClick="@(() => EditerBareme(context))" />
@@ -521,6 +524,15 @@
         var dialog = await DialogService.ShowAsync<CreerVersionDialog>("Créer une nouvelle version", parameters);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled) await ChargerVersionsAsync();
+    }
+
+    async Task RenommerVersion(RulesVersion v)
+    {
+        var parameters = new DialogParameters<RenommerVersionDialog> { { x => x.Version, v } };
+        var dialog = await DialogService.ShowAsync<RenommerVersionDialog>("Renommer la version", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+            await ChargerVersionsAsync();
     }
 
     async Task ActiverVersion(RulesVersion v)
