@@ -397,3 +397,123 @@ h1:focus {
         text-align: left !important;
     }
 }
+
+/* ------------------------------------------------------------
+   m2 — cibles tactiles (audit R9 / carte R9c)
+   L'app est utilisée debout, au doigt, pendant les tournois.
+   Recommandation Apple/Google : 44px. Mesuré avant correction :
+   flèches des champs numériques 20x20, bouton agenda 26x26,
+   boutons Size.Small 31px de haut.
+   Uniquement sous 600px : le desktop garde sa densité.
+   ------------------------------------------------------------ */
+@media (max-width: 599.98px) {
+
+    /* flèches ▲▼ des MudNumericField (Gains, Variation fans, XP) —
+       c'était le pire cas de tout l'audit : 20x20px.
+       !important obligatoire : la feuille de MudBlazor est chargée APRÈS
+       app.css et remet min-height:auto sur ces boutons. */
+    .mud-input-adornment .mud-button-root,
+    .mud-input .mud-icon-button,
+    .mud-input-numeric-spin .mud-button-root {
+        min-height: 34px !important;
+        min-width: 34px !important;
+        padding: 4px !important;
+    }
+
+    /* boutons icône hors AppBar (agenda, supprimer une ligne, +/- de stats) */
+    .mud-main-content .mud-icon-button:not(.mud-input-adornment .mud-icon-button) {
+        min-height: 44px !important;
+        min-width: 44px !important;
+    }
+
+    /* boutons texte/contour Size.Small : 31px -> 44px */
+    .mud-main-content .mud-button-root.mud-button {
+        min-height: 44px !important;
+    }
+
+    /* liens de navigation du tiroir : 41px -> 48px, plus confortables
+       en liste et évitent les erreurs de sélection au pouce */
+    .mud-drawer .mud-nav-link {
+        min-height: 48px !important;
+    }
+
+    /* liens texte dans les tableaux (nom d'équipe du classement) :
+       24px de haut, trop fin pour être touché sans erreur */
+    .mud-main-content .mud-table-cell .mud-link,
+    .mud-main-content td .mud-link {
+        display: inline-block;
+        padding: 10px 0;
+        line-height: 1.3;
+    }
+
+    /* interrupteurs et cases à cocher (24x24) : on élargit la zone
+       cliquable sans grossir le visuel */
+    .mud-main-content .mud-switch-base,
+    .mud-main-content .mud-checkbox > .mud-button-root {
+        min-height: 44px !important;
+        min-width: 44px !important;
+    }
+
+    /* ------------------------------------------------------------
+       m3 — texte sous 12px (sous-titres de poste sur la fiche
+       d'équipe, étiquettes de compétences). Illisible à bout de
+       bras dans un gymnase.
+       ------------------------------------------------------------ */
+    .mud-main-content [style*="font-size:10px"],
+    .mud-main-content [style*="font-size: 10px"],
+    .mud-main-content [style*="font-size:11px"],
+    .mud-main-content [style*="font-size: 11px"] {
+        font-size: 12px !important;
+    }
+
+    .mud-main-content .mud-typography-caption {
+        font-size: 0.78rem;
+    }
+}
+
+/* ------------------------------------------------------------
+   m1 — onglets compacts sous 600px (audit R9 / carte R9d)
+   Mesuré avant correction : 800px de contenu d'onglets pour 360px
+   d'écran sur /ligues/{id} (Classement / Matchs / Équipes /
+   Calendrier / Règlement) — on ne voyait qu'un onglet et demi et
+   les onglets Calendrier et Règlement étaient invisibles au
+   premier coup d'œil.
+   Chaque MudTab a une largeur MINIMALE de 160px imposée par
+   MudBlazor : c'est elle qu'il faut lever, sinon rien ne bouge.
+   ------------------------------------------------------------ */
+@media (max-width: 599.98px) {
+    .tabs-compact .mud-tab {
+        /* MudBlazor écrit min-width:160px en style INLINE sur chaque onglet
+           (5 x 160 = 800px pour 360px d'écran). Un style inline ne peut être
+           battu que par !important — sans lui cette règle est ignorée. */
+        min-width: 0 !important;
+        flex: 1 1 0;
+        padding-left: 4px;
+        padding-right: 4px;
+        font-size: 0.66rem;
+        letter-spacing: 0;
+        line-height: 1.15;
+        /* icône au-dessus du libellé plutôt qu'à côté : deux fois
+           moins large, et le libellé reste lisible */
+        flex-direction: column;
+        gap: 2px;
+        min-height: 56px;
+    }
+
+    /* l'icône n'a plus besoin de sa marge latérale en mode colonne */
+    .tabs-compact .mud-tab .mud-icon-root {
+        margin: 0 !important;
+        font-size: 1.15rem;
+    }
+
+    /* la barre d'onglets occupe toute la largeur, sans flèches de
+       défilement puisque tout tient désormais à l'écran */
+    .tabs-compact .mud-tabs-tabbar-inner,
+    .tabs-compact .mud-tabs-tabbar-wrapper {
+        width: 100% !important;
+    }
+
+    .tabs-compact .mud-tabs-scroll-button {
+        display: none;
+    }
+}

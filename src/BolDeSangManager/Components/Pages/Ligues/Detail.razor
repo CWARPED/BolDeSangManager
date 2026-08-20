@@ -117,7 +117,7 @@ else
         </MudPaper>
     }
 
-    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-4">
+    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4">
         <!-- Classement -->
         <MudTabPanel Text="Classement" Icon="@Icons.Material.Filled.Leaderboard">
             @foreach (var division in _ligue.Divisions.OrderBy(d => d.Ordre))

@@ -70,7 +70,7 @@ else
         </MudItem>
     </MudGrid>
 
-    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-4">
+    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4">
         <!-- Effectif -->
         <MudTabPanel Text="@($"Effectif ({_equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite)})")" Icon="@Icons.Material.Filled.Group">
             <div style="overflow-x:auto">
