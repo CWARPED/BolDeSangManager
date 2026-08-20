@@ -9,8 +9,11 @@
                        Color="Color.Inherit"
                        Edge="Edge.Start"
                        OnClick="@ToggleDrawer" />
-        <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="ml-1 text-transform-none px-2">
-            <MudText Typo="Typo.h6"><b>BolDeSang Manager</b></MudText>
+        <MudButton Href="/" Variant="Variant.Text" Color="Color.Inherit" Class="ml-1 text-transform-none px-2 appbar-title">
+            @* Titre complet à partir de sm ; abrégé sur téléphone pour éviter le retour à la ligne
+               et le débordement horizontal de l'AppBar (audit responsive R9 / M1). *@
+            <MudText Typo="Typo.h6" Class="d-none d-sm-flex"><b>BolDeSang Manager</b></MudText>
+            <MudText Typo="Typo.h6" Class="d-flex d-sm-none"><b>BDS Manager</b></MudText>
         </MudButton>
         <MudSpacer />
         <AuthorizeView>

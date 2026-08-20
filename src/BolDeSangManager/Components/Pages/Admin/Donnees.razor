@@ -63,23 +63,23 @@
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd>
+                    <MudTd DataLabel="Poste">
                         <div style="font-weight:600">@context.Nom</div>
                         @if (!string.IsNullOrEmpty(context.MotsCles))
                         {
                             <div style="font-size:10px; color:#9e9e9e; font-style:italic">@context.MotsCles.Replace(",", ", ")</div>
                         }
                     </MudTd>
-                    <MudTd Style="text-align:center">@context.QuantiteMax</MudTd>
-                    <MudTd Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
-                    <MudTd Style="text-align:center; font-family:monospace; font-size:11px">
+                    <MudTd DataLabel="Quantité max" Style="text-align:center">@context.QuantiteMax</MudTd>
+                    <MudTd DataLabel="Coût" Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
+                    <MudTd DataLabel="M / F / AG / CP / AR" Style="text-align:center; font-family:monospace; font-size:11px">
                         @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="P / S">
                         <div style="font-size:11px"><span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
                         <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Skills départ">
                         @if (context.CompetencesDepart?.Any() == true)
                         {
                             <div style="display:flex; flex-wrap:wrap; gap:2px">
@@ -91,7 +91,7 @@
                         }
                         else { <span style="font-size:10px; color:#666">—</span> }
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Actions">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditerReservePoste(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerReservePoste(context))" />
                     </MudTd>
@@ -114,11 +114,11 @@
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd>@context.Nom</MudTd>
-                    <MudTd>@context.Categorie</MudTd>
-                    <MudTd>@context.CoutRelance.ToString("N0") po</MudTd>
-                    <MudTd>@(context.Postes?.Count ?? 0)</MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Nom">@context.Nom</MudTd>
+                    <MudTd DataLabel="Catégorie">@context.Categorie</MudTd>
+                    <MudTd DataLabel="Coût relance">@context.CoutRelance.ToString("N0") po</MudTd>
+                    <MudTd DataLabel="Nb postes">@(context.Postes?.Count ?? 0)</MudTd>
+                    <MudTd DataLabel="Actions">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => EditerTeamType(context.Id))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -157,10 +157,10 @@
                                 <MudTh Style="width:12%">Actions</MudTh>
                             </HeaderContent>
                             <RowTemplate>
-                                <MudTd><b>@context.Nom</b></MudTd>
-                                <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Code</MudChip></MudTd>
-                                <MudTd>@NbSkills(context.Id)</MudTd>
-                                <MudTd>
+                                <MudTd DataLabel="Nom"><b>@context.Nom</b></MudTd>
+                                <MudTd DataLabel="Code"><MudChip T="string" Size="Size.Small" Color="Color.Default">@context.Code</MudChip></MudTd>
+                                <MudTd DataLabel="Compétences">@NbSkills(context.Id)</MudTd>
+                                <MudTd DataLabel="Actions">
                                     <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                                    title="Renommer / changer le code"
                                                    OnClick="@(() => EditerCategorie(context))" />
@@ -197,14 +197,14 @@
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd>@context.Nom</MudTd>
-                    <MudTd>@(context.SkillCategoryDef?.Nom ?? "—")</MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Nom">@context.Nom</MudTd>
+                    <MudTd DataLabel="Catégorie">@(context.SkillCategoryDef?.Nom ?? "—")</MudTd>
+                    <MudTd DataLabel="Trait/Élite">
                         @if (context.EstElite) { <MudChip T="string" Size="Size.Small" Color="Color.Warning">Élite</MudChip> }
                         @if (context.EstTrait) { <MudChip T="string" Size="Size.Small" Color="Color.Info">Trait</MudChip> }
                     </MudTd>
-                    <MudTd Style="max-width:400px; white-space:normal">@context.Description</MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Description" Style="max-width:400px; white-space:normal">@context.Description</MudTd>
+                    <MudTd DataLabel="Actions">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => EditerSkill(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -239,17 +239,17 @@
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd>@context.Nom</MudTd>
-                    <MudTd>@context.Ordre</MudTd>
-                    <MudTd>@(context.EstActive ? "Oui" : "Non")</MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Nom">@context.Nom</MudTd>
+                    <MudTd DataLabel="Ordre">@context.Ordre</MudTd>
+                    <MudTd DataLabel="Active">@(context.EstActive ? "Oui" : "Non")</MudTd>
+                    <MudTd DataLabel="Barème d'XP">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
                             TD @context.XpParTouchdown · Passe @context.XpParPasse ·
                             Int @context.XpParInterception · Élim @context.XpParElimination ·
                             MVP @context.XpBonusMvp
                         </MudText>
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Révision">
                         @if (context.Revision > 0)
                         {
                             <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
@@ -262,7 +262,7 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">jamais exportée</MudText>
                         }
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Actions">
                         <MudIconButton Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small"
                                        title="Modifier le barème d'XP de cette version"
                                        OnClick="@(() => EditerBareme(context))" />

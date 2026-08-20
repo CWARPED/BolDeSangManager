@@ -33,7 +33,7 @@
                         <MudTh Class="d-none d-md-table-cell">Skills</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd Style="width:32px">
+                        <MudTd DataLabel="Sélection" Style="width:32px">
                             <MudCheckBox T="bool" Dense="true" Value="@_selection.Contains(context.Id)"
                                          ValueChanged="@(v => Toggle(context.Id))" />
                         </MudTd>

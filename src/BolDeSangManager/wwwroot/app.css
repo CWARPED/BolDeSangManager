@@ -341,3 +341,59 @@ h1:focus {
 @media (max-width: 700px) {
     .calendrier-grille { display: none; }
 }
+
+/* ============================================================
+   Responsive mobile — audit R9
+   ============================================================ */
+
+/* M1 — l'AppBar débordait horizontalement (368px pour 360 dispo, et 505px
+   sur /admin/donnees) : le titre passait sur 2 lignes et poussait les
+   boutons d'action hors de l'écran. On empêche tout wrap et on autorise
+   le titre à se rétrécir (min-width:0 est indispensable en flex). */
+@media (max-width: 599.98px) {
+    .mud-appbar .mud-toolbar {
+        flex-wrap: nowrap;
+        overflow: hidden;
+    }
+
+    .mud-appbar .mud-toolbar > .appbar-title {
+        min-width: 0;
+        flex-shrink: 1;
+        overflow: hidden;
+    }
+
+    .mud-appbar .mud-toolbar > .appbar-title .mud-typography {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* les icônes de droite (admin / profil / déconnexion) ne doivent
+       jamais être comprimées ni rejetées hors champ */
+    .mud-appbar .mud-toolbar > .mud-icon-button,
+    .mud-appbar .mud-toolbar > form {
+        flex-shrink: 0;
+    }
+
+    /* garde-fou global : plus aucun défilement horizontal parasite */
+    html, body {
+        overflow-x: hidden;
+    }
+}
+
+/* B1 — en mode carte (MudBlazor bascule les MudTable sous 600px), le
+   libellé de colonne injecté par td::before depuis DataLabel doit rester
+   lisible et bien séparé de la valeur. */
+@media (max-width: 599.98px) {
+    .mud-table-cell-mobile .mud-table-cell-mobile-title,
+    .mud-table-row .mud-table-cell[data-label]::before {
+        font-weight: 600;
+        opacity: 0.75;
+    }
+
+    /* les cellules centrées en desktop doivent repasser à gauche en mode
+       carte, sinon la valeur flotte loin de son libellé */
+    .mud-table-cell-mobile {
+        text-align: left !important;
+    }
+}

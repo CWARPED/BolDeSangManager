@@ -36,10 +36,10 @@
                     <MudTh>Rôle</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="u">
-                    <MudTd>
+                    <MudTd DataLabel="Pseudo">
                         <b>@(string.IsNullOrEmpty(u.PseudoCoach) ? u.UserName : u.PseudoCoach)</b>
                     </MudTd>
-                    <MudTd>@u.Email</MudTd>
+                    <MudTd DataLabel="Email">@u.Email</MudTd>
                     <MudTd DataLabel="Rôle">
                         @if (_rolesById.TryGetValue(u.Id, out var roleActuel))
                         {

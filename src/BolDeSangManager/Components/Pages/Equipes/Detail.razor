@@ -91,9 +91,9 @@ else
                         <MudTh>Statut</MudTh>
                     </HeaderContent>
                     <RowTemplate Context="j">
-                        <MudTd>@j.Numero</MudTd>
-                        <MudTd><b>@j.Nom</b></MudTd>
-                        <MudTd>
+                        <MudTd DataLabel="N°">@j.Numero</MudTd>
+                        <MudTd DataLabel="Nom"><b>@j.Nom</b></MudTd>
+                        <MudTd DataLabel="Poste">
                             <div>@j.PlayerPosition?.Nom</div>
                             @if (!string.IsNullOrEmpty(j.PlayerPosition?.MotsCles))
                             {
@@ -102,12 +102,12 @@ else
                                 </div>
                             }
                         </MudTd>
-                        <MudTd Style="@InjuryCellStyle(j.ModMouvement)">@StatInt(j.PlayerPosition?.Mouvement ?? 0, j.ModMouvement)</MudTd>
-                        <MudTd Style="@InjuryCellStyle(j.ModForce)">@StatInt(j.PlayerPosition?.Force ?? 0, j.ModForce)</MudTd>
-                        <MudTd Style="@InjuryCellStyle(j.ModAgilite)">@StatStr(j.PlayerPosition?.Agilite ?? "-", j.ModAgilite, false)</MudTd>
-                        <MudTd Style="@InjuryCellStyle(j.ModCapacitePasse)">@StatStr(j.PlayerPosition?.CapacitePasse ?? "-", j.ModCapacitePasse, false)</MudTd>
-                        <MudTd Style="@InjuryCellStyle(j.ModArmure)">@StatStr(j.PlayerPosition?.Armure ?? "-", j.ModArmure, true)</MudTd>
-                        <MudTd>
+                        <MudTd DataLabel="Mouvement" Style="@InjuryCellStyle(j.ModMouvement)">@StatInt(j.PlayerPosition?.Mouvement ?? 0, j.ModMouvement)</MudTd>
+                        <MudTd DataLabel="Force" Style="@InjuryCellStyle(j.ModForce)">@StatInt(j.PlayerPosition?.Force ?? 0, j.ModForce)</MudTd>
+                        <MudTd DataLabel="Agilité" Style="@InjuryCellStyle(j.ModAgilite)">@StatStr(j.PlayerPosition?.Agilite ?? "-", j.ModAgilite, false)</MudTd>
+                        <MudTd DataLabel="Passe" Style="@InjuryCellStyle(j.ModCapacitePasse)">@StatStr(j.PlayerPosition?.CapacitePasse ?? "-", j.ModCapacitePasse, false)</MudTd>
+                        <MudTd DataLabel="Armure" Style="@InjuryCellStyle(j.ModArmure)">@StatStr(j.PlayerPosition?.Armure ?? "-", j.ModArmure, true)</MudTd>
+                        <MudTd DataLabel="Compétences">
                             <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
                             @if (j.PlayerPosition?.AccesCategories.Any() == true)
                             {
@@ -120,10 +120,10 @@ else
                                 </div>
                             }
                         </MudTd>
-                        <MudTd Style="text-align:center">@j.PointsStarPlayer</MudTd>
-                        <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
-                        <MudTd Style="text-align:center">@j.ValeurActuelle.ToString("N0")</MudTd>
-                        <MudTd>
+                        <MudTd DataLabel="PSP" Style="text-align:center">@j.PointsStarPlayer</MudTd>
+                        <MudTd DataLabel="Améliorations" Style="text-align:center">@j.Improvements.Count</MudTd>
+                        <MudTd DataLabel="Valeur" Style="text-align:center">@j.ValeurActuelle.ToString("N0")</MudTd>
+                        <MudTd DataLabel="Statut">
                             @if (j.ManqueSuivantMatch)
                             {
                                 <MudChip T="string" Color="Color.Warning" Size="Size.Small">Rate prochain</MudChip>
@@ -160,8 +160,8 @@ else
                             <MudTh Style="text-align:center">Amél.</MudTh>
                         </HeaderContent>
                         <RowTemplate Context="j">
-                            <MudTd>@j.Numero</MudTd>
-                            <MudTd>
+                            <MudTd DataLabel="N°">@j.Numero</MudTd>
+                            <MudTd DataLabel="Nom">
                                 <span style="text-decoration:line-through">@j.Nom</span>
                                 @if (j.EstMort)
                                 {
@@ -169,8 +169,8 @@ else
                                              Size="Size.Small" Class="ml-1" title="Mort" />
                                 }
                             </MudTd>
-                            <MudTd>@j.PlayerPosition?.Nom</MudTd>
-                            <MudTd>
+                            <MudTd DataLabel="Poste">@j.PlayerPosition?.Nom</MudTd>
+                            <MudTd DataLabel="Statut">
                                 @if (j.EstMort)
                                 {
                                     <MudChip T="string" Color="Color.Error" Size="Size.Small">Mort</MudChip>
@@ -180,8 +180,8 @@ else
                                     <MudChip T="string" Color="Color.Default" Size="Size.Small">Retraité</MudChip>
                                 }
                             </MudTd>
-                            <MudTd><MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText></MudTd>
-                            <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
+                            <MudTd DataLabel="Compétences"><MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText></MudTd>
+                            <MudTd DataLabel="Améliorations" Style="text-align:center">@j.Improvements.Count</MudTd>
                         </RowTemplate>
                     </MudTable>
                 </div>
@@ -235,13 +235,13 @@ else
                             }
                         </HeaderContent>
                         <RowTemplate Context="j">
-                            <MudTd>@j.Numero</MudTd>
-                            <MudTd>@j.Nom</MudTd>
-                            <MudTd Style="text-align:center"><b>@j.PointsStarPlayer</b></MudTd>
-                            <MudTd Style="text-align:center">@j.Improvements.Count</MudTd>
+                            <MudTd DataLabel="N°">@j.Numero</MudTd>
+                            <MudTd DataLabel="Joueur">@j.Nom</MudTd>
+                            <MudTd DataLabel="XP" Style="text-align:center"><b>@j.PointsStarPlayer</b></MudTd>
+                            <MudTd DataLabel="Améliorations" Style="text-align:center">@j.Improvements.Count</MudTd>
                             @if (_estCommissaire)
                             {
-                                <MudTd Style="text-align:center">
+                                <MudTd DataLabel="Action" Style="text-align:center">
                                     <MudIconButton Icon="@Icons.Material.Filled.EditNote" Size="Size.Small"
                                                    title="Corriger l'XP de ce joueur"
                                                    OnClick="@(() => CorrigerXp(j))" />

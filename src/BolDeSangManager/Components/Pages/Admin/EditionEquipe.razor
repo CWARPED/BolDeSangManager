@@ -68,7 +68,7 @@
                         <MudTh Style="width:9%">Actions</MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd>
+                        <MudTd DataLabel="Poste">
                             <div style="font-weight:600">
                                 @context.Nom
                             </div>
@@ -79,16 +79,16 @@
                                 </div>
                             }
                         </MudTd>
-                        <MudTd Style="text-align:center">@context.QuantiteMax</MudTd>
-                        <MudTd Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
-                        <MudTd Style="text-align:center; font-family:monospace; font-size:11px">
+                        <MudTd DataLabel="Quantité max" Style="text-align:center">@context.QuantiteMax</MudTd>
+                        <MudTd DataLabel="Coût" Style="text-align:right">@context.Cout.ToString("N0")</MudTd>
+                        <MudTd DataLabel="M / F / AG / CP / AR" Style="text-align:center; font-family:monospace; font-size:11px">
                             @context.Mouvement / @context.Force / @context.Agilite / @context.CapacitePasse / @context.Armure
                         </MudTd>
-                        <MudTd>
+                        <MudTd DataLabel="P / S">
                             <div style="font-size:11px"><span style="color:#90caf9">P:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
                             <div style="font-size:11px"><span style="color:#ce93d8">S:</span> @CategoryAccessHelpers.FormatAcces(context.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef))</div>
                         </MudTd>
-                        <MudTd>
+                        <MudTd DataLabel="Skills départ">
                             @if (context.CompetencesDepart?.Any() == true)
                             {
                                 <div style="display:flex; flex-wrap:wrap; gap:2px">
@@ -105,7 +105,7 @@
                                 <span style="font-size:10px; color:#666">—</span>
                             }
                         </MudTd>
-                        <MudTd>
+                        <MudTd DataLabel="Actions">
                             <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                            title="Éditer ce poste"
                                            OnClick="@(() => EditerPoste(context))" />
@@ -136,9 +136,9 @@
                         <MudTh></MudTh>
                     </HeaderContent>
                     <RowTemplate>
-                        <MudTd>@context.MotCle</MudTd>
-                        <MudTd>@context.Max</MudTd>
-                        <MudTd><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerLimite(context.Id))" /></MudTd>
+                        <MudTd DataLabel="Mot-clé">@context.MotCle</MudTd>
+                        <MudTd DataLabel="Max">@context.Max</MudTd>
+                        <MudTd DataLabel="Action"><MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerLimite(context.Id))" /></MudTd>
                     </RowTemplate>
                 </MudTable>
             </MudPaper>
