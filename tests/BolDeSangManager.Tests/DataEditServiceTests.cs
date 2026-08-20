@@ -264,7 +264,7 @@ public class DataEditServiceTests
         using (var db = factory.CreateContext())
         {
             var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
-            var nouvelle = await svc.CreerVersionAsync(gameId, "Saison 4", 2, false, srcVersionId);
+            var nouvelle = await svc.CreerVersionAsync(gameId, "Saison 4", srcVersionId);
             newVersionId = nouvelle.Id;
         }
 
@@ -405,7 +405,7 @@ public class DataEditServiceTests
         using (var db = factory.CreateContext())
         {
             var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
-            var nouvelle = await svc.CreerVersionAsync(gameId, "Clone repare", 2, false, srcVersionId);
+            var nouvelle = await svc.CreerVersionAsync(gameId, "Clone repare", srcVersionId);
             newVersionId = nouvelle.Id;
         }
 
@@ -491,7 +491,7 @@ public class DataEditServiceTests
         {
             var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
             await Assert.ThrowsAsync<InvalidOperationException>(
-                () => svc.CreerVersionAsync(gameId, "Doit disparaitre", 2, false, srcVersionId));
+                () => svc.CreerVersionAsync(gameId, "Doit disparaitre", srcVersionId));
         }
 
         using (var db = factory.CreateContext())
@@ -722,5 +722,107 @@ public class DataEditServiceTests
             Assert.Equal(versionId, league!.RulesVersionId);
             Assert.Equal("Nouveau nom", (await db.RulesVersions.FindAsync(versionId))!.Nom);
         }
+    }
+
+    [Fact]
+    public async Task CreerVersion_CalculeLordreAutomatiquement()
+    {
+        using var factory = new TestDbFactory();
+        int gameId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, _) = SeedVersion(db);   // "Saison 3", Ordre = 1
+            gameId = gId;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.CreerVersionAsync(gameId, "Saison 4", null);
+            await svc.CreerVersionAsync(gameId, "Saison 5", null);
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            Assert.Equal(2, (await db.RulesVersions.SingleAsync(v => v.Nom == "Saison 4")).Ordre);
+            Assert.Equal(3, (await db.RulesVersions.SingleAsync(v => v.Nom == "Saison 5")).Ordre);
+        }
+    }
+
+    [Fact]
+    public async Task CreerVersion_NactivePasQuandUneVersionExisteDeja()
+    {
+        using var factory = new TestDbFactory();
+        int gameId, v1Id;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, vId) = SeedVersion(db);   // active
+            gameId = gId; v1Id = vId;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.CreerVersionAsync(gameId, "Saison 4", null);
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            // la nouvelle n'est pas active, l'ancienne le reste
+            Assert.False((await db.RulesVersions.SingleAsync(v => v.Nom == "Saison 4")).EstActive);
+            Assert.True((await db.RulesVersions.FindAsync(v1Id))!.EstActive);
+            Assert.Equal(1, await db.RulesVersions.CountAsync(v => v.GameId == gameId && v.EstActive));
+        }
+    }
+
+    [Fact]
+    public async Task CreerVersion_PremiereDuJeu_EstActiveDoffice()
+    {
+        using var factory = new TestDbFactory();
+        int gameId;
+
+        using (var db = factory.CreateContext())
+        {
+            var game = new Game { Nom = "Blood Bowl", Type = GameType.BloodBowl };
+            db.Games.Add(game); db.SaveChanges(); gameId = game.Id;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await svc.CreerVersionAsync(gameId, "Saison 1", null);
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var v = await db.RulesVersions.SingleAsync(v => v.GameId == gameId);
+            Assert.True(v.EstActive);   // sinon aucune version par défaut à la création d'une ligue
+            Assert.Equal(1, v.Ordre);
+        }
+    }
+
+    [Fact]
+    public async Task CreerVersion_RefuseUnNomDejaPrisDansLeMemeJeu()
+    {
+        using var factory = new TestDbFactory();
+        int gameId;
+
+        using (var db = factory.CreateContext())
+        {
+            var (gId, _) = SeedVersion(db);   // "Saison 3"
+            gameId = gId;
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var svc = new DataEditService(db, NullLogger<DataEditService>.Instance);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.CreerVersionAsync(gameId, "saison 3", null));
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.Equal(1, await db.RulesVersions.CountAsync(v => v.GameId == gameId));
     }
 }

@@ -189,7 +189,7 @@ public class SkillCategoryTests
         using (var ctx = factory.CreateContext())
         {
             var svc = new DataEditService(ctx, NullLogger<DataEditService>.Instance);
-            var nouvelle = await svc.CreerVersionAsync(gameId, "Saison 4", 2, false, srcVersionId);
+            var nouvelle = await svc.CreerVersionAsync(gameId, "Saison 4", srcVersionId);
             newVersionId = nouvelle.Id;
         }
 

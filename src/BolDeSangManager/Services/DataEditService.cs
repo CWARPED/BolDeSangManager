@@ -20,22 +20,41 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             .OrderBy(v => v.Ordre)
             .ToListAsync();
 
-    public async Task<RulesVersion> CreerVersionAsync(int gameId, string nom, int ordre, bool estActive, int? cloneFromVersionId)
+    /// <summary>
+    /// Crée une version de règles. L'ordre et le statut actif ne sont plus
+    /// demandés à l'utilisateur :
+    /// - l'ordre est calculé automatiquement (dernier + 1 pour ce jeu) ;
+    /// - la version n'est active que si c'est la PREMIÈRE du jeu, sinon on
+    ///   bascule explicitement via ActiverVersionAsync (bouton dédié).
+    /// </summary>
+    public async Task<RulesVersion> CreerVersionAsync(int gameId, string nom, int? cloneFromVersionId)
     {
+        var nomNet = (nom ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(nomNet))
+            throw new InvalidOperationException("Le nom de la version est obligatoire.");
+        if (nomNet.Length > 100)
+            throw new InvalidOperationException("Le nom de la version ne peut pas dépasser 100 caractères.");
+
+        var doublon = await db.RulesVersions
+            .AnyAsync(v => v.GameId == gameId && v.Nom.ToLower() == nomNet.ToLower());
+        if (doublon)
+            throw new InvalidOperationException($"Une autre version de ce jeu s'appelle déjà « {nomNet} ».");
+
         // Tout est fait dans UNE transaction : si le clonage échoue, la version
         // ne doit pas rester en base à moitié remplie (sinon la liste se pollue
         // de versions vides après chaque erreur).
         await using var tx = await db.Database.BeginTransactionAsync();
         try
         {
-            // Si estActive, désactiver les autres versions actives du même jeu
-            if (estActive)
-            {
-                var actives = await db.RulesVersions.Where(v => v.GameId == gameId && v.EstActive).ToListAsync();
-                foreach (var a in actives) a.EstActive = false;
-            }
+            var ordre = (await db.RulesVersions
+                .Where(v => v.GameId == gameId)
+                .MaxAsync(v => (int?)v.Ordre) ?? 0) + 1;
 
-            var nouvelle = new RulesVersion { GameId = gameId, Nom = nom, Ordre = ordre, EstActive = estActive };
+            // Première version du jeu : elle doit être active, sinon aucune ne
+            // le serait et la création de ligue n'aurait pas de valeur par défaut.
+            var premiere = !await db.RulesVersions.AnyAsync(v => v.GameId == gameId);
+
+            var nouvelle = new RulesVersion { GameId = gameId, Nom = nomNet, Ordre = ordre, EstActive = premiere };
             db.RulesVersions.Add(nouvelle);
             await db.SaveChangesAsync();
 
@@ -43,7 +62,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                 await ClonerVersionAsync(srcId, nouvelle.Id);
 
             await tx.CommitAsync();
-            logger.LogInformation("Version créée : {Nom} (id={Id}) sur Game={GameId} (cloneFrom={Clone})", nom, nouvelle.Id, gameId, cloneFromVersionId);
+            logger.LogInformation("Version créée : {Nom} (id={Id}) sur Game={GameId} (cloneFrom={Clone}, active={Active})", nomNet, nouvelle.Id, gameId, cloneFromVersionId, premiere);
             return nouvelle;
         }
         catch

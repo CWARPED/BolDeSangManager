@@ -5,25 +5,25 @@
 
 <MudDialog>
     <DialogContent>
-        <MudGrid>
-            <MudItem xs="12" sm="8"><MudTextField @bind-Value="_nom" Label="Nom (ex: Saison 4)" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12" sm="4"><MudNumericField @bind-Value="_ordre" Label="Ordre" Variant="Variant.Outlined" /></MudItem>
-            <MudItem xs="12"><MudCheckBox @bind-Value="_estActive" Label="Définir comme version active (désactive l'actuelle)" /></MudItem>
-            <MudItem xs="12">
-                <MudSelect T="int?" @bind-Value="_cloneFromId" Label="Cloner depuis (optionnel)" Variant="Variant.Outlined" Clearable="true">
-                    <MudSelectItem T="int?" Value="@((int?)null)">Vide (pas de clonage)</MudSelectItem>
-                    @foreach (var v in VersionsDispo)
-                    {
-                        <MudSelectItem T="int?" Value="@((int?)v.Id)">@v.Nom @(v.EstActive ? "(active)" : "")</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12">
-                <MudText Typo="Typo.caption" Style="color:#9e9e9e">
-                    Le clonage copie tous les TeamTypes, postes, compétences et limites de la version source. Opération transactionnelle.
-                </MudText>
-            </MudItem>
-        </MudGrid>
+        <MudTextField @bind-Value="_nom" Label="Nom (ex: Saison 4)" Variant="Variant.Outlined"
+                      MaxLength="100" Immediate="true" AutoFocus="true"
+                      HelperText="Doit être unique pour ce jeu." />
+        <MudSelect T="int?" @bind-Value="_cloneFromId" Label="Cloner depuis (optionnel)"
+                   Variant="Variant.Outlined" Clearable="true" Class="mt-4">
+            <MudSelectItem T="int?" Value="@((int?)null)">Vide (pas de clonage)</MudSelectItem>
+            @foreach (var v in VersionsDispo)
+            {
+                <MudSelectItem T="int?" Value="@((int?)v.Id)">@v.Nom @(v.EstActive ? "(active)" : "")</MudSelectItem>
+            }
+        </MudSelect>
+        <MudText Typo="Typo.caption" Style="color:#9e9e9e" Class="mt-2">
+            Le clonage copie tous les types d'équipe, postes, compétences, la Réserve et les
+            limites de la version source. Opération transactionnelle.
+        </MudText>
+        <MudText Typo="Typo.caption" Style="color:#9e9e9e" Class="mt-2">
+            La nouvelle version n'est pas activée automatiquement : utilisez la coche
+            « version active » dans la liste quand vous voulez qu'elle serve par défaut.
+        </MudText>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Annuler">Annuler</MudButton>
@@ -40,14 +40,11 @@
     [Parameter] public List<RulesVersion> VersionsDispo { get; set; } = [];
 
     string _nom = "";
-    int _ordre = 1;
-    bool _estActive = false;
     int? _cloneFromId;
     bool _saving;
 
     protected override void OnInitialized()
     {
-        _ordre = (VersionsDispo.Any() ? VersionsDispo.Max(v => v.Ordre) : 0) + 1;
         _cloneFromId = VersionsDispo.FirstOrDefault(v => v.EstActive)?.Id;
     }
 
@@ -58,9 +55,13 @@
         _saving = true;
         try
         {
-            await DataEditService.CreerVersionAsync(GameId, _nom, _ordre, _estActive, _cloneFromId);
+            await DataEditService.CreerVersionAsync(GameId, _nom, _cloneFromId);
             Snackbar.Add("Version créée", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
         }
         catch (Exception ex)
         {

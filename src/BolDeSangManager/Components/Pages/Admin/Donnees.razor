@@ -232,7 +232,6 @@
             <MudTable Items="@_versions" Dense="true">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
-                    <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Ordre)">Ordre</MudTableSortLabel></MudTh>
                     <MudTh>Active</MudTh>
                     <MudTh>Barème d'XP</MudTh>
                     <MudTh>Révision</MudTh>
@@ -240,7 +239,6 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Nom">@context.Nom</MudTd>
-                    <MudTd DataLabel="Ordre">@context.Ordre</MudTd>
                     <MudTd DataLabel="Active">
                         @if (context.EstActive)
                         {
