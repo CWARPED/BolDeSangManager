@@ -4,10 +4,24 @@
 @inject MatchService MatchService
 @inject TeamService TeamService
 @inject AuthenticationStateProvider AuthProvider
+@inject IDialogService DialogService
+@inject CalendrierService CalendrierService
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
 
 <PageTitle>Mes matchs — BolDeSang Manager</PageTitle>
 
-<MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4"><b>Mes matchs</b></MudText>
+<MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
+    <MudText Typo="Typo.h5" Color="Color.Error"><b>Mes matchs</b></MudText>
+    @if (_matchs?.Any(m => m.DateProgrammee.HasValue) == true)
+    {
+        <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                   StartIcon="@Icons.Material.Filled.CalendarMonth"
+                   OnClick="TelechargerTousIcs">
+            Ajouter mes matchs à mon agenda
+        </MudButton>
+    }
+</MudStack>
 
 @if (_matchs is null)
 {
@@ -46,6 +60,24 @@ else
                                 }
                                 <b>@match.EquipeExterieur?.Nom</b>
                             </MudText>
+                            @if (match.DateProgrammee.HasValue)
+                            {
+                                <MudText Typo="Typo.caption" Class="d-flex align-center gap-1 mt-1">
+                                    <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" />
+                                    @DateLocale(match.DateProgrammee.Value)
+                                    @if (!string.IsNullOrWhiteSpace(match.Lieu))
+                                    {
+                                        <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" Class="ms-2" />
+                                        @match.Lieu
+                                    }
+                                </MudText>
+                            }
+                            else if (match.Statut is MatchStatus.Programme or MatchStatus.AJouer)
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-1">
+                                    Date à convenir
+                                </MudText>
+                            }
                         </div>
                         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                             <MudChip T="string" Color="@MatchColor(match.Statut)" Size="Size.Small">
@@ -55,6 +87,17 @@ else
                                  && match.Statut != MatchStatus.ValidationCompetences
                                  && match.Statut != MatchStatus.FeuilleEnSaisie)
                             {
+                                <MudButton Size="Size.Small" Variant="Variant.Text"
+                                           StartIcon="@Icons.Material.Filled.EditCalendar"
+                                           OnClick="@(() => Programmer(match))">
+                                    @(match.DateProgrammee.HasValue ? "Modifier la date" : "Fixer la date")
+                                </MudButton>
+                                @if (match.DateProgrammee.HasValue)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small"
+                                                   title="Ajouter à mon agenda (.ics)"
+                                                   OnClick="@(() => TelechargerIcs(match))" />
+                                }
                                 <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
                                           Href="@($"/matchs/{match.Id}/feuille")">
                                     Saisir la feuille
@@ -99,6 +142,43 @@ else
 }
 
 @code {
+    // ── Calendrier (#1) ───────────────────────────────────────────────────────
+
+    /// <summary>Date UTC stockée → affichage en heure locale du lecteur.</summary>
+    static string DateLocale(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime()
+            .ToString("ddd d MMM yyyy 'à' HH'h'mm");
+
+    async Task Programmer(Match match)
+    {
+        var parametres = new DialogParameters<ProgrammationDialog>
+        {
+            { x => x.Match, match },
+            { x => x.UserId, _userId },
+            { x => x.EstCommissaire, false },
+        };
+        var dialog = await DialogService.ShowAsync<ProgrammationDialog>(
+            "Date et lieu du match", parametres,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+
+        if (await dialog.Result is { Canceled: false }) StateHasChanged();
+    }
+
+    async Task TelechargerIcs(Match match)
+    {
+        var bytes = CalendrierService.GenererIcs(match);
+        await JS.InvokeVoidAsync("blazorDownloadBase64File",
+            $"match-{match.Id}.ics", "text/calendar", Convert.ToBase64String(bytes));
+    }
+
+    async Task TelechargerTousIcs()
+    {
+        if (_matchs is null) return;
+        var bytes = CalendrierService.GenererIcs(_matchs, "Mes matchs — BolDeSang");
+        await JS.InvokeVoidAsync("blazorDownloadBase64File",
+            "mes-matchs.ics", "text/calendar", Convert.ToBase64String(bytes));
+    }
+
     List<Match>? _matchs;
     HashSet<int> _mesEquipeIds = [];
     string _userId = "";

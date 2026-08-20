@@ -47,6 +47,41 @@ public class MatchService(
             .OrderBy(m => m.Ronde)
             .ToListAsync();
 
+    /// <summary>
+    /// Fixe (ou efface) la date et le lieu d'un match (#1).
+    ///
+    /// Saisie libre : les deux coaches concernés et les commissaires peuvent la
+    /// modifier — on fait confiance à l'entente entre joueurs. L'habilitation est
+    /// vérifiée ici et pas seulement masquée dans l'UI.
+    /// </summary>
+    /// <param name="date">Date/heure en UTC, ou null pour effacer.</param>
+    public async Task ProgrammerMatchAsync(int matchId, DateTime? date, string lieu, string userId,
+        bool estCommissaire = false)
+    {
+        var match = await db.Matches
+            .Include(m => m.EquipeDomicile)
+            .Include(m => m.EquipeExterieur)
+            .FirstOrDefaultAsync(m => m.Id == matchId)
+            ?? throw new InvalidOperationException("Match introuvable");
+
+        var estCoach = match.EquipeDomicile?.CoachId == userId
+                    || match.EquipeExterieur?.CoachId == userId;
+
+        if (!estCoach && !estCommissaire)
+            throw new UnauthorizedAccessException(
+                "Seuls les deux coaches du match et les commissaires peuvent fixer la date.");
+
+        if (match.Statut is MatchStatus.Termine or MatchStatus.Concede)
+            throw new InvalidOperationException("Ce match est déjà joué : sa date ne peut plus être modifiée.");
+
+        match.DateProgrammee = date;
+        match.Lieu = (lieu ?? string.Empty).Trim();
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Match id={MatchId} programmé au {Date} à '{Lieu}' par {UserId}",
+            matchId, date?.ToString("u") ?? "(non fixée)", match.Lieu, userId);
+    }
+
     public async Task<MatchSheet> SaisirFeuilleMatchAsync(int matchId, MatchSheet feuille,
         List<MatchPlayerRecord> records, string saisiParId)
     {

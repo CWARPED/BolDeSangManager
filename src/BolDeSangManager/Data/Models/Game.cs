@@ -22,6 +22,17 @@ public class RulesVersion
     public bool EstActive { get; set; } = true;
     public int Ordre { get; set; }
 
+    /// <summary>
+    /// Numéro de révision des données de cette version de règles (F3).
+    /// Incrémenté à chaque export : c'est lui qui permet de dire quelle
+    /// correction de l'asso se trouve dans quelle livraison, et d'avertir
+    /// quand on réimporte un fichier plus ancien que la base.
+    /// </summary>
+    public int Revision { get; set; } = 0;
+
+    /// <summary>Date du dernier export de cette version (F3), en UTC.</summary>
+    public DateTime? DernierExportLe { get; set; }
+
     // ── Barème d'XP de référence (R6) ─────────────────────────────────────────
     // Le barème appartient aux RÈGLES : c'est ici qu'on définit ce que vaut un
     // touchdown dans cette version. Une ligue reprend ces valeurs à sa création
