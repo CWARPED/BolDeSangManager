@@ -129,7 +129,8 @@ public static class DataSeeder
 
     public static async Task<League> SeedLeagueAsync(
         ApplicationDbContext db, int gameId, int rulesVersionId, string commissaireId,
-        LeagueStatus statut = LeagueStatus.Inscription)
+        LeagueStatus statut = LeagueStatus.Inscription,
+        LeagueFormat format = LeagueFormat.RoundRobinAvecPlayoffs)
     {
         var ligue = new League
         {
@@ -138,7 +139,7 @@ public static class DataSeeder
             CommissaireId = commissaireId,
             GameId = gameId,
             RulesVersionId = rulesVersionId,
-            Format = LeagueFormat.RoundRobinAvecPlayoffs,
+            Format = format,
             BudgetDepart = 1_000_000,
             NombreEquipesPlayoff = 4,
             Statut = statut,

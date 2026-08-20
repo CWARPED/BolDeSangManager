@@ -72,4 +72,65 @@ public static class BrouillardHelpers
         bool estCommissaire) =>
         FiltrerVisibles(tousLesMatchsDeLaLigue, equipesDuCoach, modeBrouillard, estCommissaire)
             .Any(m => m.Id == match.Id);
+
+    /// <summary>
+    /// Équipes que le coach affrontera lors de sa prochaine rencontre non jouée.
+    /// (Une par match à venir visible : en pratique une seule, sauf si le coach
+    /// engage plusieurs équipes dans la même ligue.)
+    /// </summary>
+    public static HashSet<int> ProchainsAdversaires(
+        IEnumerable<Match> tousLesMatchsDeLaLigue,
+        IReadOnlySet<int> equipesDuCoach)
+    {
+        var adversaires = new HashSet<int>();
+
+        // Pour chacune de ses équipes, le prochain match non joué.
+        foreach (var equipeId in equipesDuCoach)
+        {
+            var prochain = tousLesMatchsDeLaLigue
+                .Where(m => !EstJoue(m)
+                         && (m.EquipeDomicileId == equipeId || m.EquipeExterieurId == equipeId))
+                .OrderBy(m => m.Ronde)
+                .ThenBy(m => m.Id)
+                .FirstOrDefault();
+
+            if (prochain is null) continue;
+
+            var adverse = prochain.EquipeDomicileId == equipeId
+                ? prochain.EquipeExterieurId
+                : prochain.EquipeDomicileId;
+
+            // Ne jamais masquer une de ses propres équipes (cas d'un coach
+            // qui en engage deux et les voit s'affronter).
+            if (!equipesDuCoach.Contains(adverse))
+                adversaires.Add(adverse);
+        }
+
+        return adversaires;
+    }
+
+    /// <summary>
+    /// Le coach peut-il consulter la fiche de cette équipe ?
+    ///
+    /// Les fiches d'équipe sont publiques **par choix** : on ne masque donc
+    /// QUE celle du prochain adversaire, et uniquement en mode brouillard.
+    /// Sinon le coach préparerait sa rencontre en étudiant l'effectif d'en
+    /// face — exactement ce que le brouillard cherche à empêcher, et que le
+    /// seul masquage du calendrier ne suffit pas à garantir.
+    ///
+    /// Restent toujours visibles : ses propres équipes, celles des autres
+    /// coaches qu'il n'affronte pas tout de suite, et tout pour un commissaire.
+    /// </summary>
+    public static bool PeutVoirFicheEquipe(
+        int equipeCibleId,
+        IEnumerable<Match> tousLesMatchsDeLaLigue,
+        IReadOnlySet<int> equipesDuCoach,
+        bool modeBrouillard,
+        bool estCommissaire)
+    {
+        if (!modeBrouillard || estCommissaire) return true;
+        if (equipesDuCoach.Contains(equipeCibleId)) return true;
+
+        return !ProchainsAdversaires(tousLesMatchsDeLaLigue, equipesDuCoach).Contains(equipeCibleId);
+    }
 }

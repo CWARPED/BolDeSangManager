@@ -74,3 +74,25 @@ public class Division
     public ICollection<Team> Equipes { get; set; } = [];
     public ICollection<Match> Matchs { get; set; } = [];
 }
+
+/// <summary>
+/// Date indicative de fin d'une ronde : la date à laquelle les matchs de cette
+/// ronde devraient être joués. Purement informative — rien n'est bloqué ni
+/// clôturé automatiquement à son échéance.
+///
+/// Table dédiée plutôt qu'une colonne sur <see cref="Match"/> : une ronde n'est
+/// pas une entité en base (juste un numéro porté par ses matchs), et dupliquer
+/// la date sur chaque match la rendrait incohérente dès la première édition.
+/// </summary>
+public class EcheanceRonde
+{
+    public int Id { get; set; }
+    public int LeagueId { get; set; }
+    public League League { get; set; } = null!;
+
+    /// <summary>Numéro de ronde concerné (même numérotation que Match.Ronde).</summary>
+    public int Ronde { get; set; }
+
+    /// <summary>Date limite conseillée, stockée en UTC.</summary>
+    public DateTime DateLimite { get; set; }
+}

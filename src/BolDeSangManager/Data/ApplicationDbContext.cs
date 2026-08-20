@@ -20,6 +20,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SkillCategoryDef> SkillCategories => Set<SkillCategoryDef>();
     public DbSet<League> Leagues => Set<League>();
     public DbSet<Division> Divisions => Set<Division>();
+    public DbSet<EcheanceRonde> EcheancesRondes => Set<EcheanceRonde>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamPlayer> TeamPlayers => Set<TeamPlayer>();
     public DbSet<TeamPlayerSkill> TeamPlayerSkills => Set<TeamPlayerSkill>();
@@ -92,6 +93,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .WithMany(u => u.LiguesCommissaireees)
             .HasForeignKey(l => l.CommissaireId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // EcheanceRonde — une seule date par (ligue, ronde). Cascade : les
+        // échéances n'ont aucun sens sans leur ligue.
+        builder.Entity<EcheanceRonde>()
+            .HasIndex(e => new { e.LeagueId, e.Ronde })
+            .IsUnique();
+
+        builder.Entity<EcheanceRonde>()
+            .HasOne(e => e.League)
+            .WithMany()
+            .HasForeignKey(e => e.LeagueId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // Team — FK vers ApplicationUser (Coach)
         builder.Entity<Team>()

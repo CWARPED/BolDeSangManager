@@ -1,6 +1,7 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Helpers;
 using BolDeSangManager.Services;
 using BolDeSangManager.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -605,6 +606,552 @@ public class LeagueServiceTests : IDisposable
     }
 
     // ─── StubAuthorizationService ─────────────────────────────────────────────
+
+    // ─── Format Libre : calendrier composé par le commissaire ─────────────────
+
+    /// <summary>Crée une ligue au format Libre avec N équipes, et la lance.</summary>
+    private async Task<(int ligueId, List<int> equipeIds)> SetupLigueLibreAsync(
+        int nbEquipes, LeagueFormat format = LeagueFormat.Libre, bool lancer = true)
+    {
+        await using var db = _factory.CreateContext();
+
+        // commissaire unique : ce helper peut être appelé plusieurs fois dans
+        // un même test (AspNetUsers.NormalizedUserName est unique).
+        var commissaire = DataSeeder.CreateUser($"comlibre_{Guid.NewGuid():N}");
+        db.Users.Add(commissaire);
+        await db.SaveChangesAsync();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id,
+            format: format);
+
+        var equipeIds = new List<int>();
+        for (int i = 1; i <= nbEquipes; i++)
+        {
+            var c = DataSeeder.CreateUser($"libre_{Guid.NewGuid():N}");
+            db.Users.Add(c);
+            await db.SaveChangesAsync();
+            var t = await DataSeeder.SeedTeamAsync(db, ligue.Id, c.Id, teamType.Id, $"Équipe {i}");
+            equipeIds.Add(t.Id);
+        }
+
+        if (lancer)
+        {
+            var svc = CreateService(db);
+            await svc.LancerSaisonAsync(ligue.Id);
+        }
+        return (ligue.Id, equipeIds);
+    }
+
+    private async Task<int> CompterMatchsAsync(int ligueId)
+    {
+        await using var db = _factory.CreateContext();
+        var divIds = await db.Divisions.Where(d => d.LeagueId == ligueId).Select(d => d.Id).ToListAsync();
+        return await db.Matches.CountAsync(m => divIds.Contains(m.DivisionId!.Value));
+    }
+
+    [Fact]
+    public async Task LancerSaison_FormatLibre_NeGenereAucunMatch()
+    {
+        var (ligueId, _) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        Assert.Equal(LeagueStatus.EnCours, (await db.Leagues.FindAsync(ligueId))!.Statut);
+        Assert.Equal(0, await CompterMatchsAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task LancerSaison_FormatLibre_CreeQuandMemeLaDivision()
+    {
+        // le commissaire a besoin d'une division pour y rattacher ses matchs
+        var (ligueId, _) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        Assert.Single(await db.Divisions.Where(d => d.LeagueId == ligueId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task DefinirRonde_CreeLesRencontresDemandees()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1]), (ids[2], ids[3])]);
+
+        await using var db2 = _factory.CreateContext();
+        var matchs = await db2.Matches
+            .Where(m => m.Division!.LeagueId == ligueId && m.Ronde == 1)
+            .ToListAsync();
+        Assert.Equal(2, matchs.Count);
+        Assert.All(matchs, m => Assert.Equal(MatchStatus.Programme, m.Statut));
+        Assert.All(matchs, m => Assert.False(m.EstPlayoff));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RefuseSurUneLigueNonLibre()
+    {
+        var (commissaire, game, rv) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+        var c1 = DataSeeder.CreateUser("nl1"); var c2 = DataSeeder.CreateUser("nl2");
+        db.Users.AddRange(c1, c2); await db.SaveChangesAsync();
+        var t1 = await DataSeeder.SeedTeamAsync(db, ligue.Id, c1.Id, teamType.Id, "A");
+        var t2 = await DataSeeder.SeedTeamAsync(db, ligue.Id, c2.Id, teamType.Id, "B");
+
+        var svc = CreateService(db);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirRondeAsync(ligue.Id, 1, [(t1.Id, t2.Id)]));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RefuseUneEquipeDeuxFoisDansLaMemeRonde()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1]), (ids[0], ids[2])]));
+        Assert.Contains("deux fois", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RefuseUneEquipeContreEllememe()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[0])]));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RefuseUneEquipeDuneAutreLigue()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+        var (_, autresIds) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirRondeAsync(ligueId, 1, [(ids[0], autresIds[0])]));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RefuseUnNumeroDeRondeInvalide()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirRondeAsync(ligueId, 0, [(ids[0], ids[1])]));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_AutoriseLeRepos_UneEquipeNonCitee()
+    {
+        // 3 équipes : une seule rencontre, la troisième se repose
+        var (ligueId, ids) = await SetupLigueLibreAsync(3);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+
+        Assert.Equal(1, await CompterMatchsAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_AutoriseLaMemePaireDansUneAutreRonde()
+    {
+        // organisation entièrement libre : les matchs aller-retour sont permis
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirRondeAsync(ligueId, 2, [(ids[1], ids[0])]);   // retour
+
+        Assert.Equal(2, await CompterMatchsAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RedefinirUneRondeNonJouee_RemplaceLesMatchs()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[2], ids[3]), (ids[0], ids[1])]);
+
+        Assert.Equal(2, await CompterMatchsAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task DefinirRonde_RefuseDeModifierUneRondeDejaJouee()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        }
+
+        // le match est joué
+        await using (var db = _factory.CreateContext())
+        {
+            var m = await db.Matches.FirstAsync(x => x.Ronde == 1);
+            m.Statut = MatchStatus.Termine;
+            m.ScoreDomicile = 2; m.ScoreExterieur = 1;
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.DefinirRondeAsync(ligueId, 1, [(ids[2], ids[3])]));
+            Assert.Contains("déjà", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task SupprimerRonde_RetireLesMatchsNonJoues()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirRondeAsync(ligueId, 2, [(ids[2], ids[3])]);
+
+        await svc.SupprimerRondeAsync(ligueId, 2);
+
+        Assert.Equal(1, await CompterMatchsAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task SupprimerRonde_RefuseSiUnMatchEstJoue()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var m = await db.Matches.FirstAsync();
+            m.Statut = MatchStatus.Termine;
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => svc.SupprimerRondeAsync(ligueId, 1));
+        }
+    }
+
+    [Fact]
+    public async Task LancerSaison_RoundRobin_GenereToujoursLeCalendrier()
+    {
+        // non-régression : les formats existants ne changent pas
+        var (commissaire, game, rv) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id,
+            format: LeagueFormat.RoundRobin);
+        for (int i = 1; i <= 4; i++)
+        {
+            var c = DataSeeder.CreateUser($"nonreg_{i}");
+            db.Users.Add(c); await db.SaveChangesAsync();
+            await DataSeeder.SeedTeamAsync(db, ligue.Id, c.Id, teamType.Id, $"T{i}");
+        }
+        var svc = CreateService(db);
+        await svc.LancerSaisonAsync(ligue.Id);
+
+        Assert.Equal(6, await CompterMatchsAsync(ligue.Id));
+    }
+
+    [Fact]
+    public void DisplayHelpers_ConnaitLesFormatsLibres()
+    {
+        Assert.Equal("Libre", DisplayHelpers.LeagueFormatLabel(LeagueFormat.Libre));
+        Assert.Equal("Libre + Play-offs", DisplayHelpers.LeagueFormatLabel(LeagueFormat.LibreAvecPlayoffs));
+
+        Assert.True(DisplayHelpers.EstFormatLibre(LeagueFormat.Libre));
+        Assert.True(DisplayHelpers.EstFormatLibre(LeagueFormat.LibreAvecPlayoffs));
+        Assert.False(DisplayHelpers.EstFormatLibre(LeagueFormat.RoundRobin));
+
+        Assert.True(DisplayHelpers.AvecPlayoffs(LeagueFormat.LibreAvecPlayoffs));
+        Assert.True(DisplayHelpers.AvecPlayoffs(LeagueFormat.RoundRobinAvecPlayoffs));
+        Assert.False(DisplayHelpers.AvecPlayoffs(LeagueFormat.Libre));
+    }
+
+    [Fact]
+    public void LeagueFormat_ValeursPersistees_NeDoiventPasBouger()
+    {
+        // ces entiers sont stockés en base : les réordonner casserait les ligues
+        Assert.Equal(0, (int)LeagueFormat.RoundRobin);
+        Assert.Equal(1, (int)LeagueFormat.RoundRobinAvecPlayoffs);
+        Assert.Equal(2, (int)LeagueFormat.Libre);
+        Assert.Equal(3, (int)LeagueFormat.LibreAvecPlayoffs);
+    }
+
+    [Fact]
+    public async Task SupprimerRonde_NeSupprimeQueLaRondeVisee()
+    {
+        // Bug signalé : supprimer la dernière ronde effaçait tout le calendrier.
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1]), (ids[2], ids[3])]);
+        await svc.DefinirRondeAsync(ligueId, 2, [(ids[0], ids[2]), (ids[1], ids[3])]);
+        await svc.DefinirRondeAsync(ligueId, 3, [(ids[0], ids[3]), (ids[1], ids[2])]);
+        Assert.Equal(6, await CompterMatchsAsync(ligueId));
+
+        await svc.SupprimerRondeAsync(ligueId, 3);   // la dernière
+
+        // les rondes 1 et 2 doivent rester intactes
+        await using var db2 = _factory.CreateContext();
+        var restants = await db2.Matches
+            .Where(m => m.Division!.LeagueId == ligueId)
+            .Select(m => m.Ronde)
+            .ToListAsync();
+        Assert.Equal(4, restants.Count);
+        Assert.Equal([1, 1, 2, 2], restants.OrderBy(r => r).ToList());
+    }
+
+    [Fact]
+    public async Task DefinirEcheanceRonde_EnregistreEtModifieLaDate()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+
+        var date = new DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, date);
+        Assert.Equal(date.Date, (await svc.GetEcheancesRondesAsync(ligueId))[1].Date);
+
+        var nouvelle = new DateTime(2026, 9, 22, 0, 0, 0, DateTimeKind.Utc);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, nouvelle);
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.Single(echeances);                 // pas de doublon
+        Assert.Equal(nouvelle.Date, echeances[1].Date);
+    }
+
+    [Fact]
+    public async Task DefinirEcheanceRonde_AvecNull_RetireLecheance()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, null);
+
+        Assert.Empty(await svc.GetEcheancesRondesAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task SupprimerRonde_RetireAussiSonEcheance()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirRondeAsync(ligueId, 2, [(ids[2], ids[3])]);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc));
+        await svc.DefinirEcheanceRondeAsync(ligueId, 2, new DateTime(2026, 9, 22, 0, 0, 0, DateTimeKind.Utc));
+
+        await svc.SupprimerRondeAsync(ligueId, 2);
+
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.Single(echeances);
+        Assert.True(echeances.ContainsKey(1));     // celle de la ronde 1 est conservée
+    }
+
+    [Fact]
+    public async Task ProposerAppariements_VarieLesRencontresEntreLesRondes()
+    {
+        // Le reproche initial : « Compléter » proposait toujours les mêmes matchs.
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var r1 = await svc.ProposerAppariementsAsync(ligueId, 1, ids);
+        await svc.DefinirRondeAsync(ligueId, 1, r1);
+
+        var r2 = await svc.ProposerAppariementsAsync(ligueId, 2, ids);
+        await svc.DefinirRondeAsync(ligueId, 2, r2);
+
+        var r3 = await svc.ProposerAppariementsAsync(ligueId, 3, ids);
+
+        static string Cle((int a, int b) p) => p.a < p.b ? $"{p.a}-{p.b}" : $"{p.b}-{p.a}";
+        var paires = r1.Concat(r2).Concat(r3).Select(p => Cle((p.domicileId, p.exterieurId))).ToList();
+
+        // 4 équipes → 3 rondes de 2 matchs couvrent les 6 affrontements possibles,
+        // chacun exactement une fois : aucune répétition.
+        Assert.Equal(6, paires.Count);
+        Assert.Equal(6, paires.Distinct().Count());
+    }
+
+    [Fact]
+    public async Task ProposerAppariements_AlterneDomicileEtExterieur()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var r1 = (await svc.ProposerAppariementsAsync(ligueId, 1, ids)).Single();
+        await svc.DefinirRondeAsync(ligueId, 1, [r1]);
+
+        var r2 = (await svc.ProposerAppariementsAsync(ligueId, 2, ids)).Single();
+
+        // match retour : celui qui recevait se déplace
+        Assert.Equal(r1.domicileId, r2.exterieurId);
+        Assert.Equal(r1.exterieurId, r2.domicileId);
+    }
+
+    [Fact]
+    public async Task ProposerAppariements_LaisseUneEquipeAuReposSiNombreImpair()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(3);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        var propositions = await svc.ProposerAppariementsAsync(ligueId, 1, ids);
+
+        Assert.Single(propositions);   // 3 équipes → 1 match, 1 au repos
+    }
+
+    [Fact]
+    public async Task ProposerAppariements_TientCompteDesRondesNonEnregistrees()
+    {
+        // Cas réel : le commissaire enchaîne « Ajouter une ronde » + « Compléter »
+        // sans enregistrer entre les deux. Sans dejaComposees, les rondes
+        // successives proposaient exactement les mêmes rencontres.
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var r1 = await svc.ProposerAppariementsAsync(ligueId, 1, ids);   // rien en base
+        var r2 = await svc.ProposerAppariementsAsync(ligueId, 2, ids, r1);
+
+        static string Cle((int a, int b) p) => p.a < p.b ? $"{p.a}-{p.b}" : $"{p.b}-{p.a}";
+        var c1 = r1.Select(p => Cle((p.domicileId, p.exterieurId))).ToHashSet();
+        var c2 = r2.Select(p => Cle((p.domicileId, p.exterieurId))).ToHashSet();
+
+        Assert.Empty(c1.Intersect(c2));   // aucune rencontre en commun
+    }
+
+    [Fact]
+    public async Task RenumeroterRondes_ComblLesTrousApresSuppression()
+    {
+        // Bug signalé : après suppression, il restait « Ronde 1 » puis « Ronde 4 ».
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirRondeAsync(ligueId, 2, [(ids[2], ids[3])]);
+        await svc.DefinirRondeAsync(ligueId, 3, [(ids[0], ids[2])]);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 3, new DateTime(2026, 9, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        await svc.SupprimerRondeAsync(ligueId, 2);      // trou : 1, 3
+        Assert.True(await svc.RenumeroterRondesAsync(ligueId));
+
+        await using var db2 = _factory.CreateContext();
+        var rondes = await db2.Matches
+            .Where(m => m.Division!.LeagueId == ligueId)
+            .Select(m => m.Ronde).Distinct().OrderBy(r => r).ToListAsync();
+        Assert.Equal([1, 2], rondes);
+
+        // l'échéance suit sa ronde (3 → 2)
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.True(echeances.ContainsKey(2));
+    }
+
+    [Fact]
+    public async Task RenumeroterRondes_NeToucheRienSiDejaCompact()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+        await svc.DefinirRondeAsync(ligueId, 2, [(ids[2], ids[3])]);
+
+        Assert.True(await svc.RenumeroterRondesAsync(ligueId));
+
+        await using var db2 = _factory.CreateContext();
+        var rondes = await db2.Matches
+            .Where(m => m.Division!.LeagueId == ligueId)
+            .Select(m => m.Ronde).Distinct().OrderBy(r => r).ToListAsync();
+        Assert.Equal([1, 2], rondes);
+    }
+
+    [Fact]
+    public async Task RenumeroterRondes_RefuseDeDecalerUneRondeCommencee()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(4);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            await svc.DefinirRondeAsync(ligueId, 2, [(ids[0], ids[1])]);   // pas de ronde 1
+        }
+        await using (var db = _factory.CreateContext())
+        {
+            var m = await db.Matches.FirstAsync();
+            m.Statut = MatchStatus.Termine;
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            Assert.False(await svc.RenumeroterRondesAsync(ligueId));   // 2 → 1 interdit
+            Assert.Equal(2, (await db.Matches.FirstAsync()).Ronde);
+        }
+    }
+
+    [Fact]
+    public async Task DefinirEcheanceRonde_ConserveLaDateSaisieQuelQueSoitLeFuseau()
+    {
+        // Piège : une date stockée à minuit bascule d'un jour selon le fuseau
+        // et l'heure d'été. Elle est donc normalisée à midi UTC.
+        var (ligueId, ids) = await SetupLigueLibreAsync(2);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirRondeAsync(ligueId, 1, [(ids[0], ids[1])]);
+
+        // saisie « 25 août » en heure locale non spécifiée, comme le MudDatePicker
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 8, 25));
+
+        var stockee = (await svc.GetEcheancesRondesAsync(ligueId))[1];
+        Assert.Equal(new DateTime(2026, 8, 25), stockee.Date);   // toujours le 25
+        Assert.Equal(12, stockee.Hour);                          // midi : marge de 12h
+    }
 
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService

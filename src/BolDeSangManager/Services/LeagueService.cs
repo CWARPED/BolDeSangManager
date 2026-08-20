@@ -1,6 +1,7 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
@@ -24,6 +25,11 @@ public class LeagueService(
             .Include(l => l.Game)
             .Include(l => l.RulesVersion)
             .Include(l => l.Commissaire)
+            // Équipes de la ligue chargées directement : en format Libre elles
+            // n'ont pas encore de division au moment de composer le calendrier,
+            // et passer uniquement par Divisions les rendrait invisibles.
+            .Include(l => l.Equipes).ThenInclude(e => e.Coach)
+            .Include(l => l.Equipes).ThenInclude(e => e.TeamType)
             .Include(l => l.Divisions).ThenInclude(d => d.Equipes).ThenInclude(e => e.Coach)
             .Include(l => l.Divisions).ThenInclude(d => d.Equipes).ThenInclude(e => e.TeamType)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
@@ -76,10 +82,294 @@ public class LeagueService(
             await db.SaveChangesAsync();
         }
 
-        await GenererPoolMatchsAsync(ligue);
+        // Format Libre : le commissaire compose lui-même les rondes après le
+        // lancement. On crée quand même la division ci-dessus, il en a besoin
+        // pour y rattacher ses rencontres.
+        if (!DisplayHelpers.EstFormatLibre(ligue.Format))
+            await GenererPoolMatchsAsync(ligue);
+
         ligue.Statut = LeagueStatus.EnCours;
         await db.SaveChangesAsync();
-        logger.LogInformation("Saison lancée pour la ligue {NomLigue} (id={Id}) avec {NbEquipes} équipes", ligue.Nom, ligue.Id, ligue.Equipes.Count);
+        logger.LogInformation("Saison lancée pour la ligue {NomLigue} (id={Id}) avec {NbEquipes} équipes (format={Format})", ligue.Nom, ligue.Id, ligue.Equipes.Count, ligue.Format);
+    }
+
+    /// <summary>
+    /// Format Libre : définit (ou remplace) les rencontres d'une ronde.
+    /// Une équipe non citée est simplement au repos ce tour-ci.
+    /// Une ronde dont un match est déjà joué ne peut plus être modifiée.
+    /// </summary>
+    public async Task DefinirRondeAsync(int ligueId, int ronde, IReadOnlyList<(int domicileId, int exterieurId)> paires)
+    {
+        var ligue = await db.Leagues
+            .Include(l => l.Equipes)
+            .Include(l => l.Divisions)
+            .FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        if (!DisplayHelpers.EstFormatLibre(ligue.Format))
+            throw new InvalidOperationException(
+                "Seules les ligues au format Libre permettent de composer les rondes à la main.");
+
+        if (ronde < 1)
+            throw new InvalidOperationException("Le numéro de ronde doit être supérieur ou égal à 1.");
+
+        var equipesDeLaLigue = ligue.Equipes.ToDictionary(e => e.Id, e => e.Nom);
+
+        // Validation des paires avant toute écriture.
+        var vues = new Dictionary<int, string>();
+        foreach (var (domicileId, exterieurId) in paires)
+        {
+            if (domicileId == exterieurId)
+                throw new InvalidOperationException("Une équipe ne peut pas se rencontrer elle-même.");
+
+            foreach (var id in new[] { domicileId, exterieurId })
+            {
+                if (!equipesDeLaLigue.TryGetValue(id, out var nom))
+                    throw new InvalidOperationException("Une des équipes sélectionnées n'appartient pas à cette ligue.");
+
+                if (!vues.TryAdd(id, nom))
+                    throw new InvalidOperationException(
+                        $"« {nom} » apparaît deux fois dans la ronde {ronde} : une équipe ne peut jouer qu'un match par ronde.");
+            }
+        }
+
+        var divisionId = ligue.Divisions.OrderBy(d => d.Ordre).FirstOrDefault()?.Id
+            ?? throw new InvalidOperationException("La ligue n'a pas encore de division. Lancez la saison d'abord.");
+
+        var existants = await db.Matches
+            .Where(m => m.Division!.LeagueId == ligueId && m.Ronde == ronde && !m.EstPlayoff)
+            .ToListAsync();
+
+        if (existants.Any(BrouillardHelpers.EstJoue))
+            throw new InvalidOperationException(
+                $"La ronde {ronde} a déjà commencé : elle ne peut plus être modifiée.");
+
+        await using var tx = await db.Database.BeginTransactionAsync();
+        try
+        {
+            db.Matches.RemoveRange(existants);
+            await db.SaveChangesAsync();
+
+            db.Matches.AddRange(paires.Select(p => new Match
+            {
+                DivisionId        = divisionId,
+                Ronde             = ronde,
+                EquipeDomicileId  = p.domicileId,
+                EquipeExterieurId = p.exterieurId,
+                Statut            = MatchStatus.Programme,
+                EstPlayoff        = false
+            }));
+            await db.SaveChangesAsync();
+
+            await tx.CommitAsync();
+            logger.LogInformation("Ronde {Ronde} définie pour la ligue {Id} : {NbMatchs} rencontre(s)", ronde, ligueId, paires.Count);
+        }
+        catch
+        {
+            await tx.RollbackAsync();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Date indicative de fin de ronde : celle à laquelle les matchs devraient
+    /// être joués. Purement informative — passer `null` retire l'échéance.
+    /// </summary>
+    public async Task DefinirEcheanceRondeAsync(int ligueId, int ronde, DateTime? dateLimite)
+    {
+        var ligue = await db.Leagues.FindAsync(ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        if (ronde < 1)
+            throw new InvalidOperationException("Le numéro de ronde doit être supérieur ou égal à 1.");
+
+        var existante = await db.EcheancesRondes
+            .FirstOrDefaultAsync(e => e.LeagueId == ligueId && e.Ronde == ronde);
+
+        // Une échéance est une DATE, pas un instant. On la stocke à midi UTC :
+        // minuit basculerait d'un jour à l'autre selon le fuseau et l'heure
+        // d'été, et la date affichée ne serait plus celle qui a été saisie.
+        DateTime? valeur = dateLimite is null
+            ? null
+            : new DateTime(dateLimite.Value.Year, dateLimite.Value.Month, dateLimite.Value.Day,
+                           12, 0, 0, DateTimeKind.Utc);
+
+        if (valeur is null)
+        {
+            if (existante is not null) db.EcheancesRondes.Remove(existante);
+        }
+        else if (existante is null)
+        {
+            db.EcheancesRondes.Add(new EcheanceRonde
+            {
+                LeagueId   = ligueId,
+                Ronde      = ronde,
+                DateLimite = valeur.Value
+            });
+        }
+        else
+        {
+            existante.DateLimite = valeur.Value;
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Échéance de la ronde {Ronde} (ligue {Id}) : {Date}", ronde, ligueId, dateLimite?.ToString("yyyy-MM-dd") ?? "retirée");
+    }
+
+    /// <summary>Échéances indicatives d'une ligue, indexées par numéro de ronde.</summary>
+    public async Task<Dictionary<int, DateTime>> GetEcheancesRondesAsync(int ligueId) =>
+        await db.EcheancesRondes
+            .Where(e => e.LeagueId == ligueId)
+            .ToDictionaryAsync(e => e.Ronde, e => e.DateLimite);
+
+    /// <summary>
+    /// Format Libre : propose un appariement des équipes encore libres d'une
+    /// ronde, en évitant autant que possible les affrontements déjà programmés
+    /// dans les autres rondes de la ligue.
+    ///
+    /// Un simple appariement dans l'ordre rejouerait sans cesse les mêmes
+    /// rencontres. On retient donc, parmi les paires possibles, celle dont les
+    /// deux équipes se sont le moins souvent affrontées (puis, à égalité, celle
+    /// qui a le moins joué), en inversant domicile/extérieur par rapport à la
+    /// dernière confrontation.
+    /// </summary>
+    public async Task<List<(int domicileId, int exterieurId)>> ProposerAppariementsAsync(
+        int ligueId, int ronde, IReadOnlyList<int> equipesLibres,
+        IReadOnlyList<(int domicileId, int exterieurId)>? dejaComposees = null)
+    {
+        var libres = equipesLibres.ToList();
+        var propositions = new List<(int, int)>();
+        if (libres.Count < 2) return propositions;
+
+        // Historique des confrontations, toutes rondes confondues sauf celle-ci.
+        var historique = (await db.Matches
+            .Where(m => m.Division!.LeagueId == ligueId && m.Ronde != ronde)
+            .Select(m => new { m.EquipeDomicileId, m.EquipeExterieurId })
+            .ToListAsync())
+            .Select(m => (m.EquipeDomicileId, m.EquipeExterieurId))
+            .ToList();
+
+        // Rondes composées à l'écran mais pas encore enregistrées : sans elles,
+        // deux rondes créées d'affilée proposeraient les mêmes rencontres.
+        if (dejaComposees is not null)
+            historique.AddRange(dejaComposees);
+
+        static string Cle(int a, int b) => a < b ? $"{a}-{b}" : $"{b}-{a}";
+
+        var nbRencontres = new Dictionary<string, int>();
+        var nbMatchs     = new Dictionary<int, int>();
+        var dernierDomicile = new Dictionary<string, int>();
+
+        foreach (var (dom, ext) in historique)
+        {
+            var cle = Cle(dom, ext);
+            nbRencontres[cle] = nbRencontres.GetValueOrDefault(cle) + 1;
+            dernierDomicile[cle] = dom;
+            nbMatchs[dom] = nbMatchs.GetValueOrDefault(dom) + 1;
+            nbMatchs[ext] = nbMatchs.GetValueOrDefault(ext) + 1;
+        }
+
+        while (libres.Count >= 2)
+        {
+            // L'équipe la moins servie ouvre l'appariement.
+            var a = libres.OrderBy(id => nbMatchs.GetValueOrDefault(id)).ThenBy(id => id).First();
+            libres.Remove(a);
+
+            // Son adversaire : celui qu'elle a le moins rencontré.
+            var b = libres
+                .OrderBy(id => nbRencontres.GetValueOrDefault(Cle(a, id)))
+                .ThenBy(id => nbMatchs.GetValueOrDefault(id))
+                .ThenBy(id => id)
+                .First();
+            libres.Remove(b);
+
+            // Alternance : si a recevait la dernière fois, il se déplace.
+            var cle = Cle(a, b);
+            var aRecuDernierement = dernierDomicile.TryGetValue(cle, out var d) && d == a;
+            propositions.Add(aRecuDernierement ? (b, a) : (a, b));
+
+            nbRencontres[cle] = nbRencontres.GetValueOrDefault(cle) + 1;
+            dernierDomicile[cle] = aRecuDernierement ? b : a;
+            nbMatchs[a] = nbMatchs.GetValueOrDefault(a) + 1;
+            nbMatchs[b] = nbMatchs.GetValueOrDefault(b) + 1;
+        }
+
+        return propositions;
+    }
+
+    /// <summary>
+    /// Renumérote les rondes d'une ligue en 1, 2, 3… sans trou, après une
+    /// suppression. Une ronde déjà commencée ne peut pas changer de numéro
+    /// (des matchs joués y font référence) : dans ce cas on ne touche à rien
+    /// et on renvoie false, à charge de l'appelant de laisser la numérotation.
+    /// </summary>
+    public async Task<bool> RenumeroterRondesAsync(int ligueId)
+    {
+        var matchs = await db.Matches
+            .Where(m => m.Division!.LeagueId == ligueId && !m.EstPlayoff)
+            .ToListAsync();
+
+        if (matchs.Count == 0) return true;
+
+        var ordre = matchs.Select(m => m.Ronde).Distinct().OrderBy(r => r).ToList();
+        var cible = ordre.Select((ancien, i) => (ancien, nouveau: i + 1))
+                         .Where(x => x.ancien != x.nouveau)
+                         .ToList();
+
+        if (cible.Count == 0) return true;   // déjà compact
+
+        // Une ronde commencée ne doit pas être renumérotée.
+        var rondesCommencees = matchs.Where(BrouillardHelpers.EstJoue)
+                                     .Select(m => m.Ronde).ToHashSet();
+        if (cible.Any(x => rondesCommencees.Contains(x.ancien)))
+        {
+            logger.LogInformation("Renumérotation ignorée pour la ligue {Id} : une ronde a déjà commencé", ligueId);
+            return false;
+        }
+
+        var map = cible.ToDictionary(x => x.ancien, x => x.nouveau);
+        foreach (var m in matchs.Where(m => map.ContainsKey(m.Ronde)))
+            m.Ronde = map[m.Ronde];
+
+        var echeances = await db.EcheancesRondes.Where(e => e.LeagueId == ligueId).ToListAsync();
+        foreach (var e in echeances.Where(e => map.ContainsKey(e.Ronde)))
+            e.Ronde = map[e.Ronde];
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Rondes renumérotées pour la ligue {Id} : {Nb} décalage(s)", ligueId, map.Count);
+        return true;
+    }
+
+    /// <summary>
+    /// Format Libre : supprime une ronde entière. Les rondes suivantes ne sont
+    /// pas renumérotées — le commissaire recompose s'il le souhaite.
+    /// </summary>
+    public async Task SupprimerRondeAsync(int ligueId, int ronde)
+    {
+        var ligue = await db.Leagues.FindAsync(ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        if (!DisplayHelpers.EstFormatLibre(ligue.Format))
+            throw new InvalidOperationException(
+                "Seules les ligues au format Libre permettent de supprimer une ronde.");
+
+        var matchs = await db.Matches
+            .Where(m => m.Division!.LeagueId == ligueId && m.Ronde == ronde && !m.EstPlayoff)
+            .ToListAsync();
+
+        if (matchs.Any(BrouillardHelpers.EstJoue))
+            throw new InvalidOperationException(
+                $"La ronde {ronde} a déjà commencé : elle ne peut plus être supprimée.");
+
+        db.Matches.RemoveRange(matchs);
+
+        // L'échéance de la ronde n'a plus d'objet.
+        var echeance = await db.EcheancesRondes
+            .FirstOrDefaultAsync(e => e.LeagueId == ligueId && e.Ronde == ronde);
+        if (echeance is not null) db.EcheancesRondes.Remove(echeance);
+
+        await db.SaveChangesAsync();
+        logger.LogInformation("Ronde {Ronde} supprimée pour la ligue {Id} ({NbMatchs} rencontre(s))", ronde, ligueId, matchs.Count);
     }
 
     private async Task GenererPoolMatchsAsync(League ligue)

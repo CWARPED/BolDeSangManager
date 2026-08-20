@@ -53,18 +53,37 @@
                 <MudDivider Class="my-4" />
                 <MudText Typo="Typo.subtitle1" Class="mb-3"><b>Format et règlement</b></MudText>
 
-                <MudSelect T="string" @bind-Value="_formatLabel" Label="Format de la ligue"
-                           Variant="Variant.Outlined" Class="mb-3">
-                    <MudSelectItem T="string" Value="@FormatPlayoffs">@FormatPlayoffs</MudSelectItem>
-                    <MudSelectItem T="string" Value="@FormatRoundRobin">@FormatRoundRobin</MudSelectItem>
+                <MudSelect T="LeagueFormat" @bind-Value="_format" Label="Format de la ligue"
+                           Variant="Variant.Outlined" Class="mb-1">
+                    <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.RoundRobinAvecPlayoffs">Round Robin + play-offs (recommandé)</MudSelectItem>
+                    <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.RoundRobin">Round Robin</MudSelectItem>
+                    <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.LibreAvecPlayoffs">Libre + play-offs</MudSelectItem>
+                    <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.Libre">Libre</MudSelectItem>
                 </MudSelect>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                    @if (DisplayHelpers.EstFormatLibre(_format))
+                    {
+                        <text>
+                            <b>Libre</b> : aucun calendrier n'est généré. Une fois les inscriptions
+                            closes, vous composez vous-même les rondes et les rencontres depuis la
+                            page de la ligue.
+                        </text>
+                    }
+                    else
+                    {
+                        <text>
+                            <b>Round Robin</b> : le calendrier est généré automatiquement au
+                            lancement, chaque équipe rencontrant toutes les autres.
+                        </text>
+                    }
+                </MudText>
 
                 <MudNumericField T="int" @bind-Value="_budget" Label="Budget de départ (po)"
                                  Variant="Variant.Outlined" Class="mb-3"
                                  Min="500000" Max="2000000" Step="50000"
                                  HelperText="Standard : 1 000 000 po" />
 
-                @if (_formatLabel == FormatPlayoffs)
+                @if (DisplayHelpers.AvecPlayoffs(_format))
                 {
                     <MudSelect T="string" @bind-Value="_nbEquipesLabel"
                                Label="Équipes qualifiées en play-offs"
@@ -177,7 +196,7 @@
     string _selectedVersionNom = "";
     string _nom = "";
     string _description = "";
-    string _formatLabel = FormatPlayoffs;
+    LeagueFormat _format = LeagueFormat.RoundRobinAvecPlayoffs;
     string _nbEquipesLabel = Playoff4;
     int _budget = 1_000_000;
     bool _saving;
@@ -269,9 +288,7 @@
                 Description            = _description.Trim(),
                 GameId                 = game.Id,
                 RulesVersionId         = version.Id,
-                Format                 = _formatLabel == FormatPlayoffs
-                                             ? LeagueFormat.RoundRobinAvecPlayoffs
-                                             : LeagueFormat.RoundRobin,
+                Format                 = _format,
                 BudgetDepart           = _budget,
                 NombreEquipesPlayoff   = nbPlayoff,
                 ModeBrouillard         = _modeBrouillard,

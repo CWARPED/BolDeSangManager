@@ -47,7 +47,15 @@ else
                         Lancer la saison
                     </MudButton>
                 }
-                @if (_ligue.Statut == LeagueStatus.EnCours)
+                @if (_ligue.Statut == LeagueStatus.EnCours && DisplayHelpers.EstFormatLibre(_ligue.Format))
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                              StartIcon="@Icons.Material.Filled.EditCalendar"
+                              OnClick="@(() => Nav.NavigateTo($"/ligues/{Id}/calendrier"))">
+                        Composer le calendrier
+                    </MudButton>
+                }
+                @if (_ligue.Statut == LeagueStatus.EnCours && DisplayHelpers.AvecPlayoffs(_ligue.Format))
                 {
                     <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
                               OnClick="LancerPlayoffs">
@@ -351,8 +359,17 @@ else
                 {
                     var duJour = matchsDuMois.Where(m => DateLocaleDe(m).Date == jour.Date).ToList();
                     var horsMois = jour.Month != _moisCourant.Month;
+                    var rondesDuJour = _echeances.Where(e => e.Value.Date == jour.Date)
+                                                 .Select(e => e.Key).OrderBy(r => r).ToList();
                     <div class="calendrier-case @(horsMois ? "hors-mois" : "") @(jour.Date == DateTime.Today ? "aujourdhui" : "")">
                         <div class="calendrier-numero">@jour.Day</div>
+                        @foreach (var r in rondesDuJour)
+                        {
+                            <div class="calendrier-echeance"
+                                 title="@($"Fin de la ronde {r} : les matchs devraient être joués avant cette date (indicatif)")">
+                                Fin ronde @r
+                            </div>
+                        }
                         @foreach (var m in duJour)
                         {
                             <div class="calendrier-match" @onclick="@(() => Nav.NavigateTo($"/matchs/{m.Id}/detail"))"
@@ -366,6 +383,46 @@ else
             </div>
 
             <!-- détail sous la grille : lisible sur mobile -->
+            @{
+                var echeancesDuMois = _echeances
+                    .Where(e => e.Value.Month == _moisCourant.Month && e.Value.Year == _moisCourant.Year)
+                    .OrderBy(e => e.Value).ToList();
+            }
+            @if (echeancesDuMois.Count > 0)
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><b>Fins de ronde du mois</b></MudText>
+                <MudSimpleTable Dense="true" Hover="true" Striped="true">
+                    <tbody>
+                        @foreach (var e in echeancesDuMois)
+                        {
+                            var passee = e.Value.Date < DateTime.Today;
+                            <tr>
+                                <td style="white-space:nowrap">
+                                    <b>@e.Value.ToString("ddd d MMM")</b>
+                                </td>
+                                <td>
+                                    Fin de la <b>ronde @e.Key</b>
+                                    <br />
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Date indicative — rien n'est bloqué à l'échéance.
+                                    </MudText>
+                                </td>
+                                <td style="white-space:nowrap">
+                                    @if (passee)
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Default">Échue</MudChip>
+                                    }
+                                    else
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Color="Color.Info">À venir</MudChip>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+
             @if (matchsDuMois.Count > 0)
             {
                 <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><b>Détail du mois</b></MudText>
@@ -505,6 +562,13 @@ else
         _estCommissaire = _ligue is not null && await Auth.PeutGererLigueAsync(_currentUserId, _ligue.Id);
         _estInscrit = _ligue?.Equipes.Any(e => e.CoachId == _currentUserId) ?? false;
 
+        // Échéances indicatives de fin de ronde (format Libre), affichées dans
+        // le calendrier de la ligue. Ce sont des DATES (stockées à midi UTC) :
+        // aucune conversion de fuseau, sinon la date affichée dériverait d'un jour.
+        if (_ligue is not null)
+            _echeances = (await LeagueService.GetEcheancesRondesAsync(_ligue.Id))
+                .ToDictionary(e => e.Key, e => e.Value.Date);
+
         await ChargerCommissairesAsync();
     }
 
@@ -564,8 +628,12 @@ else
         try
         {
             await LeagueService.LancerSaisonAsync(Id);
-            Snackbar.Add("Saison lancée ! Pool de matchs généré.", Severity.Success);
             _ligue = await LeagueService.GetLigueAsync(Id);
+            Snackbar.Add(
+                _ligue is not null && DisplayHelpers.EstFormatLibre(_ligue.Format)
+                    ? "Saison lancée ! Composez maintenant le calendrier."
+                    : "Saison lancée ! Pool de matchs généré.",
+                Severity.Success);
         }
         catch (Exception ex)
         {
@@ -663,6 +731,9 @@ else
     // ── Vue calendrier mensuelle (#1) ─────────────────────────────────────────
 
     DateTime _moisCourant = PremierDuMois(DateTime.Today);
+
+    /// <summary>Échéances indicatives de fin de ronde, par numéro de ronde (heure locale).</summary>
+    Dictionary<int, DateTime> _echeances = [];
 
     static DateTime PremierDuMois(DateTime d) => new(d.Year, d.Month, 1);
 

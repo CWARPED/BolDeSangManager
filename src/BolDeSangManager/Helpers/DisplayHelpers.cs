@@ -28,8 +28,22 @@ public static class DisplayHelpers
     {
         LeagueFormat.RoundRobin             => "Round Robin",
         LeagueFormat.RoundRobinAvecPlayoffs => "RR + Play-offs",
+        LeagueFormat.Libre                  => "Libre",
+        LeagueFormat.LibreAvecPlayoffs      => "Libre + Play-offs",
         _                                   => f.ToString()
     };
+
+    /// <summary>
+    /// Le calendrier est-il composé à la main par le commissaire ?
+    /// Centralisé ici pour que le test « est-ce un format libre » ne se
+    /// disperse pas en comparaisons d'enum à travers l'application.
+    /// </summary>
+    public static bool EstFormatLibre(LeagueFormat f) =>
+        f is LeagueFormat.Libre or LeagueFormat.LibreAvecPlayoffs;
+
+    /// <summary>Le format prévoit-il une phase de play-offs ?</summary>
+    public static bool AvecPlayoffs(LeagueFormat f) =>
+        f is LeagueFormat.RoundRobinAvecPlayoffs or LeagueFormat.LibreAvecPlayoffs;
 
     public static Color MatchColor(MatchStatus s) => s switch
     {

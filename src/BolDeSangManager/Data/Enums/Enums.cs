@@ -14,8 +14,12 @@ public enum LeagueStatus
 
 public enum LeagueFormat
 {
+    // ⚠️ NE JAMAIS RÉORDONNER : ces valeurs sont persistées en int en base.
+    // Toute nouvelle entrée s'ajoute À LA FIN.
     RoundRobin,                  // Chacun joue contre tous
-    RoundRobinAvecPlayoffs       // Saison régulière + playoffs
+    RoundRobinAvecPlayoffs,      // Saison régulière + playoffs
+    Libre,                       // Le commissaire compose lui-même les rondes
+    LibreAvecPlayoffs            // Rondes composées à la main + playoffs
 }
 
 public enum MatchStatus

@@ -1,6 +1,8 @@
 @page "/equipes/{Id:int}"
 @rendermode InteractiveServer
+@using BolDeSangManager.Helpers
 @inject TeamService TeamService
+@inject MatchService MatchService
 @inject AuthenticationStateProvider AuthProvider
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
@@ -11,6 +13,24 @@
 @if (_equipe is null)
 {
     <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else if (_masqueeParBrouillard)
+{
+    <MudContainer MaxWidth="MaxWidth.Small" Class="mt-8">
+        <MudPaper Class="pa-8" Elevation="2" Style="text-align:center">
+            <MudIcon Icon="@Icons.Material.Filled.VisibilityOff" Size="Size.Large" Color="Color.Warning" />
+            <MudText Typo="Typo.h6" Class="mt-2">Fiche masquée — mode brouillard</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mt-2 mb-4">
+                <b>@_equipe.Nom</b> est votre prochain adversaire : son effectif reste caché
+                jusqu'à ce que la rencontre soit jouée. C'est le principe du mode brouillard —
+                on ne prépare pas un match en étudiant l'équipe d'en face.
+            </MudText>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Nav.NavigateTo($"/ligues/{_equipe.LeagueId}"))">
+                Retour à la ligue
+            </MudButton>
+        </MudPaper>
+    </MudContainer>
 }
 else
 {
@@ -263,6 +283,13 @@ else
     string _userId = "";
     bool _estCommissaire;
 
+    /// <summary>
+    /// Mode brouillard : la fiche du prochain adversaire est masquée, pour que
+    /// le coach ne prépare pas sa rencontre en étudiant l'effectif d'en face.
+    /// Le contrôle est fait au chargement (serveur), pas seulement à l'affichage.
+    /// </summary>
+    bool _masqueeParBrouillard;
+
     bool _peutEditer =>
         _equipe is not null
         && _equipe.CoachId == _userId
@@ -282,6 +309,22 @@ else
                        || authState.User.IsInRole("GrandCommissaire")
                        || authState.User.IsInRole("Admin")
                        || (_equipe?.League?.CommissaireId is { } cid && cid == _userId);
+
+        // Mode brouillard : masquer la fiche du prochain adversaire.
+        if (_equipe?.League is { ModeBrouillard: true } ligue && !_estCommissaire)
+        {
+            var mesEquipes = (await TeamService.GetEquipesLigueAsync(ligue.Id))
+                .Where(e => e.CoachId == _userId)
+                .Select(e => e.Id)
+                .ToHashSet();
+
+            if (mesEquipes.Count > 0)
+            {
+                var matchs = await MatchService.GetMatchsLigueAsync(ligue.Id);
+                _masqueeParBrouillard = !BrouillardHelpers.PeutVoirFicheEquipe(
+                    Id, matchs, mesEquipes, ligue.ModeBrouillard, _estCommissaire);
+            }
+        }
     }
 
     async Task CorrigerXp(TeamPlayer joueur)

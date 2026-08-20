@@ -1,0 +1,527 @@
+@page "/ligues/{Id:int}/calendrier"
+@rendermode InteractiveServer
+@using BolDeSangManager.Helpers
+@inject LeagueService LeagueService
+@inject NavigationManager Nav
+@inject AuthenticationStateProvider AuthProvider
+@inject BolDeSangManager.Services.IAuthorizationService Auth
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+
+<PageTitle>Calendrier — @(_ligue?.Nom ?? "Ligue")</PageTitle>
+
+@if (_chargement)
+{
+    <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+}
+else if (_ligue is null)
+{
+    <MudAlert Severity="Severity.Error" Class="ma-4">Ligue introuvable.</MudAlert>
+}
+else if (!_peutGerer)
+{
+    <MudAlert Severity="Severity.Warning" Class="ma-4">
+        Seul le commissaire de cette ligue peut composer le calendrier.
+    </MudAlert>
+}
+else if (!DisplayHelpers.EstFormatLibre(_ligue.Format))
+{
+    <MudAlert Severity="Severity.Info" Class="ma-4">
+        Cette ligue est au format <b>@DisplayHelpers.LeagueFormatLabel(_ligue.Format)</b> :
+        son calendrier est généré automatiquement et n'a pas à être composé à la main.
+    </MudAlert>
+}
+else
+{
+    <MudContainer MaxWidth="MaxWidth.Large" Class="mt-4">
+
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+            <div>
+                <MudText Typo="Typo.h5">Composer le calendrier</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_ligue.Nom</MudText>
+            </div>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="@(() => Nav.NavigateTo($"/ligues/{Id}"))">
+                Retour à la ligue
+            </MudButton>
+        </MudStack>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+            Composez chaque ronde en choisissant les rencontres. Une équipe non citée
+            dans une ronde est simplement <b>au repos</b> ce tour-là. Une ronde dont un
+            match a commencé est verrouillée.
+        </MudAlert>
+
+        @* ── Barre de synthèse ─────────────────────────────────────────── *@
+        <MudPaper Class="pa-3 mb-4" Elevation="1">
+            <MudStack Row="true" Spacing="4" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
+                <MudChip T="string" Icon="@Icons.Material.Filled.Groups" Variant="Variant.Text">
+                    @_equipes.Count équipe(s)
+                </MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.CalendarMonth" Variant="Variant.Text">
+                    @_rondes.Count ronde(s)
+                </MudChip>
+                <MudChip T="string" Icon="@Icons.Material.Filled.SportsScore" Variant="Variant.Text">
+                    @_rondes.Sum(r => r.Paires.Count) rencontre(s)
+                </MudChip>
+                <MudSpacer />
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="AjouterRonde">
+                    Ajouter une ronde
+                </MudButton>
+            </MudStack>
+        </MudPaper>
+
+        @if (_equipes.Count < 2)
+        {
+            <MudAlert Severity="Severity.Warning">
+                Il faut au moins deux équipes inscrites pour composer des rencontres.
+            </MudAlert>
+        }
+
+        @if (!_rondes.Any())
+        {
+            <MudPaper Class="pa-8" Elevation="0" Style="text-align:center; border:1px dashed var(--mud-palette-lines-default)">
+                <MudIcon Icon="@Icons.Material.Filled.EventNote" Size="Size.Large" Color="Color.Secondary" />
+                <MudText Typo="Typo.h6" Class="mt-2">Aucune ronde pour l'instant</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                    Ajoutez une première ronde pour commencer à composer le calendrier.
+                </MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add" OnClick="AjouterRonde">
+                    Ajouter une ronde
+                </MudButton>
+            </MudPaper>
+        }
+
+        @foreach (var ronde in _rondes.OrderBy(r => r.Numero))
+        {
+            <MudPaper Class="pa-4 mb-4" Elevation="2">
+
+                @* ── En-tête de ronde ──────────────────────────────────── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3">
+                    <MudText Typo="Typo.h6">Ronde @ronde.Numero</MudText>
+
+                    @if (ronde.Verrouillee)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                 Icon="@Icons.Material.Filled.Lock"
+                                 title="Cette ronde a commencé : elle ne peut plus être modifiée">
+                            Commencée
+                        </MudChip>
+                    }
+
+                    <MudSpacer />
+
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @ronde.Paires.Count rencontre(s)@(RepresenterRepos(ronde))
+                    </MudText>
+
+                    @if (!ronde.Verrouillee)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error" Size="Size.Small"
+                                       title="Supprimer cette ronde"
+                                       OnClick="@(() => SupprimerRonde(ronde))" />
+                    }
+                </MudStack>
+
+                @* ── Échéance indicative ───────────────────────────────── *@
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
+                          Wrap="Wrap.Wrap" Class="mb-3">
+                    @* PickerVariant.Dialog : en inline, le calendrier est rogné par
+                       le conteneur de la ronde sur les écrans étroits. *@
+                    <MudDatePicker Date="ronde.DateLimite"
+                                   DateChanged="@(d => { ronde.DateLimite = d; ronde.Modifiee = true; })"
+                                   Label="À jouer avant le (facultatif)"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   PickerVariant="PickerVariant.Dialog"
+                                   Clearable="true" Editable="true"
+                                   DateFormat="dd/MM/yyyy"
+                                   Disabled="@ronde.Verrouillee"
+                                   Class="calendrier-date" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Date indicative : rien n'est bloqué à l'échéance.
+                    </MudText>
+                </MudStack>
+
+                @* ── Rencontres ────────────────────────────────────────── *@
+                @foreach (var paire in ronde.Paires)
+                {
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
+                              Wrap="Wrap.Wrap" Class="mb-2 rencontre-ligne">
+                        <MudSelect T="int" Value="paire.DomicileId"
+                                   ValueChanged="@(v => ChangerEquipe(ronde, paire, domicile: true, v))"
+                                   ToStringFunc="@NomEquipe"
+                                   Label="Domicile" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Disabled="@ronde.Verrouillee" Class="equipe-select">
+                            @foreach (var e in EquipesDisponibles(ronde, paire, domicile: true))
+                            {
+                                <MudSelectItem T="int" Value="@e.Id">@e.Nom</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        <MudText Typo="Typo.body2" Color="Color.Secondary"><b>vs</b></MudText>
+
+                        <MudSelect T="int" Value="paire.ExterieurId"
+                                   ValueChanged="@(v => ChangerEquipe(ronde, paire, domicile: false, v))"
+                                   ToStringFunc="@NomEquipe"
+                                   Label="Extérieur" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                   Disabled="@ronde.Verrouillee" Class="equipe-select">
+                            @foreach (var e in EquipesDisponibles(ronde, paire, domicile: false))
+                            {
+                                <MudSelectItem T="int" Value="@e.Id">@e.Nom</MudSelectItem>
+                            }
+                        </MudSelect>
+
+                        @if (!ronde.Verrouillee)
+                        {
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                           title="Retirer cette rencontre"
+                                           OnClick="@(() => { ronde.Paires.Remove(paire); ronde.Modifiee = true; })" />
+                        }
+                    </MudStack>
+                }
+
+                @* ── Actions de ronde ──────────────────────────────────── *@
+                @if (!ronde.Verrouillee)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Add"
+                                   Disabled="@(!PeutAjouterRencontre(ronde))"
+                                   title="@(PeutAjouterRencontre(ronde)
+                                       ? "Ajouter une rencontre à cette ronde"
+                                       : "Toutes les équipes jouent déjà dans cette ronde")"
+                                   OnClick="@(() => AjouterRencontre(ronde))">
+                            Ajouter une rencontre
+                        </MudButton>
+
+                        <MudButton Variant="Variant.Text" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.AutoFixHigh"
+                                   title="Apparier automatiquement les équipes encore libres de cette ronde"
+                                   Disabled="@(!PeutAjouterRencontre(ronde))"
+                                   OnClick="@(() => CompleterRonde(ronde))">
+                            Compléter
+                        </MudButton>
+
+                        <MudSpacer />
+
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Save"
+                                   Disabled="@(!ronde.Modifiee || _enregistrement)"
+                                   OnClick="@(() => EnregistrerRonde(ronde))">
+                            @(ronde.Modifiee ? "Enregistrer" : "Enregistré")
+                        </MudButton>
+                    </MudStack>
+                }
+            </MudPaper>
+        }
+    </MudContainer>
+}
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    League? _ligue;
+    List<Team> _equipes = [];
+    List<RondeVm> _rondes = [];
+    Dictionary<int, DateTime> _echeances = [];
+    bool _peutGerer, _chargement = true, _enregistrement;
+
+    /// <summary>Ronde en cours d'édition côté écran (état local, pas encore en base).</summary>
+    class RondeVm
+    {
+        public int Numero { get; set; }
+        public List<PaireVm> Paires { get; set; } = [];
+        public bool Verrouillee { get; set; }
+        public bool Modifiee { get; set; }
+
+        /// <summary>Vrai dès que la ronde existe en base.</summary>
+        public bool Enregistree { get; set; }
+
+        /// <summary>Date indicative de fin de ronde (heure locale à l'écran).</summary>
+        public DateTime? DateLimite { get; set; }
+
+        public bool JamaisEnregistree => !Enregistree;
+    }
+
+    class PaireVm
+    {
+        public int DomicileId { get; set; }
+        public int ExterieurId { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthProvider.GetAuthenticationStateAsync();
+        var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+        _ligue = await LeagueService.GetLigueAsync(Id);
+        if (_ligue is not null)
+        {
+            _peutGerer = await Auth.PeutGererLigueAsync(userId, Id);
+            _equipes = _ligue.Equipes.OrderBy(e => e.Nom).ToList();
+            _echeances = await LeagueService.GetEcheancesRondesAsync(Id);
+            ChargerRondes();
+        }
+        _chargement = false;
+    }
+
+    void ChargerRondes()
+    {
+        // Rondes composées à l'écran mais jamais enregistrées : elles n'existent
+        // pas en base, il faut donc les conserver au rechargement — sinon
+        // enregistrer ou supprimer UNE ronde ferait disparaître tout le reste.
+        var enAttente = _rondes.Where(r => r.JamaisEnregistree).ToList();
+
+        var matchs = _ligue!.Divisions
+            .SelectMany(d => d.Matchs)
+            .Where(m => !m.EstPlayoff)
+            .ToList();
+
+        _rondes = matchs
+            .GroupBy(m => m.Ronde)
+            .OrderBy(g => g.Key)
+            .Select(g => new RondeVm
+            {
+                Numero      = g.Key,
+                Verrouillee = g.Any(BrouillardHelpers.EstJoue),
+                Enregistree = true,
+                DateLimite  = _echeances.TryGetValue(g.Key, out var d) ? d.Date : null,
+                Paires      = g.Select(m => new PaireVm
+                              {
+                                  DomicileId  = m.EquipeDomicileId,
+                                  ExterieurId = m.EquipeExterieurId
+                              }).ToList()
+            })
+            .ToList();
+
+        // On ne réinjecte que celles dont le numéro n'existe pas déjà en base
+        // (une ronde qui vient d'être enregistrée revient par la requête).
+        foreach (var r in enAttente.Where(r => _rondes.All(x => x.Numero != r.Numero)))
+            _rondes.Add(r);
+
+        _rondes = _rondes.OrderBy(r => r.Numero).ToList();
+    }
+
+    // ─── Ergonomie : qui est encore libre dans la ronde ? ─────────────────────
+
+    /// <summary>Équipes déjà engagées dans cette ronde, hors la paire en cours d'édition.</summary>
+    HashSet<int> EquipesPrises(RondeVm ronde, PaireVm? sauf = null) =>
+        ronde.Paires.Where(p => p != sauf)
+             .SelectMany(p => new[] { p.DomicileId, p.ExterieurId })
+             .ToHashSet();
+
+    /// <summary>
+    /// Liste proposée dans un menu déroulant : les équipes libres, plus celle
+    /// déjà choisie dans ce champ (sinon elle disparaîtrait de son propre select).
+    /// </summary>
+    IEnumerable<Team> EquipesDisponibles(RondeVm ronde, PaireVm paire, bool domicile)
+    {
+        var prises = EquipesPrises(ronde, sauf: paire);
+        var autreCote = domicile ? paire.ExterieurId : paire.DomicileId;
+        var courant = domicile ? paire.DomicileId : paire.ExterieurId;
+
+        return _equipes.Where(e => e.Id == courant
+                                || (!prises.Contains(e.Id) && e.Id != autreCote));
+    }
+
+    /// <summary>
+    /// Libellé affiché par les MudSelect. Sans cette fonction, MudBlazor affiche
+    /// l'identifiant brut (« 26 ») quand l'option correspondante n'est pas
+    /// présente dans la liste au moment du rendu.
+    /// </summary>
+    string NomEquipe(int id) =>
+        _equipes.FirstOrDefault(e => e.Id == id)?.Nom ?? "";
+
+    List<Team> EquipesLibres(RondeVm ronde)
+    {
+        var prises = EquipesPrises(ronde);
+        return _equipes.Where(e => !prises.Contains(e.Id)).ToList();
+    }
+
+    bool PeutAjouterRencontre(RondeVm ronde) => EquipesLibres(ronde).Count >= 2;
+
+    string RepresenterRepos(RondeVm ronde)
+    {
+        var libres = EquipesLibres(ronde);
+        if (libres.Count == 0) return "";
+        var noms = string.Join(", ", libres.Select(e => e.Nom));
+        return $" · au repos : {noms}";
+    }
+
+    // ─── Édition ─────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Rencontres composées à l'écran dans les AUTRES rondes, enregistrées ou
+    /// non : sans elles, deux rondes créées d'affilée se ressembleraient.
+    /// </summary>
+    List<(int, int)> RencontresDesAutresRondes(RondeVm sauf) =>
+        _rondes.Where(r => r != sauf)
+               .SelectMany(r => r.Paires.Select(p => (p.DomicileId, p.ExterieurId)))
+               .ToList();
+
+    async Task AjouterRonde()
+    {
+        var numero = _rondes.Any() ? _rondes.Max(r => r.Numero) + 1 : 1;
+        var ronde = new RondeVm { Numero = numero, Modifiee = true, Enregistree = false };
+        _rondes.Add(ronde);
+
+        // Première rencontre pré-remplie, en tenant compte des rondes déjà
+        // composées pour ne pas reproposer systématiquement le même duel.
+        var libres = EquipesLibres(ronde).Select(e => e.Id).ToList();
+        if (libres.Count >= 2)
+        {
+            var propositions = await LeagueService.ProposerAppariementsAsync(
+                Id, numero, libres, RencontresDesAutresRondes(ronde));
+            var premiere = propositions.FirstOrDefault();
+            if (premiere != default)
+                ronde.Paires.Add(new PaireVm { DomicileId = premiere.domicileId, ExterieurId = premiere.exterieurId });
+        }
+    }
+
+    void AjouterRencontre(RondeVm ronde)
+    {
+        var libres = EquipesLibres(ronde);
+        if (libres.Count < 2) return;
+
+        ronde.Paires.Add(new PaireVm { DomicileId = libres[0].Id, ExterieurId = libres[1].Id });
+        ronde.Modifiee = true;
+    }
+
+    /// <summary>
+    /// Apparie d'un coup les équipes encore libres, en variant les rencontres
+    /// par rapport aux autres rondes déjà composées (voir
+    /// LeagueService.ProposerAppariementsAsync).
+    /// </summary>
+    async Task CompleterRonde(RondeVm ronde)
+    {
+        var libres = EquipesLibres(ronde).Select(e => e.Id).ToList();
+        if (libres.Count < 2) return;
+
+        var propositions = await LeagueService.ProposerAppariementsAsync(
+            Id, ronde.Numero, libres, RencontresDesAutresRondes(ronde));
+        foreach (var (dom, ext) in propositions)
+            ronde.Paires.Add(new PaireVm { DomicileId = dom, ExterieurId = ext });
+
+        ronde.Modifiee = true;
+    }
+
+    void ChangerEquipe(RondeVm ronde, PaireVm paire, bool domicile, int nouvelleId)
+    {
+        if (domicile) paire.DomicileId = nouvelleId;
+        else          paire.ExterieurId = nouvelleId;
+        ronde.Modifiee = true;
+    }
+
+    // ─── Persistance ─────────────────────────────────────────────────────────
+
+    async Task EnregistrerRonde(RondeVm ronde)
+    {
+        _enregistrement = true;
+        try
+        {
+            var paires = ronde.Paires.Select(p => (p.DomicileId, p.ExterieurId)).ToList();
+            await LeagueService.DefinirRondeAsync(Id, ronde.Numero, paires);
+            await LeagueService.DefinirEcheanceRondeAsync(Id, ronde.Numero, ronde.DateLimite?.Date);
+            ronde.Modifiee = false;
+            ronde.Enregistree = true;
+            Snackbar.Add($"Ronde {ronde.Numero} enregistrée.", Severity.Success);
+            await RechargerAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible d'enregistrer cette ronde.", Severity.Error);
+        }
+        finally
+        {
+            _enregistrement = false;
+        }
+    }
+
+    async Task SupprimerRonde(RondeVm ronde)
+    {
+        // Ronde jamais enregistrée : elle n'existe qu'à l'écran, rien à
+        // demander au serveur — et surtout pas de rechargement, qui ferait
+        // disparaître les autres rondes en attente d'enregistrement.
+        if (ronde.JamaisEnregistree)
+        {
+            _rondes.Remove(ronde);
+            await RenumeroterAsync();
+            Snackbar.Add($"Ronde {ronde.Numero} retirée.", Severity.Success);
+            return;
+        }
+
+        var ok = await DialogService.ShowMessageBox(
+            "Supprimer la ronde",
+            $"Supprimer la ronde {ronde.Numero} et ses {ronde.Paires.Count} rencontre(s) ? "
+            + "Les rondes suivantes ne sont pas renumérotées.",
+            "Supprimer", "Annuler");
+        if (ok != true) return;
+
+        try
+        {
+            await LeagueService.SupprimerRondeAsync(Id, ronde.Numero);
+            _rondes.Remove(ronde);
+            await LeagueService.RenumeroterRondesAsync(Id);
+            Snackbar.Add($"Ronde {ronde.Numero} supprimée.", Severity.Success);
+            await RechargerAsync();
+            await RenumeroterAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            await RechargerAsync();
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible de supprimer cette ronde.", Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Recompacte la numérotation affichée en 1, 2, 3… après une suppression,
+    /// pour ne pas laisser « Ronde 1 » suivie de « Ronde 4 ».
+    /// Les rondes déjà commencées gardent leur numéro (des matchs joués y font
+    /// référence) : si l'une d'elles devait être décalée, on ne renumérote pas.
+    /// </summary>
+    async Task RenumeroterAsync()
+    {
+        var ordonnees = _rondes.OrderBy(r => r.Numero).ToList();
+
+        var decalees = ordonnees
+            .Select((r, i) => (ronde: r, nouveau: i + 1))
+            .Where(x => x.ronde.Numero != x.nouveau)
+            .ToList();
+
+        if (decalees.Count == 0) return;
+        if (decalees.Any(x => x.ronde.Verrouillee)) return;
+
+        // Les rondes déjà en base doivent être renumérotées côté serveur aussi.
+        if (decalees.Any(x => x.ronde.Enregistree))
+            await LeagueService.RenumeroterRondesAsync(Id);
+
+        foreach (var (ronde, nouveau) in decalees)
+            ronde.Numero = nouveau;
+
+        _rondes = ordonnees;
+        StateHasChanged();
+    }
+
+    async Task RechargerAsync()
+    {
+        _ligue = await LeagueService.GetLigueAsync(Id);
+        if (_ligue is not null)
+        {
+            _equipes = _ligue.Equipes.OrderBy(e => e.Nom).ToList();
+            _echeances = await LeagueService.GetEcheancesRondesAsync(Id);
+            ChargerRondes();
+        }
+        StateHasChanged();
+    }
+}

@@ -182,4 +182,102 @@ public class BrouillardHelpersTests
         Assert.Contains(61, ids);
         Assert.DoesNotContain(62, ids);
     }
+
+    // ─── Fiche d'équipe du prochain adversaire ────────────────────────────────
+    // Les fiches sont publiques par choix : SEUL le prochain adversaire est
+    // masqué, et seulement en mode brouillard.
+
+    [Fact]
+    public void FicheEquipe_ProchainAdversaire_EstMasquee()
+    {
+        List<Match> cal =
+        [
+            M(10, 1, 1, 3, MatchStatus.Termine, score: 2),   // déjà joué contre 3
+            M(11, 2, 1, 4),                                   // prochain : contre 4
+            M(12, 3, 1, 5),                                   // plus tard : contre 5
+        ];
+
+        Assert.False(BrouillardHelpers.PeutVoirFicheEquipe(
+            4, cal, MesEquipes, modeBrouillard: true, estCommissaire: false));
+    }
+
+    [Fact]
+    public void FicheEquipe_AdversaireDejaAffronte_ResteVisible()
+    {
+        List<Match> cal =
+        [
+            M(10, 1, 1, 3, MatchStatus.Termine, score: 2),
+            M(11, 2, 1, 4),
+        ];
+
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            3, cal, MesEquipes, modeBrouillard: true, estCommissaire: false));
+    }
+
+    [Fact]
+    public void FicheEquipe_AdversaireFutur_ResteVisible()
+    {
+        // seul le PROCHAIN est masqué : les rencontres ultérieures ne le sont pas
+        List<Match> cal =
+        [
+            M(11, 2, 1, 4),
+            M(12, 3, 1, 5),
+        ];
+
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            5, cal, MesEquipes, modeBrouillard: true, estCommissaire: false));
+    }
+
+    [Fact]
+    public void FicheEquipe_EquipeNonImpliquee_ResteVisible()
+    {
+        List<Match> cal =
+        [
+            M(11, 2, 1, 4),
+            M(12, 2, 5, 6),   // match entre deux autres équipes
+        ];
+
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            6, cal, MesEquipes, modeBrouillard: true, estCommissaire: false));
+    }
+
+    [Fact]
+    public void FicheEquipe_SansBrouillard_ToutEstVisible()
+    {
+        List<Match> cal = [M(11, 2, 1, 4)];
+
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            4, cal, MesEquipes, modeBrouillard: false, estCommissaire: false));
+    }
+
+    [Fact]
+    public void FicheEquipe_Commissaire_VoitTout()
+    {
+        List<Match> cal = [M(11, 2, 1, 4)];
+
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            4, cal, MesEquipes, modeBrouillard: true, estCommissaire: true));
+    }
+
+    [Fact]
+    public void FicheEquipe_SaPropreEquipe_ToujoursVisible()
+    {
+        // un coach engageant deux équipes qui s'affrontent doit voir les siennes
+        var deuxEquipes = new HashSet<int> { 1, 2 };
+        List<Match> cal = [M(11, 2, 1, 2)];
+
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            2, cal, deuxEquipes, modeBrouillard: true, estCommissaire: false));
+    }
+
+    [Fact]
+    public void FicheEquipe_MatchEnCoursDeSaisie_ResteMasquee()
+    {
+        // tant que le résultat n'est pas acquis, l'effectif adverse reste caché
+        List<Match> cal = [M(11, 2, 1, 4, MatchStatus.FeuilleEnSaisie)];
+
+        Assert.True(BrouillardHelpers.EstJoue(cal[0]));   // considéré comme joué
+        Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
+            4, cal, MesEquipes, modeBrouillard: true, estCommissaire: false));
+    }
 }
