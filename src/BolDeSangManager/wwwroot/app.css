@@ -408,26 +408,51 @@ h1:focus {
    ------------------------------------------------------------ */
 @media (max-width: 599.98px) {
 
-    /* flèches ▲▼ des MudNumericField (Gains, Variation fans, XP) —
-       c'était le pire cas de tout l'audit : 20x20px.
-       !important obligatoire : la feuille de MudBlazor est chargée APRÈS
-       app.css et remet min-height:auto sur ces boutons. */
-    .mud-input-adornment .mud-button-root,
-    .mud-input .mud-icon-button,
+    /* flèches ▲▼ des MudNumericField (Gains, Variation fans, XP).
+       ATTENTION — piège vérifié sur MATÉRIEL RÉEL (Firefox Android) :
+       MudBlazor empile les DEUX flèches dans la hauteur du champ (40px).
+       Leur imposer 34px ou 44px de haut chacune donne 68-88px pour 40px
+       disponibles : la flèche du bas est rognée et l'utilisateur ne peut
+       plus DÉCRÉMENTER. Chromium masquait le défaut (overflow visible),
+       seul le test sur téléphone l'a révélé.
+       On élargit donc HORIZONTALEMENT sans toucher à la hauteur, qui
+       reste la moitié du champ. */
     .mud-input-numeric-spin .mud-button-root {
+        min-height: 0 !important;
+        height: 50% !important;
+        min-width: 44px !important;
+        padding: 0 !important;
+    }
+
+    .mud-input-numeric-spin {
+        height: 100%;
+        align-self: stretch;
+    }
+
+    /* champ porté à 44px : chaque flèche fait donc 22px de haut sur 44px
+       de large — atteignable au pouce sans rien rogner */
+    .mud-main-content .mud-input.mud-input-margin-dense {
+        min-height: 44px;
+    }
+
+    /* autres adornments de champ (icônes en fin de saisie) */
+    .mud-input-adornment .mud-button-root,
+    .mud-input-adornment .mud-icon-button {
         min-height: 34px !important;
         min-width: 34px !important;
         padding: 4px !important;
     }
 
-    /* boutons icône hors AppBar (agenda, supprimer une ligne, +/- de stats) */
-    .mud-main-content .mud-icon-button:not(.mud-input-adornment .mud-icon-button) {
+    /* boutons icône hors AppBar (agenda, supprimer une ligne, +/- de stats).
+       Les flèches de spinner sont EXCLUES : elles sont contraintes par la
+       hauteur de leur champ (voir ci-dessus). */
+    .mud-main-content .mud-icon-button:not(.mud-input-adornment .mud-icon-button):not(.mud-input-numeric-spin .mud-button-root) {
         min-height: 44px !important;
         min-width: 44px !important;
     }
 
-    /* boutons texte/contour Size.Small : 31px -> 44px */
-    .mud-main-content .mud-button-root.mud-button {
+    /* boutons texte/contour Size.Small : 31px -> 44px, spinners exclus */
+    .mud-main-content .mud-button-root.mud-button:not(.mud-input-numeric-spin .mud-button-root) {
         min-height: 44px !important;
     }
 
@@ -515,5 +540,31 @@ h1:focus {
 
     .tabs-compact .mud-tabs-scroll-button {
         display: none;
+    }
+}
+
+/* ------------------------------------------------------------
+   Après-match — audit R9e (écran enfin auditable après avoir
+   fabriqué un match en ValidationCompetences avec des joueurs
+   à 6+ PSP).
+   Le popover des MudSelect a exactement la même couleur de fond
+   que les MudPaper qu'il recouvre (#1e1e1e) et une ombre très
+   faible : le menu de compétences semble transparent et les
+   bordures de la carte du joueur suivant le traversent.
+   Défaut pré-existant (visible aussi en desktop), mais pénalisant
+   surtout sur téléphone où le menu recouvre la carte suivante.
+   Corrigé côté mobile uniquement pour rester dans le périmètre R9.
+   ------------------------------------------------------------ */
+@media (max-width: 599.98px) {
+    .mud-popover.mud-popover-open {
+        background-color: #2a2a2a !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.7) !important;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+    }
+
+    /* les items d'une liste longue (58 compétences) doivent rester
+       confortables au pouce */
+    .mud-popover .mud-list-item {
+        min-height: 44px;
     }
 }
