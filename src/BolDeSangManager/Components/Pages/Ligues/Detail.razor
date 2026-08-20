@@ -117,7 +117,7 @@ else
         </MudPaper>
     }
 
-    <MudTabs Elevation="1" Rounded="true" PanelClass="pt-4">
+    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4">
         <!-- Classement -->
         <MudTabPanel Text="Classement" Icon="@Icons.Material.Filled.Leaderboard">
             @foreach (var division in _ligue.Divisions.OrderBy(d => d.Ordre))
@@ -138,18 +138,18 @@ else
                         <MudTh Style="text-align:center">Pts</MudTh>
                     </HeaderContent>
                     <RowTemplate Context="equipe">
-                        <MudTd>
+                        <MudTd DataLabel="Équipe">
                             <MudLink Href="@($"/equipes/{equipe.Id}")">@equipe.Nom</MudLink>
                         </MudTd>
-                        <MudTd>@(equipe.Coach?.PseudoCoach ?? equipe.Coach?.UserName)</MudTd>
-                        <MudTd>@equipe.TeamType?.Nom</MudTd>
-                        <MudTd Style="text-align:center">@equipe.NombreMatchsJoues</MudTd>
-                        <MudTd Style="text-align:center">@equipe.NombreVictoires</MudTd>
-                        <MudTd Style="text-align:center">@equipe.NombreNuls</MudTd>
-                        <MudTd Style="text-align:center">@equipe.NombreDefaites</MudTd>
-                        <MudTd Style="text-align:center" Class="mud-success-text">@equipe.TouchdownsMarques</MudTd>
-                        <MudTd Style="text-align:center" Class="mud-error-text">@equipe.TouchdownsConcedes</MudTd>
-                        <MudTd Style="text-align:center"><b>@equipe.PointsLigue</b></MudTd>
+                        <MudTd DataLabel="Coach">@(equipe.Coach?.PseudoCoach ?? equipe.Coach?.UserName)</MudTd>
+                        <MudTd DataLabel="Race/Collège">@equipe.TeamType?.Nom</MudTd>
+                        <MudTd DataLabel="Joués" Style="text-align:center">@equipe.NombreMatchsJoues</MudTd>
+                        <MudTd DataLabel="Victoires" Style="text-align:center">@equipe.NombreVictoires</MudTd>
+                        <MudTd DataLabel="Nuls" Style="text-align:center">@equipe.NombreNuls</MudTd>
+                        <MudTd DataLabel="Défaites" Style="text-align:center">@equipe.NombreDefaites</MudTd>
+                        <MudTd DataLabel="TDs marqués" Style="text-align:center" Class="mud-success-text">@equipe.TouchdownsMarques</MudTd>
+                        <MudTd DataLabel="TDs encaissés" Style="text-align:center" Class="mud-error-text">@equipe.TouchdownsConcedes</MudTd>
+                        <MudTd DataLabel="Points" Style="text-align:center"><b>@equipe.PointsLigue</b></MudTd>
                     </RowTemplate>
                 </MudTable>
             }

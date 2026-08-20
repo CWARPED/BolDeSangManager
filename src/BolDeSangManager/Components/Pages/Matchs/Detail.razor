@@ -57,15 +57,26 @@ else
     </MudStack>
 
     <!-- Score -->
+    @* Responsive (R9f) : en xs=5/2/5 la colonne centrale ne fait que 56px
+       sur un écran de 360px — le score « 2 – 1 » en Typo.h4 s'y empile
+       verticalement sur 126px de haut et le nom du coach se coupe.
+       Sur téléphone on passe donc en pleine largeur : les deux équipes
+       côte à côte (xs=6) et le score sur sa propre ligne en dessous. *@
     <MudPaper Elevation="2" Class="pa-4 mb-4">
-        <MudGrid>
-            <MudItem xs="5" Class="text-center">
+        <MudGrid Class="score-grid">
+            <MudItem xs="6" sm="5" Class="text-center">
                 <MudText Typo="Typo.subtitle1"><b>@_match.EquipeDomicile?.Nom</b></MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
                     @(_match.EquipeDomicile?.Coach?.PseudoCoach ?? _match.EquipeDomicile?.Coach?.UserName)
                 </MudText>
             </MudItem>
-            <MudItem xs="2" Class="text-center">
+            <MudItem xs="6" sm="5" Class="text-center score-away">
+                <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @(_match.EquipeExterieur?.Coach?.PseudoCoach ?? _match.EquipeExterieur?.Coach?.UserName)
+                </MudText>
+            </MudItem>
+            <MudItem xs="12" sm="2" Class="text-center score-value">
                 <MudText Typo="Typo.h4" Color="Color.Error">
                     <b>@_match.ScoreDomicile – @_match.ScoreExterieur</b>
                 </MudText>
@@ -75,12 +86,6 @@ else
                         @_match.DateJouee.Value.ToLocalTime().ToString("dd/MM/yyyy")
                     </MudText>
                 }
-            </MudItem>
-            <MudItem xs="5" Class="text-center">
-                <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
-                <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @(_match.EquipeExterieur?.Coach?.PseudoCoach ?? _match.EquipeExterieur?.Coach?.UserName)
-                </MudText>
             </MudItem>
         </MudGrid>
     </MudPaper>
@@ -118,17 +123,17 @@ else
                     <MudTh Style="min-width:120px">Stat</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
-                    <MudTd>@r.Numero</MudTd>
-                    <MudTd><b>@r.NomJoueur</b></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd Style="text-align:center">
+                    <MudTd DataLabel="N°">@r.Numero</MudTd>
+                    <MudTd DataLabel="Joueur"><b>@r.NomJoueur</b></MudTd>
+                    <MudTd DataLabel="TDs"><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="Passes"><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="Interceptions"><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="Éliminations"><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="MVP" Style="text-align:center">
                         <MudCheckBox Value="@(r.TeamPlayerId == _mvpDomId)" Color="Color.Warning"
                                      ValueChanged="@((bool v) => { if (v) _mvpDomId = r.TeamPlayerId; else if (_mvpDomId == r.TeamPlayerId) _mvpDomId = null; })" />
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Blessure">
                         <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Text" Style="min-width:150px">
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">—</MudSelectItem>
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate prochain match</MudSelectItem>
@@ -137,7 +142,7 @@ else
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort</MudSelectItem>
                         </MudSelect>
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Caractéristique">
                         @if (r.Blessure == InjuryType.BlessurePersistante)
                         {
                             <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Variant="Variant.Text" Style="min-width:110px">
@@ -171,17 +176,17 @@ else
                     <MudTh Style="min-width:120px">Stat</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
-                    <MudTd>@r.Numero</MudTd>
-                    <MudTd><b>@r.NomJoueur</b></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd Style="text-align:center">
+                    <MudTd DataLabel="N°">@r.Numero</MudTd>
+                    <MudTd DataLabel="Joueur"><b>@r.NomJoueur</b></MudTd>
+                    <MudTd DataLabel="TDs"><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="Passes"><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="Interceptions"><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="Éliminations"><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
+                    <MudTd DataLabel="MVP" Style="text-align:center">
                         <MudCheckBox Value="@(r.TeamPlayerId == _mvpExtId)" Color="Color.Warning"
                                      ValueChanged="@((bool v) => { if (v) _mvpExtId = r.TeamPlayerId; else if (_mvpExtId == r.TeamPlayerId) _mvpExtId = null; })" />
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Blessure">
                         <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Text" Style="min-width:150px">
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">—</MudSelectItem>
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate prochain match</MudSelectItem>
@@ -190,7 +195,7 @@ else
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort</MudSelectItem>
                         </MudSelect>
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Caractéristique">
                         @if (r.Blessure == InjuryType.BlessurePersistante)
                         {
                             <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Variant="Variant.Text" Style="min-width:110px">
@@ -285,15 +290,15 @@ else
                     <MudTh>Blessure</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
-                    <MudTd>@r.TeamPlayer?.Numero</MudTd>
-                    <MudTd><b>@r.TeamPlayer?.Nom</b></MudTd>
-                    <MudTd><MudText Typo="Typo.caption">@r.TeamPlayer?.PlayerPosition?.Nom</MudText></MudTd>
-                    <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
-                    <MudTd Style="text-align:center">@r.Passes</MudTd>
-                    <MudTd Style="text-align:center">@r.Interceptions</MudTd>
-                    <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
-                    <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
-                    <MudTd Style="text-align:center">
+                    <MudTd DataLabel="N°">@r.TeamPlayer?.Numero</MudTd>
+                    <MudTd DataLabel="Joueur"><b>@r.TeamPlayer?.Nom</b></MudTd>
+                    <MudTd DataLabel="Poste"><MudText Typo="Typo.caption">@r.TeamPlayer?.PlayerPosition?.Nom</MudText></MudTd>
+                    <MudTd DataLabel="TDs" Style="text-align:center">@r.Touchdowns</MudTd>
+                    <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
+                    <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
+                    <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
+                    <MudTd DataLabel="MVP" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
+                    <MudTd DataLabel="PSP" Style="text-align:center">
                         @if (r.PspGagnes > 0)
                         {
                             <MudChip T="string" Size="Size.Small"
@@ -303,7 +308,7 @@ else
                         }
                         else { <span>0</span> }
                     </MudTd>
-                    <MudTd>@BlessureLabel(r.Blessure, r.StatAffectee)</MudTd>
+                    <MudTd DataLabel="Blessure">@BlessureLabel(r.Blessure, r.StatAffectee)</MudTd>
                 </RowTemplate>
             </MudTable>
         }

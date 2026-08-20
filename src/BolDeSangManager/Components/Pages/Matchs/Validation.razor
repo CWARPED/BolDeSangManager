@@ -104,20 +104,20 @@ else
                     <MudTh>Blessure</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
-                    <MudTd><b>@r.TeamPlayer?.Nom</b></MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Joueur"><b>@r.TeamPlayer?.Nom</b></MudTd>
+                    <MudTd DataLabel="Équipe">
                         <MudChip T="string" Size="Size.Small"
                                 Color="@(r.EstCoteDomicile ? Color.Primary : Color.Secondary)">
                             @(r.EstCoteDomicile ? _match.EquipeDomicile?.Nom : _match.EquipeExterieur?.Nom)
                         </MudChip>
                     </MudTd>
-                    <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
-                    <MudTd Style="text-align:center">@r.Passes</MudTd>
-                    <MudTd Style="text-align:center">@r.Interceptions</MudTd>
-                    <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
-                    <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "—")</MudTd>
-                    <MudTd Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
-                    <MudTd Style="text-align:center">
+                    <MudTd DataLabel="TDs" Style="text-align:center">@r.Touchdowns</MudTd>
+                    <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
+                    <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
+                    <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
+                    <MudTd DataLabel="MVP" Style="text-align:center">@(r.EstMVP ? "★" : "—")</MudTd>
+                    <MudTd DataLabel="PSP match" Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
+                    <MudTd DataLabel="PSP total" Style="text-align:center">
                         <b>@(r.TeamPlayer?.PointsStarPlayer ?? 0)</b>
                         @if ((r.TeamPlayer?.PointsStarPlayer ?? 0) >= 6)
                         {
@@ -125,7 +125,7 @@ else
                                      Size="Size.Small" title="Amélioration disponible !" />
                         }
                     </MudTd>
-                    <MudTd>
+                    <MudTd DataLabel="Blessure">
                         @if (r.Blessure.HasValue)
                         {
                             <MudChip T="string" Color="Color.Error" Size="Size.Small">

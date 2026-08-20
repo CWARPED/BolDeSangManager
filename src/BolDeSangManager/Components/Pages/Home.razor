@@ -11,7 +11,12 @@
 <PageTitle>BolDeSang Manager</PageTitle>
 
 <!-- Bandeau Blood Bowl -->
-<div style="margin:-16px -16px 24px -16px; overflow:hidden; border-radius:0 0 8px 8px; max-height:220px;">
+@* Les marges négatives annulent le padding du MudContainer pour un effet
+   pleine largeur. Ce padding vaut 16px à partir de sm mais seulement 8px
+   sur téléphone (Class="px-2 px-sm-4" dans MainLayout) : un -16px codé en
+   dur débordait donc de 8px de chaque côté (audit R9f). La variable est
+   redéfinie sous 600px dans app.css. *@
+<div class="home-bandeau">
     <img src="/images/bandeau.webp" alt="BolDeSang Manager" style="width:100%; display:block; object-fit:cover; object-position:center top;" />
 </div>
 

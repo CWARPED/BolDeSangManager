@@ -109,13 +109,13 @@ else
                     <MudTh Style="text-align:center">PSP</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
-                    <MudTd>@r.TeamPlayer?.Nom</MudTd>
-                    <MudTd Style="text-align:center">@r.Touchdowns</MudTd>
-                    <MudTd Style="text-align:center">@r.Passes</MudTd>
-                    <MudTd Style="text-align:center">@r.Interceptions</MudTd>
-                    <MudTd Style="text-align:center">@r.EliminationsInfligees</MudTd>
-                    <MudTd Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
-                    <MudTd Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
+                    <MudTd DataLabel="Joueur">@r.TeamPlayer?.Nom</MudTd>
+                    <MudTd DataLabel="TDs" Style="text-align:center">@r.Touchdowns</MudTd>
+                    <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
+                    <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
+                    <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
+                    <MudTd DataLabel="MVP" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
+                    <MudTd DataLabel="PSP" Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
                 </RowTemplate>
             </MudTable>
         }
