@@ -235,6 +235,7 @@
                     <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Ordre)">Ordre</MudTableSortLabel></MudTh>
                     <MudTh>Active</MudTh>
                     <MudTh>Barème d'XP</MudTh>
+                    <MudTh>Révision</MudTh>
                     <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
@@ -247,6 +248,19 @@
                             Int @context.XpParInterception · Élim @context.XpParElimination ·
                             MVP @context.XpBonusMvp
                         </MudText>
+                    </MudTd>
+                    <MudTd>
+                        @if (context.Revision > 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     title="@($"Dernier export : {context.DernierExportLe?.ToLocalTime():dd/MM/yyyy à HH'h'mm}")">
+                                rév. @context.Revision
+                            </MudChip>
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">jamais exportée</MudText>
+                        }
                     </MudTd>
                     <MudTd>
                         <MudIconButton Icon="@Icons.Material.Filled.MilitaryTech" Size="Size.Small"
@@ -548,8 +562,26 @@
         {
             using var ms = new MemoryStream();
             await e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+
             ms.Position = 0;
             var (success, imported, errors) = await GameDataExportService.ImportReserveAsync(ms, _selectedVersionId);
+
+            // F3 : refus lié à la révision du fichier → on demande confirmation
+            // explicite, puis on rejoue le même import en forçant.
+            if (!success && errors.Count == 1 && EstAvertissementRevision(errors[0]))
+            {
+                var ok = await DialogService.ShowMessageBox(
+                    "Vérifier avant d'importer",
+                    errors[0],
+                    yesText: "Importer quand même", cancelText: "Annuler");
+
+                if (ok != true) { Snackbar.Add("Import annulé.", Severity.Normal); return; }
+
+                ms.Position = 0;
+                (success, imported, errors) = await GameDataExportService.ImportReserveAsync(
+                    ms, _selectedVersionId, confirmerMalgreRevision: true);
+            }
+
             if (success)
             {
                 Snackbar.Add($"{imported} poste(s) de réserve importé(s)." + (errors.Count > 0 ? $" ({errors.Count} avertissement(s))" : ""), Severity.Success);
@@ -563,6 +595,10 @@
         }
         catch (Exception ex) { Snackbar.Add($"Erreur import : {ex.Message}", Severity.Error); }
     }
+
+    /// <summary>Distingue un refus de traçabilité (F3) d'une vraie erreur de lecture.</summary>
+    static bool EstAvertissementRevision(string message) =>
+        message.Contains("révision", StringComparison.OrdinalIgnoreCase);
 
     async Task ImporterVersion(InputFileChangeEventArgs e)
     {

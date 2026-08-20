@@ -55,11 +55,20 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .OrderBy(c => c.Nom)
             .ToListAsync();
 
+        // F3 : chaque export produit une nouvelle révision, persistée sur la
+        // version. Sans persistance le numéro repartirait à 1 à chaque fois et
+        // ne prouverait rien.
+        version.Revision++;
+        version.DernierExportLe = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
         var dto = new GameDataExportDto(
             Jeu: version.Game.Nom,
             Version: version.Nom,
             Ordre: version.Ordre,
             EstActive: version.EstActive,
+            Revision: version.Revision,
+            ExporteLe: version.DernierExportLe,
             Skills: skills.Select(s => new SkillGdDto(
                 s.Nom, s.Categorie, s.Description, s.EstElite, s.EstTrait,
                 CategorieNom: s.SkillCategoryDef?.Nom)).ToList(),
@@ -156,6 +165,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 Nom = versionNom,
                 Ordre = nextOrdre + 1,
                 EstActive = false,
+                // F3 : la version importée hérite de la révision du fichier, pour
+                // qu'on sache de quelle livraison elle provient. Sans ça la
+                // traçabilité serait perdue au clonage.
+                Revision = dto.Revision ?? 0,
+                DernierExportLe = dto.ExporteLe,
                 // Barème d'XP (R6) — un export antérieur n'a pas ces champs :
                 // on retombe alors sur les valeurs par défaut du jeu.
                 XpParTouchdown    = dto.XpParTouchdown    ?? XpBareme.ParDefaut(game.Type).ParTouchdown,
@@ -357,6 +371,12 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .OrderBy(p => p.Nom)
             .ToListAsync();
 
+        // F3 : la Réserve fait partie des données de la version — un export
+        // Réserve compte donc comme une révision de cette version.
+        version.Revision++;
+        version.DernierExportLe = DateTime.UtcNow;
+        await db.SaveChangesAsync();
+
         var dto = new ReserveExportDto(
             Jeu: version.Game.Nom,
             Version: version.Nom,
@@ -367,7 +387,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 p.CompetencesDepart.Select(pps => pps.Skill.Nom).OrderBy(n => n).ToList(),
                 p.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList(),
                 p.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList()
-            )).ToList()
+            )).ToList(),
+            Revision: version.Revision,
+            ExporteLe: version.DernierExportLe
         );
 
         logger.LogInformation("Export réserve : version '{V}' ({N} postes)", version.Nom, reserve.Count);
@@ -380,7 +402,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
     /// un nom introuvable est signalé mais n'interrompt pas l'import.
     /// </summary>
     public async Task<(bool Success, int Imported, List<string> Errors)> ImportReserveAsync(
-        Stream stream, int rulesVersionId)
+        Stream stream, int rulesVersionId, bool confirmerMalgreRevision = false)
     {
         var errors = new List<string>();
 
@@ -398,6 +420,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
         var version = await db.RulesVersions.FindAsync(rulesVersionId);
         if (version is null)
             return (false, 0, [$"Version id={rulesVersionId} introuvable"]);
+
+        // F3 : refuser d'appliquer un fichier plus ancien que la base sans que
+        // l'utilisateur l'ait explicitement confirmé.
+        var controle = TracabiliteImport.Verifier(dto.Revision, version.Revision, dto.ExporteLe);
+        if (controle.DemandeConfirmation && !confirmerMalgreRevision)
+            return (false, 0, [controle.Message]);
+        if (controle.Verdict != TracabiliteImport.Verdict.PlusRecent)
+            logger.LogWarning("Import Réserve sur version {V} : {Message}", version.Nom, controle.Message);
 
         // skills de la version cible, indexés par nom
         var skillMap = await db.Skills
@@ -500,6 +530,10 @@ record GameDataExportDto(
     List<SkillCategoryGdDto>? Categories = null, // ← AJOUT optionnel (rétrocompat, R2)
     // Barème d'XP de la version (R6). Optionnels : un export antérieur reprend
     // les valeurs par défaut du jeu à l'import.
+    // Traçabilité (F3). Optionnels : un JSON exporté avant cette version n'en a
+    // pas, et doit rester importable tel quel.
+    int? Revision = null,
+    DateTime? ExporteLe = null,
     int? XpParTouchdown = null,
     int? XpParPasse = null,
     int? XpParInterception = null,
@@ -510,7 +544,10 @@ record GameDataExportDto(
 record ReserveExportDto(
     string Jeu,
     string Version,
-    List<PlayerPositionGdDto> Reserve
+    List<PlayerPositionGdDto> Reserve,
+    // Traçabilité (F3), optionnelle pour rester rétrocompatible.
+    int? Revision = null,
+    DateTime? ExporteLe = null
 );
 
 record SkillGdDto(
