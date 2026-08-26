@@ -1,4 +1,5 @@
 ﻿@page "/Account/Manage/DeletePersonalData"
+@layout BolDeSangManager.Components.Layout.MainLayout
 
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Identity
@@ -12,81 +13,138 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<DeletePersonalData> Logger
 
-<PageTitle>Supprimer mon compte</PageTitle>
+<PageTitle>Supprimer mon compte — BolDeSang Manager</PageTitle>
 
-<StatusMessage Message="@message" />
+@* Layout MainLayout et non ManageLayout : ce dernier s'appuie sur des classes
+   Bootstrap (row / col-lg-*) absentes du projet, qui est en MudBlazor. La page
+   s'affichait donc en HTML brut, sans aucun style. *@
 
-<h3>Supprimer mon compte</h3>
+<div class="account-page-wrap">
+    <MudCard Elevation="6" Style="width:100%;max-width:560px">
+        <MudCardContent Class="pa-6">
 
-@if (verdict is not null)
-{
-    @if (verdict.PeutEtreSupprimeDur)
-    {
-        <div class="alert alert-warning" role="alert">
-            <p>
-                <strong>Votre compte sera intégralement supprimé.</strong>
-            </p>
-            <p class="mb-0">
-                Aucune donnée de jeu n'est rattachée à votre compte : il ne restera
-                rien. Cette action est définitive.
-            </p>
-        </div>
-    }
-    else
-    {
-        <div class="alert alert-warning" role="alert">
-            <p>
-                <strong>Vos données personnelles seront effacées, vos résultats sportifs resteront.</strong>
-            </p>
-            <p>
-                Votre compte est rattaché à @DescriptionImpacts(). Ces éléments
-                appartiennent aussi aux autres participants : les effacer viderait
-                leurs classements et leurs feuilles de match.
-            </p>
-            <p class="mb-0">
-                Votre adresse e-mail, votre mot de passe et votre pseudo seront donc
-                effacés, et vous ne pourrez plus vous connecter. Vos équipes resteront
-                dans leurs ligues, sous le nom « Coach supprimé ».
-            </p>
-        </div>
-    }
-
-    <p>
-        Avant de continuer, vous pouvez
-        <a href="Account/Manage/PersonalData">télécharger une copie de vos données</a>.
-    </p>
-}
-
-<div>
-    <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post">
-        <DataAnnotationsValidator />
-        <ValidationSummary class="text-danger" role="alert" />
-
-        @if (requirePassword)
-        {
-            <div class="form-floating mb-3">
-                <InputText type="password" @bind-Value="Input.Password" id="Input.Password"
-                           class="form-control" autocomplete="current-password"
-                           aria-required="true" placeholder="Votre mot de passe" />
-                <label for="Input.Password" class="form-label">Mot de passe</label>
-                <ValidationMessage For="() => Input.Password" class="text-danger" />
+            <div class="d-flex flex-column align-center mb-5">
+                <MudIcon Icon="@Icons.Material.Filled.DeleteForever"
+                         Color="Color.Error" Style="font-size:3rem" />
+                <MudText Typo="Typo.h5" Align="Align.Center" Class="mt-2">
+                    <b>Supprimer mon compte</b>
+                </MudText>
             </div>
-        }
 
-        <div class="form-floating mb-3">
-            <InputText @bind-Value="Input.Confirmation" id="Input.Confirmation"
-                       class="form-control" autocomplete="off"
-                       aria-required="true" placeholder="SUPPRIMER" />
-            <label for="Input.Confirmation" class="form-label">
-                Tapez SUPPRIMER pour confirmer
-            </label>
-            <ValidationMessage For="() => Input.Confirmation" class="text-danger" />
-        </div>
+            @if (!string.IsNullOrEmpty(message))
+            {
+                <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@message</MudAlert>
+            }
 
-        <button class="w-100 btn btn-lg btn-danger" type="submit">
-            Supprimer mon compte
-        </button>
-    </EditForm>
+            @if (verdict is not null)
+            {
+                @if (verdict.PeutEtreSupprimeDur)
+                {
+                    <MudAlert Severity="Severity.Warning" Class="mb-4" Dense="true">
+                        <b>Votre compte sera intégralement supprimé.</b><br />
+                        Aucune donnée de jeu n'y est rattachée : il ne restera rien.
+                        Cette action est définitive.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudAlert Severity="Severity.Info" Class="mb-3" Dense="true">
+                        <b>Vos données personnelles seront effacées,
+                        vos résultats sportifs resteront.</b>
+                    </MudAlert>
+
+                    <MudText Typo="Typo.body2" Class="mb-2">
+                        Votre compte est rattaché à :
+                    </MudText>
+
+                    <MudPaper Elevation="0" Class="pa-3 mb-3"
+                              Style="background:rgba(255,255,255,0.04);border-radius:8px">
+                        <MudStack Spacing="1">
+                            @if (verdict.NbEquipes > 0)
+                            {
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body2">Équipes</MudText>
+                                    <MudText Typo="Typo.body2"><b>@verdict.NbEquipes</b></MudText>
+                                </MudStack>
+                            }
+                            @if (verdict.NbLigues > 0)
+                            {
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body2">Ligues que vous gérez</MudText>
+                                    <MudText Typo="Typo.body2"><b>@verdict.NbLigues</b></MudText>
+                                </MudStack>
+                            }
+                            @if (verdict.NbFeuilles > 0)
+                            {
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body2">Feuilles de match saisies</MudText>
+                                    <MudText Typo="Typo.body2"><b>@verdict.NbFeuilles</b></MudText>
+                                </MudStack>
+                            }
+                            @if (verdict.NbCommissariats > 0)
+                            {
+                                <MudStack Row="true" Justify="Justify.SpaceBetween">
+                                    <MudText Typo="Typo.body2">Commissariats de ligue</MudText>
+                                    <MudText Typo="Typo.body2"><b>@verdict.NbCommissariats</b></MudText>
+                                </MudStack>
+                            }
+                        </MudStack>
+                    </MudPaper>
+
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+                        Ces éléments appartiennent aussi aux autres participants : les
+                        effacer viderait leurs classements. Votre e-mail, votre mot de
+                        passe et votre pseudo seront effacés, et vous ne pourrez plus
+                        vous connecter. Vos équipes resteront dans leurs ligues, sous
+                        le nom « Coach supprimé ».
+                    </MudText>
+                }
+
+                <MudAlert Severity="Severity.Normal" Dense="true" Class="mb-4"
+                          Icon="@Icons.Material.Filled.Download">
+                    Avant de continuer, vous pouvez
+                    <a href="Account/Manage/PersonalData" class="account-link">
+                        télécharger une copie de vos données</a>.
+                </MudAlert>
+            }
+
+            <EditForm Model="Input" FormName="delete-user" OnValidSubmit="OnValidSubmitAsync" method="post">
+                <DataAnnotationsValidator />
+
+                @if (requirePassword)
+                {
+                    <div class="account-field">
+                        <label class="account-label" for="Input.Password">Votre mot de passe</label>
+                        <InputText type="password" id="Input.Password" @bind-Value="Input.Password"
+                                   class="account-input" autocomplete="current-password"
+                                   placeholder="••••••••" aria-required="true" />
+                        <ValidationMessage For="() => Input.Password" class="account-validation-msg" />
+                    </div>
+                }
+
+                <div class="account-field">
+                    <label class="account-label" for="Input.Confirmation">
+                        Tapez SUPPRIMER pour confirmer
+                    </label>
+                    <InputText id="Input.Confirmation" @bind-Value="Input.Confirmation"
+                               class="account-input" autocomplete="off"
+                               placeholder="SUPPRIMER" aria-required="true" />
+                    <ValidationMessage For="() => Input.Confirmation" class="account-validation-msg" />
+                </div>
+
+                <MudStack Row="true" Spacing="2" Class="mt-5">
+                    <MudButton Href="/profil" Variant="Variant.Outlined"
+                               Color="Color.Default" FullWidth="true">
+                        Annuler
+                    </MudButton>
+                    <button type="submit" class="account-danger-btn">
+                        Supprimer définitivement
+                    </button>
+                </MudStack>
+            </EditForm>
+
+        </MudCardContent>
+    </MudCard>
 </div>
 
 @code {
@@ -112,40 +170,17 @@
         verdict = await UserAccountService.EvaluerSuppressionAsync(user.Id);
     }
 
-    /// <summary>Énumère en clair ce qui rattache le compte à la vie de la ligue.</summary>
-    private string DescriptionImpacts()
-    {
-        if (verdict is null) return "";
-
-        var morceaux = new List<string>();
-        if (verdict.NbEquipes > 0)
-            morceaux.Add($"{verdict.NbEquipes} équipe{(verdict.NbEquipes > 1 ? "s" : "")}");
-        if (verdict.NbLigues > 0)
-            morceaux.Add($"{verdict.NbLigues} ligue{(verdict.NbLigues > 1 ? "s" : "")} que vous gérez");
-        if (verdict.NbFeuilles > 0)
-            morceaux.Add($"{verdict.NbFeuilles} feuille{(verdict.NbFeuilles > 1 ? "s" : "")} de match");
-        if (verdict.NbCommissariats > 0)
-            morceaux.Add($"{verdict.NbCommissariats} commissariat{(verdict.NbCommissariats > 1 ? "s" : "")} de ligue");
-
-        return morceaux.Count switch
-        {
-            0 => "aucune donnée de jeu",
-            1 => morceaux[0],
-            _ => string.Join(", ", morceaux.Take(morceaux.Count - 1)) + " et " + morceaux[^1]
-        };
-    }
-
     private async Task OnValidSubmitAsync()
     {
         if (requirePassword && !await UserManager.CheckPasswordAsync(user, Input.Password))
         {
-            message = "Erreur : mot de passe incorrect.";
+            message = "Mot de passe incorrect.";
             return;
         }
 
         if (!string.Equals(Input.Confirmation?.Trim(), "SUPPRIMER", StringComparison.Ordinal))
         {
-            message = "Erreur : tapez SUPPRIMER en majuscules pour confirmer.";
+            message = "Tapez SUPPRIMER en majuscules pour confirmer.";
             return;
         }
 
@@ -157,7 +192,7 @@
         var result = await UserAccountService.SupprimerCompteAsync(userId, parQui: "self");
         if (!result.Succeeded)
         {
-            message = "Erreur : " + string.Join(" ", result.Errors.Select(e => e.Description));
+            message = string.Join(" ", result.Errors.Select(e => e.Description));
             return;
         }
 

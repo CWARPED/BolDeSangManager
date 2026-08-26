@@ -984,3 +984,37 @@ h1:focus {
 .mud-container {
     max-width: 100%;
 }
+
+/* ─── Page « Supprimer mon compte » ───────────────────────────────────────────
+   Les pages Identity sont rendues en SSR : pas de composant MudBlazor
+   interactif pour les champs et le bouton de soumission, d'où ces styles
+   alignés sur les .account-* de la page de connexion. */
+.account-link {
+    color: var(--mud-palette-info);
+    text-decoration: underline;
+}
+
+.account-danger-btn {
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 4px;
+    background: var(--mud-palette-error);
+    color: #fff;
+    font-size: 0.875rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+    /* 44 px de haut : cible tactile confortable sur mobile. */
+    min-height: 44px;
+}
+
+.account-danger-btn:hover {
+    filter: brightness(1.12);
+}
+
+.account-danger-btn:active {
+    filter: brightness(0.92);
+}
