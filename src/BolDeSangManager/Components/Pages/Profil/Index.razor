@@ -12,6 +12,7 @@
 @inject LeagueService LeagueService
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject UserAccountService UserAccountService
 
 <PageTitle>Mon Profil — BolDeSang Manager</PageTitle>
 
@@ -289,11 +290,82 @@ else
             }
         </MudItem>
 
+        <!-- Zone de danger : suppression du compte -->
+        <MudItem xs="12">
+            <MudCard Elevation="2" Class="mt-3" Style="border:1px solid var(--mud-palette-error)">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Color="Color.Error" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Warning" Class="mr-1" Size="Size.Small" />
+                        <b>Supprimer mon compte</b>
+                    </MudText>
+
+                    @if (_verdict is null)
+                    {
+                        <MudText Typo="Typo.body2" Color="Color.Secondary">Vérification…</MudText>
+                    }
+                    else if (_verdict.PeutEtreSupprimeDur)
+                    {
+                        <MudText Typo="Typo.body2">
+                            Aucune donnée de jeu n'est rattachée à votre compte :
+                            il sera <b>intégralement supprimé</b>. Cette action est définitive.
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">
+                            Votre compte est rattaché à <b>@ResumeImpacts()</b>. Ces éléments
+                            appartiennent aussi aux autres participants : ils seront conservés.
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            Votre e-mail, votre mot de passe et votre pseudo seront effacés,
+                            et vous ne pourrez plus vous connecter. Vos équipes resteront dans
+                            leurs ligues sous le nom « Coach supprimé ».
+                        </MudText>
+                    }
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Error"
+                               StartIcon="@Icons.Material.Filled.DeleteForever"
+                               Href="/Account/Manage/DeletePersonalData">
+                        Supprimer mon compte…
+                    </MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
     </MudGrid>
 }
 
 @code {
     ApplicationUser? _user;
+
+    /// <summary>
+    /// Ce qui sera réellement effacé : affiché AVANT que le coach clique, pour
+    /// qu'il sache si son compte disparaît ou s'il est seulement anonymisé.
+    /// </summary>
+    UserAccountService.VerdictSuppression? _verdict;
+
+    /// <summary>Énumère en clair ce qui rattache le compte à la vie des ligues.</summary>
+    string ResumeImpacts()
+    {
+        if (_verdict is null) return "";
+        var bouts = new List<string>();
+        if (_verdict.NbEquipes > 0)
+            bouts.Add($"{_verdict.NbEquipes} équipe{(_verdict.NbEquipes > 1 ? "s" : "")}");
+        if (_verdict.NbLigues > 0)
+            bouts.Add($"{_verdict.NbLigues} ligue{(_verdict.NbLigues > 1 ? "s" : "")} que vous gérez");
+        if (_verdict.NbFeuilles > 0)
+            bouts.Add($"{_verdict.NbFeuilles} feuille{(_verdict.NbFeuilles > 1 ? "s" : "")} de match");
+        if (_verdict.NbCommissariats > 0)
+            bouts.Add($"{_verdict.NbCommissariats} commissariat{(_verdict.NbCommissariats > 1 ? "s" : "")}");
+
+        return bouts.Count switch
+        {
+            0 => "aucune donnée de jeu",
+            1 => bouts[0],
+            _ => string.Join(", ", bouts.Take(bouts.Count - 1)) + " et " + bouts[^1]
+        };
+    }
     List<Team>? _equipes;
     List<League>? _ligues;
     bool _estCommissaire;
@@ -317,6 +389,8 @@ else
 
         _user = await UserManager.FindByIdAsync(userId);
         if (_user is null) { Nav.NavigateTo("/Account/Login"); return; }
+
+        _verdict = await UserAccountService.EvaluerSuppressionAsync(userId);
 
         _estCommissaire = await UserManager.IsInRoleAsync(_user, "Commissaire");
         _pseudoEdit = _user.PseudoCoach ?? "";
