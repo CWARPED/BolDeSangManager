@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize(Roles = "Admin,GrandCommissaire")]
 @inject LeagueService LeagueService
+@inject StaffService StaffService
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
@@ -142,6 +143,100 @@
                     </MudItem>
                 </MudGrid>
 
+                <MudDivider Class="my-3" />
+
+                <MudText Typo="Typo.subtitle2" Class="mb-1"><b>Staff & Équipement</b></MudText>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                    Ce que les équipes pourront acheter dans cette ligue. Les valeurs viennent
+                    des règles : ajustez-les ici pour votre format, sans modifier les règles
+                    ni les autres ligues. Un staff décoché n'est pas proposé.
+                </MudText>
+
+                @if (_staff.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                        Aucun staff défini dans cette version de règles.
+                        Ajoutez-en dans <b>Édition des données → Staff</b>.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="@_staff" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm"
+                              Class="mb-3" Style="font-size:12px">
+                        <HeaderContent>
+                            <MudTh>Staff</MudTh>
+                            <MudTh Style="text-align:right">Coût</MudTh>
+                            <MudTh Style="text-align:center">Min créa.</MudTh>
+                            <MudTh Style="text-align:center">Max créa.</MudTh>
+                            <MudTh Style="text-align:center">Plafond ligue</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Staff">
+                                <MudCheckBox T="bool" Value="@context.EstActif" Dense="true"
+                                             ValueChanged="@(v => context.EstActif = v)"
+                                             Color="Color.Primary" Label="@context.Nom" />
+                                @if (!string.IsNullOrWhiteSpace(context.Description))
+                                {
+                                    @* La description passe SOUS le nom, hors de la cellule étroite :
+                                       en vue mobile MudBlazor empile label/valeur et la colonne
+                                       de droite ne fait que quelques caractères de large. *@
+                                    <div class="staff-desc">@context.Description</div>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Coût" Style="text-align:right">
+                                @if (context.CoutDepuisTypeEquipe)
+                                {
+                                    <span style="font-size:11px; color:#90caf9"
+                                          title="Le prix vient de la fiche de la race (Coût relance) : il diffère d'une race à l'autre.">
+                                        selon la race
+                                    </span>
+                                }
+                                else
+                                {
+                                    <MudNumericField T="int" @bind-Value="context.Cout" Min="0" Step="5000"
+                                                     Variant="Variant.Text" Margin="Margin.Dense"
+                                                     Disabled="@(!context.EstActif)" Style="max-width:110px" />
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Min à la création" Style="text-align:center">
+                                <MudNumericField T="int" @bind-Value="context.MinCreation" Min="0" Max="99"
+                                                 Variant="Variant.Text" Margin="Margin.Dense"
+                                                 Disabled="@(!context.EstActif)" Style="max-width:70px" />
+                            </MudTd>
+                            <MudTd DataLabel="Max à la création" Style="text-align:center">
+                                <MudNumericField T="int" @bind-Value="context.MaxCreation" Min="0" Max="99"
+                                                 Variant="Variant.Text" Margin="Margin.Dense"
+                                                 Disabled="@(!context.EstActif)" Style="max-width:70px" />
+                            </MudTd>
+                            <MudTd DataLabel="Plafond en cours de ligue" Style="text-align:center">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Justify="Justify.Center">
+                                    <MudCheckBox T="bool" Dense="true" Color="Color.Primary"
+                                                 Value="@(context.MaxLigue.HasValue)"
+                                                 ValueChanged="@(v => BasculerPlafond(context, v))"
+                                                 Disabled="@(!context.EstActif)"
+                                                 title="Décoché = aucune limite en cours de ligue" />
+                                    @if (context.MaxLigue.HasValue)
+                                    {
+                                        <MudNumericField T="int" Min="0" Max="99"
+                                                         Value="@context.MaxLigue.Value"
+                                                         ValueChanged="@(v => context.MaxLigue = v)"
+                                                         Variant="Variant.Text" Margin="Margin.Dense"
+                                                         Disabled="@(!context.EstActif)" Style="max-width:70px" />
+                                    }
+                                    else
+                                    {
+                                        <span style="font-size:11px; color:#9e9e9e">illimité</span>
+                                    }
+                                </MudStack>
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                        Le plafond de ligue est strict : il s'applique aux achats <b>comme</b> aux
+                        fans gagnés par les résultats de match.
+                    </MudText>
+                }
+
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4" Spacing="2">
                     <MudButton Href="/ligues" Variant="Variant.Text" Disabled="@_saving">
                         Annuler
@@ -202,6 +297,12 @@
 
     List<Game> _games = [];
     List<RulesVersion> _versions = [];
+
+    /// <summary>
+    /// Copie de travail du staff des règles. Le commissaire l'ajuste pour SA
+    /// ligue ; rien n'est écrit tant que la ligue n'est pas créée.
+    /// </summary>
+    List<LeagueStaffType> _staff = [];
     string _selectedGameNom = "";
     string _selectedVersionNom = "";
     string _nom = "";
@@ -222,8 +323,40 @@
             var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
             _selectedVersionNom = active?.Nom ?? "";
             AppliquerBaremeDeVersion(_games[0].Type);
+            await ChargerStaffAsync();
         }
     }
+
+    /// <summary>
+    /// Reprend le staff défini sur la version de règles sélectionnée, en copie de
+    /// travail. Même principe que le barème d'XP : les règles fournissent les
+    /// valeurs par défaut, la ligue en garde sa propre version.
+    /// </summary>
+    async Task ChargerStaffAsync()
+    {
+        var version = _versions.FirstOrDefault(v => v.Nom == _selectedVersionNom);
+        if (version is null) { _staff = []; return; }
+
+        var source = await StaffService.GetStaffTypesAsync(version.Id);
+        _staff = source.Select(s => new LeagueStaffType
+        {
+            StaffTypeId          = s.Id,
+            Nom                  = s.Nom,
+            Description          = s.Description,
+            Ordre                = s.Ordre,
+            EstActif             = s.EstActif,
+            // Le prix des relances vient de la race : ne pas le figer dans la ligue.
+            Cout                 = s.CoutDepuisTypeEquipe ? 0 : s.Cout,
+            CoutDepuisTypeEquipe = s.CoutDepuisTypeEquipe,
+            MinCreation          = s.MinCreation,
+            MaxCreation          = s.MaxCreation,
+            MaxLigue             = s.MaxLigue
+        }).ToList();
+    }
+
+    /// <summary>Active ou retire le plafond de ligue d'un staff.</summary>
+    void BasculerPlafond(LeagueStaffType staff, bool plafonne) =>
+        staff.MaxLigue = plafonne ? Math.Max(staff.MaxCreation, 1) : null;
 
     /// <summary>
     /// Reprend le barème d'XP défini sur la version de règles sélectionnée (R6).
@@ -240,11 +373,12 @@
         _xpMvp          = bareme.BonusMvp;
     }
 
-    void OnVersionChanged(string nom)
+    async Task OnVersionChanged(string nom)
     {
         _selectedVersionNom = nom;
         var game = _games.FirstOrDefault(g => g.Nom == _selectedGameNom);
         if (game is not null) AppliquerBaremeDeVersion(game.Type);
+        await ChargerStaffAsync();
     }
 
     async Task OnGameNameChanged(string nom)
@@ -262,6 +396,7 @@
             _selectedVersionNom = active?.Nom ?? "";
 
             AppliquerBaremeDeVersion(game.Type);
+            await ChargerStaffAsync();
         }
         StateHasChanged();
     }
@@ -309,7 +444,7 @@
                 XpBonusMvp             = _xpMvp,
             };
 
-            await LeagueService.CreerLigueAsync(ligue, userId);
+            await LeagueService.CreerLigueAsync(ligue, userId, _staff);
             Snackbar.Add("Ligue créée avec succès !", Severity.Success);
             Nav.NavigateTo("/ligues");
         }

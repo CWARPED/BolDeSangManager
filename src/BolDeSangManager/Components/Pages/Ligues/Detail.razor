@@ -47,6 +47,16 @@ else
                         @(DisplayHelpers.SansCalendrier(_ligue.Format) ? "Ouvrir la ligue" : "Lancer la saison")
                     </MudButton>
                 }
+                @* Le staff reste réglable tant que la ligue n'est pas terminée :
+                   contrairement au calendrier, il vaut aussi en Open. *@
+                @if (_peutGererLigue && _ligue.Statut != LeagueStatus.Termine)
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Groups"
+                               Href="@($"/ligues/{Id}/staff")">
+                        Staff de la ligue
+                    </MudButton>
+                }
                 @if (DisplayHelpers.CalendrierEditable(_ligue.Statut, _ligue.Format))
                 {
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"

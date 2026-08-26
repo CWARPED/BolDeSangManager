@@ -39,7 +39,15 @@ public class LeagueService(
                 .ThenInclude(m => m.EquipeExterieur)
             .FirstOrDefaultAsync(l => l.Id == id);
 
-    public async Task<League> CreerLigueAsync(League ligue, string commissaireId)
+    /// <param name="staffPersonnalise">
+    /// Staff ajusté par le commissaire à la création. Quand il est fourni, il
+    /// remplace la copie brute des règles : c'est ce qui permet de régler les
+    /// bornes de fans, de désactiver un staff, etc. pour CETTE ligue seulement.
+    /// </param>
+    public async Task<League> CreerLigueAsync(
+        League ligue,
+        string commissaireId,
+        IEnumerable<LeagueStaffType>? staffPersonnalise = null)
     {
         ligue.CommissaireId = commissaireId;
         ligue.Statut = LeagueStatus.Creation;
@@ -51,7 +59,32 @@ public class LeagueService(
         // Le staff des règles est COPIÉ dans la ligue : le commissaire pourra
         // l'ajuster pour son format sans toucher aux règles, et une évolution
         // ultérieure des règles ne rétro-modifiera pas cette ligue.
-        await staffService.CopierVersLigueAsync(ligue.Id, ligue.RulesVersionId);
+        var perso = staffPersonnalise?.ToList();
+        if (perso is { Count: > 0 })
+        {
+            foreach (var s in perso)
+            {
+                db.LeagueStaffTypes.Add(new LeagueStaffType
+                {
+                    LeagueId             = ligue.Id,
+                    StaffTypeId          = s.StaffTypeId,
+                    Nom                  = s.Nom,
+                    Description          = s.Description,
+                    Ordre                = s.Ordre,
+                    EstActif             = s.EstActif,
+                    Cout                 = s.CoutDepuisTypeEquipe ? 0 : s.Cout,
+                    CoutDepuisTypeEquipe = s.CoutDepuisTypeEquipe,
+                    MinCreation          = s.MinCreation,
+                    MaxCreation          = s.MaxCreation,
+                    MaxLigue             = s.MaxLigue
+                });
+            }
+            await db.SaveChangesAsync();
+        }
+        else
+        {
+            await staffService.CopierVersLigueAsync(ligue.Id, ligue.RulesVersionId);
+        }
 
         logger.LogInformation("Ligue créée : {NomLigue} (id={Id}) par commissaire {CommissaireId}", ligue.Nom, ligue.Id, commissaireId);
         return ligue;

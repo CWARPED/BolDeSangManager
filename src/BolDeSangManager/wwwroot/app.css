@@ -930,3 +930,35 @@ h1:focus {
 #components-reconnect-modal.components-reconnect-show .reconnect-compteur {
     display: inline;
 }
+
+/* ─── Description d'un staff dans les tables de réglage ──────────────────────
+   En vue mobile MudBlazor empile label/valeur dans chaque cellule : la colonne
+   de droite ne fait alors que quelques caractères, et une description s'y
+   retrouve écrasée en colonne illisible. On la sort du flux de la cellule pour
+   qu'elle occupe toute la largeur, sous le nom du staff. */
+.staff-desc {
+    font-size: 11px;
+    color: #9e9e9e;
+    font-style: italic;
+    line-height: 1.35;
+    margin: 2px 0 0 32px;
+}
+
+@media (max-width: 959px) {
+    /* La cellule mobile est en flex (label à gauche, valeur à droite) :
+       forcer la description sur sa propre ligne, pleine largeur, sinon elle
+       se retrouve écrasée dans la colonne de droite et chevauche le nom. */
+    .staff-desc {
+        flex-basis: 100%;
+        width: 100%;
+        margin-left: 0;
+        margin-top: 6px;
+        text-align: left;
+        order: 99;
+    }
+
+    /* Autorise le retour à la ligne dans la cellule qui porte le nom du staff. */
+    .mud-table-cell[data-label="Staff"] {
+        flex-wrap: wrap;
+    }
+}

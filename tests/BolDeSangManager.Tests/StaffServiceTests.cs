@@ -319,4 +319,69 @@ public class StaffServiceTests : IDisposable
             (await svc.GetStaffLigueAsync(ligue.Id)).Where(s => s.Nom == "Cheerleaders"));
         Assert.Null(chee.StaffTypeId);          // le lien est coupé, la copie reste
     }
+
+    [Fact]
+    public async Task CreerLigue_AvecStaffPersonnalise_UtiliseLesValeursDuCommissaire()
+    {
+        // Le commissaire règle le staff À LA CRÉATION de la ligue : ses valeurs
+        // doivent primer sur celles des règles, sans modifier les règles.
+        await using var db = _factory.CreateContext();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var commissaire = DataSeeder.CreateUser("com_perso");
+        db.Users.Add(commissaire);
+        await db.SaveChangesAsync();
+
+        var svcStaff = CreateService(db);
+        await svcStaff.AjouterStaffTypeAsync(Def(rv.Id, "Fans dévoués", 10_000, min: 1, max: 9));
+        await svcStaff.AjouterStaffTypeAsync(Def(rv.Id, "Cheerleaders", 10_000, min: 0, max: 6));
+
+        var perso = (await svcStaff.GetStaffTypesAsync(rv.Id))
+            .Select(s => new LeagueStaffType
+            {
+                StaffTypeId = s.Id, Nom = s.Nom, Description = s.Description,
+                Ordre = s.Ordre, EstActif = s.Nom != "Cheerleaders",   // désactivé pour cette ligue
+                Cout = s.Nom == "Fans dévoués" ? 15_000 : s.Cout,       // prix relevé
+                CoutDepuisTypeEquipe = s.CoutDepuisTypeEquipe,
+                MinCreation = s.Nom == "Fans dévoués" ? 2 : s.MinCreation,
+                MaxCreation = s.Nom == "Fans dévoués" ? 5 : s.MaxCreation,
+                MaxLigue = s.Nom == "Fans dévoués" ? 12 : s.MaxLigue
+            })
+            .ToList();
+
+        var ligueSvc = new LeagueService(
+            db, NullLogger<LeagueService>.Instance,
+            new StubAuthorizationService(), svcStaff);
+
+        var ligue = await ligueSvc.CreerLigueAsync(new League
+        {
+            Nom = "Ligue perso", GameId = game.Id, RulesVersionId = rv.Id,
+            BudgetDepart = 1_000_000
+        }, commissaire.Id, perso);
+
+        var staffLigue = await svcStaff.GetStaffLigueAsync(ligue.Id);
+
+        var fans = Assert.Single(staffLigue.Where(s => s.Nom == "Fans dévoués"));
+        Assert.Equal(15_000, fans.Cout);
+        Assert.Equal(2, fans.MinCreation);
+        Assert.Equal(5, fans.MaxCreation);
+        Assert.Equal(12, fans.MaxLigue);
+
+        var chee = Assert.Single(staffLigue.Where(s => s.Nom == "Cheerleaders"));
+        Assert.False(chee.EstActif);
+
+        // Les RÈGLES n'ont pas bougé : c'est bien une copie.
+        var regles = await svcStaff.GetStaffTypesAsync(rv.Id);
+        Assert.Equal(10_000, Assert.Single(regles.Where(s => s.Nom == "Fans dévoués")).Cout);
+        Assert.True(Assert.Single(regles.Where(s => s.Nom == "Cheerleaders")).EstActif);
+    }
+
+    private class StubAuthorizationService : BolDeSangManager.Services.IAuthorizationService
+    {
+        public Task<bool> PeutGererLigueAsync(string userId, int ligueId) => Task.FromResult(true);
+        public Task<bool> EstCommissaireDeLigueAsync(string userId, int ligueId) => Task.FromResult(true);
+        public Task<bool> EstGrandCommissaireAsync(string userId) => Task.FromResult(true);
+        public Task<bool> EstAdminAsync(string userId) => Task.FromResult(true);
+        public Task<bool> PeutEditerDonneesAsync(string userId) => Task.FromResult(true);
+        public Task<bool> PeutGererSettingsAsync(string userId) => Task.FromResult(true);
+    }
 }
