@@ -7,6 +7,8 @@ src/BolDeSangManager/Data/*.db-wal
 
 tests/**/bin/
 tests/**/obj/
+tools/**/bin/
+tools/**/obj/
 
 .claude/
 # Fichiers secrets locaux
