@@ -58,6 +58,12 @@ src/BolDeSangManager/
 
 ## Points clés du domaine
 
+**Suppression de compte** (`UserAccountService`) : quatre FK pointent vers `ApplicationUser` en **Restrict** — `Team.CoachId`, `League.CommissaireId`, `MatchSheet.SaisiParId`, `LeagueCommissioner.UserId`. Supprimer la ligne d'un coach ayant joué échouerait, et passer ces FK en `Cascade` détruirait l'historique sportif **d'autres** coaches (une feuille de match est validée par deux personnes). D'où la règle : **suppression dure seulement si le compte n'a aucune trace, anonymisation sinon**. L'anonymisation garde la ligne mais écrase les données personnelles (email en `@local.invalid`, pseudo « Coach supprimé », `PasswordHash = null`, rôles retirés, `LockoutEnd` au maximum) — conforme au droit à l'effacement, sans casser les classements. L'ancienne adresse redevient libre pour une réinscription, qui repart d'un compte neuf.
+
+⚠️ **Consigne pour le futur** : toute **nouvelle FK vers `ApplicationUser`** doit être soit *nullable + SetNull*, soit ajoutée au comptage de `EvaluerSuppressionAsync` — sinon la suppression dure d'un compte considéré comme vierge échouera au `SaveChanges`.
+
+Affichage : utiliser `DisplayHelpers.NomCoach(user)` et **jamais** `PseudoCoach` directement, sinon un identifiant technique (`compte-supprime-a1b2c3d4`) s'affiche aux autres coaches.
+
 **Rôles** : `Commissaire` et `Coach` (ASP.NET Identity). Le commissaire crée les ligues et valide les matchs. Les coaches créent des équipes et saisissent les feuilles.
 
 **Cycle de vie d'une ligue** :
