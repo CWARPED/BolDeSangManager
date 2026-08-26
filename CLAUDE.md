@@ -25,36 +25,48 @@ dotnet test tests/BolDeSangManager.Tests/BolDeSangManager.Tests.csproj
 
 ## Architecture
 
-Blazor Server (.NET 9) avec Identity, MudBlazor 8.6.0, EF Core 9 + SQLite, QuestPDF, QRCoder.
+Blazor Server (.NET 9) avec Identity, MudBlazor 8.6.0, EF Core 9 + SQLite, QuestPDF, QRCoder, Markdig.
 
 ```
 src/BolDeSangManager/
 ├── Data/
 │   ├── Models/         # Entités EF Core (Game, League, Team, Match, Skill, AppConfig…)
 │   ├── Enums/          # Enums.cs — tous les enums du domaine
+│   ├── Seeding/        # Seed BB + DB, seuils d'XP, catégories standard
 │   ├── ApplicationDbContext.cs
-│   ├── ApplicationUser.cs   # IdentityUser + PseudoCoach
-│   └── DbSeeder.cs     # Seed au démarrage : jeux, races BB, collèges DB, ~80 compétences
-├── Helpers/
-│   └── DisplayHelpers.cs   # Méthodes statiques partagées (couleurs/labels des enums)
+│   ├── ApplicationUser.cs   # IdentityUser + PseudoCoach + EstSupprime
+│   └── DbSeeder.cs     # Seed idempotent + migrations auto au démarrage
+├── Helpers/            # DisplayHelpers (couleurs/labels), BrouillardHelpers, accès compétences
 ├── Services/           # Logique métier (tous Scoped)
 │   ├── LeagueService       # Lifecycle ligue : créer → inscriptions → saison → playoffs → supprimer
-│   ├── TeamService         # Roster : créer équipe, recruter joueur, attribuer compétence, VEA
-│   ├── MatchService        # Saisir feuille, valider, calculer PSP/blessures/gains
+│   ├── TeamService         # Roster : créer équipe, recruter, améliorer, VEA, corrections d'XP
+│   ├── MatchService        # Saisir/confirmer feuille, après-match, clôture auto, PSP/blessures/gains
+│   ├── CalendrierService   # Export iCalendar (.ics) RFC 5545 des matchs programmés
+│   ├── StaffService        # Staff d'équipe, prix copiés par ligue (StaffType → LeagueStaffType → TeamStaff)
+│   ├── MarkdownService     # Rendu des règlements (Markdig sans HTML brut + filtrage javascript:/data:)
+│   ├── AuthorizationService# IAuthorizationService — toutes les vérifs de rôle
+│   ├── DataEditService     # CRUD données de jeu + clonage de version + Réserve
 │   ├── PdfService          # Export QuestPDF (feuille d'équipe A4 + QR code match)
+│   ├── LeagueExportService # Export/import JSON d'une ligue complète
+│   ├── GameDataExportService     # Export/import des données d'une RulesVersion
+│   ├── PersonalDataExportService # Export RGPD du dossier d'un coach
+│   ├── UserAccountService  # Suppression de compte : verdict, suppression dure ou anonymisation
 │   ├── GmailEmailSender    # IEmailSender<ApplicationUser> via Gmail SMTP (MailKit)
-│   ├── SettingsService     # Clés/valeurs persistées en DB (AppConfig)
-│   └── LeagueExportService # Export/import JSON d'une ligue complète
+│   └── SettingsService     # Clés/valeurs persistées en DB (AppConfig)
 ├── Components/
-│   ├── Layout/             # MainLayout (dark MudBlazor), NavMenu
-│   ├── Account/Pages/      # Login, Register — SSR (EditForm method="post"), CSS custom
+│   ├── Layout/             # MainLayout (dark MudBlazor), AccountLayout, NavMenu, MudProviders
+│   ├── Account/Pages/      # Parcours NON connecté uniquement (Login, Register, mot de passe
+│   │                       # oublié, confirmation d'e-mail) + SupprimerCompte — SSR
 │   └── Pages/
-│       ├── Admin/Index.razor       # Tabs : Utilisateurs, Paramètres (URL externe)
-│       ├── Ligues/                 # Index, Creer, Detail (classement + pool matchs + équipes)
-│       ├── Equipes/                # MaFeuille, Creer, Detail
-│       └── Matchs/                 # Index, Feuille (saisie), Validation
+│       ├── Admin/                  # Index (Utilisateurs, Paramètres), Donnees (CRUD + Réserve)
+│       ├── Ligues/                 # Index, Creer, Detail, CalendrierLibre, StaffLigue, PhaseRepos
+│       ├── Equipes/                # MaFeuille, Rejoindre, Detail
+│       ├── Matchs/                 # Index, Feuille, Detail, Validation, ApresMatch
+│       └── Profil/Index.razor      # /profil — pseudo, e-mail, mot de passe, RGPD, suppression
 └── wwwroot/app.css     # Dark mode custom CSS pour pages Account (SSR)
 ```
+
+⚠️ **Les pages Identity sont en SSR** : aucun composant MudBlazor *interactif* (`MudTextField`, `MudSelect`, `MudCheckBox`…) n'y fonctionne. Utiliser `InputText` + les classes `.account-*` de `app.css`, comme sur `Login.razor`. Les `MudButton` / `MudAlert` non interactifs passent, eux, sans problème. Ne jamais s'appuyer sur des classes **Bootstrap** (`row`, `col-*`, `btn`, `alert`, `form-floating`) : elles n'existent pas dans ce projet et le HTML tombe sans aucun style.
 
 ## Points clés du domaine
 
@@ -104,7 +116,9 @@ Dans les deux sens la copie est **indépendante** (modifier ou supprimer l'un n'
 - `SupprimerVersionAsync` supprime la **Réserve avant** les compétences et les catégories (`PoolPositionSkill → Skill` et `PoolPositionCategoryAccess → SkillCategoryDef` sont en `Restrict`, FK non nullable), et **refuse** la suppression si une `League` référence la version (`League → RulesVersion` est en cascade par convention : sans ce garde-fou, supprimer une version effaçait silencieusement les ligues et leurs matchs).
 - Migration `ReparerCategoriesOrphelines` : réparation de **données** uniquement (aucun changement de schéma), idempotente — recrée les catégories standard manquantes par version et réaffecte les seules compétences dont la catégorie est hors de leur version.
 
-⚠️ **Reste à faire (R2b)** : `PlayerPosition.CompetencesPrincipales` / `CompetencesSecondaires` (et leurs jumeaux sur `PoolPosition`) sont **toujours des chaînes de lettres** type `"GAF"`, découpées caractère par caractère. Tant que cette bascule vers une relation many-to-many n'est pas faite, un code de catégorie à 2 lettres est correct en affichage mais **inutilisable dans les accès de poste**.
+✅ **R2b fait** : les accès de compétence d'un poste passent par la table **`PlayerPositionCategoryAccess`** (jumelle `PoolPositionCategoryAccess` pour la Réserve) — un lien vers `SkillCategoryDef` + un booléen principal/secondaire. Les codes de catégorie à 2 lettres sont donc pleinement utilisables. Lire les accès via `CategoryAccessHelpers` / `AccesCompetencesHelpers`, jamais en découpant une chaîne. Les colonnes `CompetencesPrincipales` / `CompetencesSecondaires` (`TeamType`, `PoolPosition`) subsistent en base par compatibilité mais **ne sont plus la source de vérité** : ne pas les réintroduire dans du code neuf.
+
+**Accès aux compétences à l'après-match** (`AccesCompetencesHelpers`, R7) : on ne propose que les catégories accessibles au poste ; principal/secondaire est **déduit** de l'accès (et pilote la hausse de valeur +20k / +40k) au lieu d'être coché à la main ; les compétences Élite sont masquées par défaut ; une case « hors accès » réaffiche tout, garde-fou franchissable en connaissance de cause pour les règles maison.
 
 **Export JSON** (`LeagueExportService`) : résout les références par nom (Game, TeamType, PlayerPosition, Skill) pour être portable entre instances.
 
@@ -126,7 +140,7 @@ Dans les deux sens la copie est **indépendante** (modifier ou supprimer l'un n'
 
 ⚠️ **Vocabulaire : on dit « JPV » (Joueur le Plus Valeureux), pas « MVP ».** Le libellé affiché vient de `DisplayHelpers.LabelMvp` — ne jamais réécrire « MVP » en dur dans une vue. Les identifiants du code (`EstMVP`, `AwardType.MVP`, `BonusMvp`, `XpBonusMvp`) gardent en revanche leur nom : ce sont des noms techniques, persistés en base pour certains. Plus généralement, tout nouveau libellé destiné à être traduit un jour passe par un helper plutôt que par du texte en dur (cf. ticket #7, i18n).
 
-**Formats de ligue** (`LeagueFormat`) : `RoundRobin`, `RoundRobinAvecPlayoffs`, `Libre`, `LibreAvecPlayoffs`. ⚠️ Ces valeurs sont **persistées en int** : ne jamais réordonner l'enum, toute nouvelle entrée s'ajoute **à la fin** (un test le verrouille). Ne pas comparer les formats à la main dans les composants : utiliser `DisplayHelpers.EstFormatLibre(...)` et `DisplayHelpers.AvecPlayoffs(...)`.
+**Formats de ligue** (`LeagueFormat`) : `RoundRobin`, `RoundRobinAvecPlayoffs`, `Libre`, `LibreAvecPlayoffs`, `Open`. ⚠️ Ces valeurs sont **persistées en int** : ne jamais réordonner l'enum, toute nouvelle entrée s'ajoute **à la fin** (un test le verrouille). Ne pas comparer les formats à la main dans les composants : utiliser `DisplayHelpers.EstFormatLibre(...)` et `DisplayHelpers.AvecPlayoffs(...)`.
 
 Les formats **Libre** délèguent la composition du calendrier au commissaire : `LancerSaisonAsync` crée bien la division par défaut (nécessaire pour rattacher les matchs) mais **n'appelle pas** `GenererPoolMatchsAsync` — la ligue démarre avec un calendrier vide. Le commissaire compose ensuite les rondes depuis `Components/Pages/Ligues/CalendrierLibre.razor` (`/ligues/{id}/calendrier`), qui s'appuie sur `DefinirRondeAsync` (créer/remplacer une ronde) et `SupprimerRondeAsync`. Règles : une équipe ne joue qu'un match par ronde ; une équipe non citée est **au repos** (autorisé) ; une même paire peut se rejouer dans une autre ronde (aller-retour voulu) ; une ronde dont un match est déjà joué est **verrouillée** côté service *et* côté UI. `NbRondes` n'est pas stocké — il se déduit de `max(Ronde)`, d'où **aucune migration** pour cette fonctionnalité.
 
@@ -151,3 +165,9 @@ Configuration via **Admin → Paramètres → Email**. Un bouton "Tester" envoie
 **JS helpers** (dans `App.razor` inline script) :
 - `blazorDownloadBase64File(filename, mimeType, base64)` — téléchargement navigateur
 - `clickElement(id)` — déclenche `.click()` sur un élément (utilisé pour `InputFile` caché)
+
+**Jeton antiforgery périmé** (`Program.cs`, middleware placé **après** `UseAntiforgery`) : un POST au jeton absent ou expiré produisait un 400 en texte brut anglais (« A valid antiforgery token was not provided… ») — page blanche pour le coach. Cas typique : onglet mobile laissé ouvert, purgé par le système, formulaire restauré depuis le cache avec un jeton orphelin. Le middleware redirige désormais vers `/Account/Login?expire=1` (`Login.razor` affiche « Votre session a expiré »).
+
+⚠️ L'ordre est essentiel : `UseAntiforgery` **ne coupe pas** le pipeline, il range son verdict dans `IAntiforgeryValidationFeature` et c'est l'endpoint, plus bas, qui renvoie le 400. Un middleware placé **avant** ne voit donc jamais rien. Le `catch` complémentaire couvre les endpoints Identity (`Logout`, `LinkExternalLogin`) qui lient le formulaire eux-mêmes et lèvent `AntiforgeryValidationException`.
+
+**Clés DataProtection** : `DataProtection__KeysPath` (défini dans le `Dockerfile` sur `/data/DataProtection-Keys`) doit rester **dans le volume persistant**. Hors volume, les clés sont régénérées à chaque redémarrage : tous les utilisateurs sont déconnectés et les formulaires ouverts échouent — même symptôme que ci-dessus, mais généralisé.
