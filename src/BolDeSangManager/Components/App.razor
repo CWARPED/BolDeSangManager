@@ -17,7 +17,29 @@
 
 <body>
     <Routes @rendermode="@PageRenderMode" />
-    <script src="_framework/blazor.web.js"></script>
+
+    <!-- Modale de reconnexion du circuit Blazor. Les classes CSS
+         components-reconnect-* sont posées par le framework (voir app.css). -->
+    <div id="components-reconnect-modal">
+        <div class="reconnect-box">
+            <div class="reconnect-spinner"></div>
+            <p class="reconnect-titre">Connexion perdue</p>
+            <p class="reconnect-detail">
+                Tentative de reconnexion
+                <span class="reconnect-compteur">
+                    <span id="components-reconnect-current-attempt"></span>/<span id="components-reconnect-max-retries"></span>
+                </span>…
+            </p>
+            <p class="reconnect-aide">
+                Ne fermez pas cette page&nbsp;: votre saisie en cours est conservée
+                sur le serveur pendant quelques minutes.
+            </p>
+            <button id="reconnect-retry-button" type="button">Réessayer</button>
+        </div>
+    </div>
+
+    <script src="_framework/blazor.web.js" autostart="false"></script>
+    <script src="@Assets["reconnect.js"]"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script>
         window.clickElement = id => { const el = document.getElementById(id); if (el) el.click(); };

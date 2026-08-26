@@ -17,7 +17,23 @@ builder.Services.AddMudServices();
 
 // Blazor
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options =>
+    {
+        // Durée pendant laquelle l'état d'un circuit déconnecté est conservé côté
+        // serveur. Les navigateurs mobiles (Safari iOS surtout) gèlent l'onglet en
+        // arrière-plan : sans cette marge, un coach qui prend un appel pendant la
+        // saisie d'une feuille de match retrouve un circuit refusé et perd sa saisie.
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(5);
+        options.DisconnectedCircuitMaxRetained = 200;
+    })
+    .AddHubOptions(options =>
+    {
+        // Doit rester cohérent avec withServerTimeout/withKeepAliveInterval défini
+        // dans wwwroot/reconnect.js. Règle : timeout >= 2 x keep-alive.
+        options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+        options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+        options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+    });
 
 // Auth
 builder.Services.AddCascadingAuthenticationState();

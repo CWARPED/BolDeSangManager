@@ -802,3 +802,131 @@ h1:focus {
     margin-right: 2px;
     user-select: none;
 }
+
+/* ─── Modale de reconnexion du circuit Blazor ────────────────────────────────
+   Affichée quand la connexion WebSocket est perdue (typiquement Safari iOS qui
+   gèle l'onglet en arrière-plan). Les classes components-reconnect-* sont
+   posées par le framework Blazor ; voir wwwroot/reconnect.js. */
+
+#components-reconnect-modal {
+    display: none;
+}
+
+#components-reconnect-modal.components-reconnect-show,
+#components-reconnect-modal.components-reconnect-failed,
+#components-reconnect-modal.components-reconnect-rejected {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    background: rgba(0, 0, 0, 0.72);
+    /* Délai avant apparition : évite un flash sur une micro-coupure. */
+    animation: reconnect-fade-in 0.2s ease-out 0.5s backwards;
+    padding: 16px;
+}
+
+@keyframes reconnect-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+
+#components-reconnect-modal .reconnect-box {
+    background: #2a2a2e;
+    color: #f5f5f5;
+    border: 1px solid #3f3f46;
+    border-radius: 12px;
+    padding: 28px 24px;
+    text-align: center;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+    max-width: 380px;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#components-reconnect-modal .reconnect-titre {
+    font-size: 1.15rem;
+    font-weight: 600;
+    margin: 0 0 8px;
+}
+
+#components-reconnect-modal .reconnect-detail {
+    font-size: 0.9rem;
+    color: #b8b8be;
+    margin: 0 0 12px;
+}
+
+#components-reconnect-modal .reconnect-aide {
+    font-size: 0.82rem;
+    color: #8e8e96;
+    line-height: 1.45;
+    margin: 0;
+}
+
+#components-reconnect-modal .reconnect-spinner {
+    width: 38px;
+    height: 38px;
+    margin: 0 auto 16px;
+    border: 3px solid #4a4a52;
+    border-top-color: #b71c1c;
+    border-radius: 50%;
+    animation: reconnect-spin 0.9s linear infinite;
+}
+
+@keyframes reconnect-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Le bouton n'a de sens que lorsque les tentatives sont épuisées. */
+#components-reconnect-modal #reconnect-retry-button {
+    display: none;
+    margin: 18px auto 0;
+    padding: 11px 26px;
+    min-height: 44px;          /* cible tactile confortable (iOS) */
+    background: #b71c1c;
+    color: #fff;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+#components-reconnect-modal #reconnect-retry-button:hover {
+    background: #d32f2f;
+}
+
+#components-reconnect-modal.components-reconnect-failed #reconnect-retry-button {
+    display: block;
+}
+
+/* En échec définitif, le compteur et le spinner n'ont plus de sens. */
+#components-reconnect-modal.components-reconnect-failed .reconnect-detail,
+#components-reconnect-modal.components-reconnect-failed .reconnect-spinner {
+    display: none;
+}
+
+/* Accessibilité : respecter la préférence système de réduction d'animation. */
+@media (prefers-reduced-motion: reduce) {
+    #components-reconnect-modal .reconnect-spinner {
+        animation: none;
+    }
+    #components-reconnect-modal.components-reconnect-show,
+    #components-reconnect-modal.components-reconnect-failed,
+    #components-reconnect-modal.components-reconnect-rejected {
+        animation: none;
+    }
+}
+
+/* Le compteur de tentatives est rempli par Blazor : masqué tant qu'il est vide
+   (sinon un « /… » orphelin s'affiche à la première apparition de la modale). */
+#components-reconnect-modal .reconnect-compteur {
+    display: none;
+    white-space: nowrap;
+}
+
+#components-reconnect-modal.components-reconnect-show .reconnect-compteur {
+    display: inline;
+}
