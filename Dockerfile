@@ -28,8 +28,9 @@ WORKDIR /app
 COPY --from=build /app/publish .
 
 # Polices Noto pour le rendu PDF (QuestPDF/SkiaSharp utilise les polices système sur Linux)
+# curl : requis par le healthcheck du docker-compose (absent de l'image aspnet de base)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-extra \
+ && apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-extra curl \
  && rm -rf /var/lib/apt/lists/*
 
 # Volume pour la base SQLite (monter un volume nommé ou un répertoire hôte)

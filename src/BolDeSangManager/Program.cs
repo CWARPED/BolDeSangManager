@@ -91,6 +91,19 @@ QuestPDF.Settings.License = LicenseType.Community;
 var app = builder.Build();
 
 // Configurer le pipeline
+// UseForwardedHeaders DOIT être le premier middleware : il réécrit Request.Scheme /
+// Request.Host à partir des X-Forwarded-* envoyés par le reverse proxy (Traefik).
+// Tout middleware placé avant lui (HSTS, gestion d'erreurs, redirections) verrait
+// encore http:// et générerait des URLs absolues en clair.
+app.UseForwardedHeaders();
+
+// Auth déclarée EXPLICITEMENT ici : sans ces deux appels, WebApplication insère
+// automatiquement UseAuthentication/UseAuthorization en TÊTE de pipeline, donc AVANT
+// UseForwardedHeaders — la redirection vers /Account/Login serait alors construite
+// avec le scheme http:// même quand Traefik annonce X-Forwarded-Proto: https.
+app.UseAuthentication();
+app.UseAuthorization();
+
 if (app.Environment.IsDevelopment())
 {
     app.UseMigrationsEndPoint();
@@ -101,7 +114,6 @@ else
     app.UseHsts();
 }
 
-app.UseForwardedHeaders();
 // En container (DOTNET_RUNNING_IN_CONTAINER=true, défini par les images .NET officielles),
 // le reverse proxy gère HTTPS — ne pas rediriger pour éviter le warning de port introuvable
 if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") != "true")
