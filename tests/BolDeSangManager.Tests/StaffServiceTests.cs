@@ -90,7 +90,7 @@ public class StaffServiceTests : IDisposable
         await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
 
         var staffLigue = await svc.GetStaffLigueAsync(ligue.Id);
-        var chee = Assert.Single(staffLigue, s => s.Nom == "Cheerleaders");
+        var chee = Assert.Single(staffLigue.Where(s => s.Nom == "Cheerleaders"));
         Assert.Equal(10_000, chee.Cout);
         Assert.Equal(6, chee.MaxCreation);
     }
@@ -111,7 +111,7 @@ public class StaffServiceTests : IDisposable
         await svc.AjouterStaffTypeAsync(Def(rv.Id, "Relances", cout: 0, max: 8, maxLigue: 8, coutRace: true));
         await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
 
-        var relances = Assert.Single(await svc.GetStaffLigueAsync(ligue.Id), s => s.Nom == "Relances");
+        var relances = Assert.Single((await svc.GetStaffLigueAsync(ligue.Id)).Where(s => s.Nom == "Relances"));
         Assert.True(relances.CoutDepuisTypeEquipe);
         Assert.Equal(0, relances.Cout);
     }
@@ -141,10 +141,15 @@ public class StaffServiceTests : IDisposable
         var svc = CreateService(db);
         await svc.AjouterStaffTypeAsync(Def(rv.Id, "Apothicaire", 50_000, max: 1, maxLigue: 1));
 
+        var avant = (await svc.GetStaffLigueAsync(ligue.Id)).Count;
         await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
         await svc.CopierVersLigueAsync(ligue.Id, rv.Id);   // second appel
 
-        Assert.Single(await svc.GetStaffLigueAsync(ligue.Id));
+        // Le seed de test fournit déjà « Apothicaire » : la copie ne doit pas le
+        // dupliquer, et le second appel ne doit rien ajouter non plus.
+        var apres = await svc.GetStaffLigueAsync(ligue.Id);
+        Assert.Single(apres.Where(s => s.Nom == "Apothicaire"));
+        Assert.Equal(avant, apres.Count);
     }
 
     // ─── Bornes appliquées aux équipes ────────────────────────────────────────
@@ -161,10 +166,16 @@ public class StaffServiceTests : IDisposable
         var equipe = await DataSeeder.SeedTeamAsync(db, ligue.Id, coach.Id, teamType.Id);
 
         var svc = CreateService(db);
-        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Fans dévoués", 10_000, min, max, maxLigue));
-        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
 
-        var staff = Assert.Single(await svc.GetStaffLigueAsync(ligue.Id));
+        // Le seed fournit déjà « Fans dévoués » à la ligue : on ajuste CETTE copie
+        // aux bornes voulues plutôt que d'en créer une seconde.
+        var staff = Assert.Single(
+            (await svc.GetStaffLigueAsync(ligue.Id)).Where(s => s.Nom == StaffService.NomFans));
+        staff.MinCreation = min;
+        staff.MaxCreation = max;
+        staff.MaxLigue = maxLigue;
+        await svc.ModifierStaffLigueAsync(staff);
+
         return (ligue.Id, staff.Id, equipe.Id);
     }
 
@@ -220,7 +231,8 @@ public class StaffServiceTests : IDisposable
 
         await svc.DefinirQuantiteAsync(teamId, staffId, 9, aLaCreation: false);
 
-        var staff = Assert.Single(await svc.GetStaffLigueAsync(ligueId));
+        var staff = Assert.Single(
+            (await svc.GetStaffLigueAsync(ligueId)).Where(s => s.Nom == "Fans dévoués"));
         staff.MaxLigue = 5;
         staff.MaxCreation = 5;
         await svc.ModifierStaffLigueAsync(staff);
@@ -239,7 +251,8 @@ public class StaffServiceTests : IDisposable
         var (ligueId, staffId, teamId) = await SetupEquipeAsync(db);
         var svc = CreateService(db);
 
-        var staff = Assert.Single(await svc.GetStaffLigueAsync(ligueId));
+        var staff = Assert.Single(
+            (await svc.GetStaffLigueAsync(ligueId)).Where(s => s.Nom == "Fans dévoués"));
         staff.EstActif = false;
         await svc.ModifierStaffLigueAsync(staff);
 
@@ -302,8 +315,8 @@ public class StaffServiceTests : IDisposable
         foreach (var def in await svc.GetStaffTypesAsync(rv.Id))
             await svc.SupprimerStaffTypeAsync(def.Id);
 
-        var chee = Assert.Single(await svc.GetStaffLigueAsync(ligue.Id));
-        Assert.Equal("Cheerleaders", chee.Nom);
+        var chee = Assert.Single(
+            (await svc.GetStaffLigueAsync(ligue.Id)).Where(s => s.Nom == "Cheerleaders"));
         Assert.Null(chee.StaffTypeId);          // le lien est coupé, la copie reste
     }
 }

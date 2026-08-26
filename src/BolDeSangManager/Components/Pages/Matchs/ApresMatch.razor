@@ -3,6 +3,7 @@
 @attribute [Authorize]
 @inject MatchService MatchService
 @inject TeamService TeamService
+@inject StaffService StaffService
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
@@ -58,7 +59,7 @@ else
                 <MudText Typo="Typo.h6"><b>@_equipe.Nom</b></MudText>
                 <MudText Typo="Typo.body2">
                     Trésorerie : <b style="color:var(--mud-palette-success)">@_equipe.Tresorerie.ToString("N0") po</b>
-                    <span class="ml-3">Relances : <b>@_equipe.NombreRelances/8</b></span>
+                    <span class="ml-3">Relances : <b>@_equipe.NombreRelances@(_typeRelances?.MaxLigue is int mx ? $"/{mx}" : "")</b></span>
                 </MudText>
             </div>
         </MudStack>
@@ -178,21 +179,27 @@ else
     </MudPaper>
 
     <!-- Section 3 : Relances -->
-    @if (_equipe.NombreRelances < 8)
+    @if (_typeRelances is not null && _equipe.NombreRelances < _plafondRelances)
     {
         var coutRelance = (_equipe.TeamType?.CoutRelance ?? 50_000) * 2;
         <MudPaper Elevation="2" Class="pa-4 mb-4">
             <MudText Typo="Typo.subtitle1" Class="mb-1">
                 <MudIcon Icon="@Icons.Material.Filled.Refresh" Color="Color.Secondary" Class="mr-1" />
-                <b>Acheter des relances</b>
+                <b>Acheter des @(_typeRelances.Nom.ToLowerInvariant())</b>
             </MudText>
-            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1 d-block">
                 Coût en ligue : @coutRelance.ToString("N0") po chacune (double du tarif normal) &nbsp;·&nbsp;
-                Actuellement @_equipe.NombreRelances relance(s), max 8
+                Actuellement @_equipe.NombreRelances, @(_typeRelances.MaxLigue is int m ? $"max {m}" : "sans plafond")
             </MudText>
+            @if (!string.IsNullOrWhiteSpace(_typeRelances.Description))
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block" Style="line-height:1.35">
+                    @_typeRelances.Description
+                </MudText>
+            }
             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
                 <MudNumericField @bind-Value="_nouvellesRelances" Min="0"
-                               Max="@(Math.Min(8 - _equipe.NombreRelances, (int)(_equipe.Tresorerie / coutRelance)))"
+                               Max="@(Math.Min(_plafondRelances - _equipe.NombreRelances, (int)(_equipe.Tresorerie / coutRelance)))"
                                Label="Relances à acheter" Variant="Variant.Outlined" Margin="Margin.Dense"
                                Style="width:160px" />
                 @if (_nouvellesRelances > 0)
@@ -230,6 +237,15 @@ else
     Dictionary<int, int> _numerosRecruté = [];
     int _nouvellesRelances;
     bool _saving;
+
+    /// <summary>
+    /// Définition « Relances » de la ligue. Le plafond n'est plus codé en dur :
+    /// il vient des règles, et peut être absent (aucune limite).
+    /// </summary>
+    LeagueStaffType? _typeRelances;
+
+    /// <summary>Plafond effectif, très grand quand la ligue n'en impose aucun.</summary>
+    int _plafondRelances => _typeRelances?.MaxLigue ?? int.MaxValue;
     string _userId = "";
 
     protected override async Task OnInitializedAsync()
@@ -249,6 +265,11 @@ else
         _estDomicile = estDom || (!estExt && estCommissaire);
         var teamId = _estDomicile ? _match.EquipeDomicileId : _match.EquipeExterieurId;
         _equipe = await TeamService.GetEquipeAsync(teamId);
+        if (_equipe is not null)
+        {
+            var staffLigue = await StaffService.GetStaffLigueAsync(_equipe.LeagueId, actifsSeulement: true);
+            _typeRelances = staffLigue.FirstOrDefault(s => s.Nom == StaffService.NomRelances);
+        }
         if (_equipe is null) return;
 
         // R7 : uniquement les compétences de la version de règles de la ligue

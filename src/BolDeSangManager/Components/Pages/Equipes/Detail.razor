@@ -418,11 +418,34 @@ else
     IEnumerable<(string, string)> StaffItems()
     {
         if (_equipe is null) yield break;
-        yield return ("Relances", _equipe.NombreRelances.ToString());
-        yield return ("Fans dévoués", _equipe.FansDevoues.ToString());
-        yield return ("Coachs ass.", _equipe.NombreCoachsAssistants.ToString());
-        yield return ("Cheerleaders", _equipe.NombreCheerleaders.ToString());
-        yield return ("Apothicaire", _equipe.Apothicaire ? "Oui" : "Non");
+
+        // Boucle sur le staff réellement détenu : un staff créé par l'association
+        // (« Chef de bande »…) doit apparaître ici sans modification de code.
+        // Repli sur les colonnes historiques pour une équipe pas encore migrée.
+        var staff = _equipe.Staff
+            .Where(s => s.LeagueStaffType is not null)
+            .OrderBy(s => s.LeagueStaffType.Ordre)
+            .ThenBy(s => s.LeagueStaffType.Nom)
+            .ToList();
+
+        if (staff.Count == 0)
+        {
+            yield return ("Relances", _equipe.NombreRelances.ToString());
+            yield return ("Fans dévoués", _equipe.FansDevoues.ToString());
+            yield return ("Coachs ass.", _equipe.NombreCoachsAssistants.ToString());
+            yield return ("Cheerleaders", _equipe.NombreCheerleaders.ToString());
+            yield return ("Apothicaire", _equipe.Apothicaire ? "Oui" : "Non");
+            yield break;
+        }
+
+        foreach (var s in staff)
+        {
+            // Un staff plafonné à 1 est un oui/non, pas un compteur.
+            var valeur = s.LeagueStaffType.MaxCreation == 1 && s.LeagueStaffType.MaxLigue == 1
+                ? (s.Quantite > 0 ? "Oui" : "Non")
+                : s.Quantite.ToString();
+            yield return (s.LeagueStaffType.Nom, valeur);
+        }
     }
 
     IEnumerable<(string, string, Color)> TeamStats()

@@ -1,0 +1,111 @@
+@using BolDeSangManager.Data.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="Modele.Nom" Label="Nom" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="mb-3" MaxLength="100" />
+
+        <MudTextField @bind-Value="Modele.Description" Label="Description (facultative)"
+                      Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-1"
+                      Lines="2" AutoGrow="true" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            Rappelée au coach au moment de l'achat. Laissez vide si le nom se suffit.
+        </MudText>
+
+        <MudSwitch T="bool" @bind-Value="Modele.CoutDepuisTypeEquipe" Color="Color.Primary"
+                   Label="Prix défini par la race / le collège" Class="mb-1" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            C'est le cas des relances : leur prix vient de la fiche de la race
+            (« Coût relance »), pas d'ici. Le champ Coût ci-dessous est alors ignoré.
+        </MudText>
+
+        <MudNumericField @bind-Value="Modele.Cout" Label="Coût unitaire (po)"
+                         Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
+                         Min="0" Step="5000" Disabled="@Modele.CoutDepuisTypeEquipe" />
+
+        <MudStack Row="true" Spacing="2" Class="mb-1">
+            <MudNumericField @bind-Value="Modele.MinCreation" Label="Min à la création"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            <MudNumericField @bind-Value="Modele.MaxCreation" Label="Max à la création"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+        </MudStack>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            Bornes imposées quand un coach compose son équipe.
+        </MudText>
+
+        <MudSwitch T="bool" Value="@_plafonne" ValueChanged="@BasculerPlafond" Color="Color.Primary"
+                   Label="Limiter la quantité en cours de ligue" Class="mb-1" />
+        @if (_plafonne)
+        {
+            <MudNumericField @bind-Value="_maxLigue" Label="Plafond en cours de ligue"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Class="mb-1" />
+        }
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            Plafond strict : il s'applique aux achats <b>comme</b> aux gains obtenus par
+            les résultats de match. Désactivé = aucune limite.
+        </MudText>
+
+        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+            <MudNumericField @bind-Value="Modele.Ordre" Label="Ordre d'affichage"
+                             Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            <MudSwitch T="bool" @bind-Value="Modele.EstActif" Color="Color.Primary" Label="Disponible" />
+        </MudStack>
+
+        @if (!string.IsNullOrEmpty(_erreur))
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">@_erreur</MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Valider">Enregistrer</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>Définition éditée. Copie de travail : rien n'est écrit ici.</summary>
+    [Parameter] public StaffDefinition Modele { get; set; } = new();
+
+    bool _plafonne;
+    int _maxLigue = 1;
+    string? _erreur;
+
+    protected override void OnInitialized()
+    {
+        _plafonne = Modele.MaxLigue.HasValue;
+        _maxLigue = Modele.MaxLigue ?? Math.Max(1, Modele.MaxCreation);
+    }
+
+    void BasculerPlafond(bool actif)
+    {
+        _plafonne = actif;
+        if (actif && _maxLigue < Modele.MaxCreation) _maxLigue = Modele.MaxCreation;
+    }
+
+    void Valider()
+    {
+        Modele.MaxLigue = _plafonne ? _maxLigue : null;
+
+        // Contrôles miroir de ceux du service : autant les signaler ici plutôt
+        // que de laisser partir un aller-retour serveur pour rien.
+        if (string.IsNullOrWhiteSpace(Modele.Nom))
+        {
+            _erreur = "Le nom est obligatoire."; return;
+        }
+        if (Modele.MinCreation > Modele.MaxCreation)
+        {
+            _erreur = "Le minimum à la création ne peut pas dépasser le maximum."; return;
+        }
+        if (Modele.MaxLigue is int p && p < Modele.MaxCreation)
+        {
+            _erreur = "Le plafond de ligue ne peut pas être inférieur au maximum à la création.";
+            return;
+        }
+
+        MudDialog.Close(DialogResult.Ok(Modele));
+    }
+
+    void Annuler() => MudDialog.Cancel();
+}

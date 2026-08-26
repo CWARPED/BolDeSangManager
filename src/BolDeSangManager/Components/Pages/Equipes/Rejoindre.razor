@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject TeamService TeamService
+@inject StaffService StaffService
 @inject LeagueService LeagueService
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
@@ -119,34 +120,32 @@ else
 
                 <!-- Staff -->
                 <MudText Typo="Typo.subtitle2" Class="mb-3"><b>Staff & Équipement</b></MudText>
+                @if (_staffLigue.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-3">
+                        Aucun staff n'est proposé dans cette ligue.
+                    </MudText>
+                }
                 <MudGrid Spacing="2">
-                    <MudItem xs="6" sm="4">
-                        <MudNumericField @bind-Value="_nombreRelances" Label="Relances" Min="0" Max="8"
-                                        Variant="Variant.Outlined" Margin="Margin.Dense"
-                                        HelperText="@($"{_selectedType.CoutRelance:N0} po")" />
-                    </MudItem>
-                    <MudItem xs="6" sm="4">
-                        <MudNumericField @bind-Value="_fansDevoues" Label="Fans dévoués" Min="0" Max="6"
-                                        Variant="Variant.Outlined" Margin="Margin.Dense"
-                                        HelperText="10 000 po" />
-                    </MudItem>
-                    <MudItem xs="6" sm="4">
-                        <MudNumericField @bind-Value="_coachsAssistants" Label="Coachs assistants" Min="0" Max="6"
-                                        Variant="Variant.Outlined" Margin="Margin.Dense"
-                                        HelperText="@(_estDB ? "Non disponible en DB" : "10 000 po")"
-                                        Disabled="@_estDB" />
-                    </MudItem>
-                    <MudItem xs="6" sm="4">
-                        <MudNumericField @bind-Value="_cheerleaders" Label="Cheerleaders" Min="0" Max="6"
-                                        Variant="Variant.Outlined" Margin="Margin.Dense"
-                                        HelperText="@(_estDB ? "Non disponible en DB" : "10 000 po")"
-                                        Disabled="@_estDB" />
-                    </MudItem>
-                    <MudItem xs="12" sm="8">
-                        <MudCheckBox @bind-Value="_apothicaire" Color="Color.Primary">
-                            Apothicaire (50 000 po)
-                        </MudCheckBox>
-                    </MudItem>
+                    @foreach (var st in _staffLigue)
+                    {
+                        <MudItem xs="12" sm="6" md="4">
+                            <MudNumericField T="int"
+                                             Value="@QuantiteStaff(st.Id)"
+                                             ValueChanged="@(v => DefinirStaff(st, v))"
+                                             Label="@st.Nom"
+                                             Min="@st.MinCreation" Max="@st.MaxCreation"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense"
+                                             HelperText="@LibelleCoutStaff(st)" />
+                            @if (!string.IsNullOrWhiteSpace(st.Description))
+                            {
+                                <MudText Typo="Typo.caption" Color="Color.Secondary"
+                                         Class="d-block mt-1" Style="line-height:1.35">
+                                    @st.Description
+                                </MudText>
+                            }
+                        </MudItem>
+                    }
                 </MudGrid>
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-6" Spacing="2">
@@ -229,11 +228,13 @@ else
     TeamType? _selectedType;
     string _nomEquipe = "";
     readonly List<PlayerSlot> _slots = [];
-    int _nombreRelances;
-    int _fansDevoues;
-    int _coachsAssistants;
-    int _cheerleaders;
-    bool _apothicaire;
+
+    /// <summary>Staff proposé par la ligue (copie des règles, ajustée par le commissaire).</summary>
+    List<LeagueStaffType> _staffLigue = [];
+
+    /// <summary>Quantités saisies à l'écran, par identifiant de staff de ligue.</summary>
+    readonly Dictionary<int, int> _staffQuantites = [];
+
     bool _saving;
     bool _chargement = true;
     bool _modeEdition;
@@ -241,14 +242,27 @@ else
 
     bool _estDB => _ligue?.Game?.Type == GameType.DungeonBowl;
 
+    int QuantiteStaff(int staffId) => _staffQuantites.TryGetValue(staffId, out var q) ? q : 0;
+
+    void DefinirStaff(LeagueStaffType staff, int valeur)
+    {
+        // Les bornes sont déjà posées sur le champ, mais une saisie clavier peut
+        // les contourner : on reste dans l'intervalle autorisé à la création.
+        _staffQuantites[staff.Id] = Math.Clamp(valeur, staff.MinCreation, staff.MaxCreation);
+    }
+
+    /// <summary>Coût unitaire affiché sous le champ. Le prix des relances vient de la race.</summary>
+    string LibelleCoutStaff(LeagueStaffType staff) =>
+        $"{StaffService.CoutUnitaire(staff, _selectedType):N0} po"
+        + (staff.CoutDepuisTypeEquipe ? " (selon la race)" : "");
+
+    int _coutStaff => _staffLigue.Sum(st =>
+        QuantiteStaff(st.Id) * StaffService.CoutUnitaire(st, _selectedType));
+
     int _budgetRestant => _ligue is null ? 0 :
         _ligue.BudgetDepart
         - _slots.Sum(s => s.Cout)
-        - _nombreRelances * (_selectedType?.CoutRelance ?? 50_000)
-        - _fansDevoues * 10_000
-        - (_estDB ? 0 : _coachsAssistants * 10_000)
-        - (_estDB ? 0 : _cheerleaders * 10_000)
-        - (_apothicaire ? 50_000 : 0);
+        - _coutStaff;
 
     bool _budgetNegatif => _budgetRestant < 0;
 
@@ -290,11 +304,11 @@ else
             LigueId = _ligue!.Id;
             _selectedType = await TeamService.GetTeamTypeAvecPostesAsync(equipe.TeamTypeId);
             _nomEquipe = equipe.Nom;
-            _nombreRelances = equipe.NombreRelances;
-            _fansDevoues = equipe.FansDevoues;
-            _coachsAssistants = equipe.NombreCoachsAssistants;
-            _cheerleaders = equipe.NombreCheerleaders;
-            _apothicaire = equipe.Apothicaire;
+
+            // Staff déjà détenu : on repart des quantités réelles.
+            _staffLigue = await StaffService.GetStaffLigueAsync(_ligue.Id, actifsSeulement: true);
+            foreach (var s in equipe.Staff)
+                _staffQuantites[s.LeagueStaffTypeId] = s.Quantite;
 
             foreach (var j in equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).OrderBy(j => j.Numero))
             {
@@ -313,6 +327,15 @@ else
             _ligue = await LeagueService.GetLigueAsync(LigueId);
             if (_ligue is not null && _ligue.RulesVersionId != 0)
                 _teamTypes = await TeamService.GetTypesEquipesParVersionAsync(_ligue.RulesVersionId);
+
+            if (_ligue is not null)
+            {
+                _staffLigue = await StaffService.GetStaffLigueAsync(_ligue.Id, actifsSeulement: true);
+                // Les minimums imposés par les règles sont pré-remplis : sinon le
+                // coach part sur une équipe invalide sans savoir pourquoi.
+                foreach (var st in _staffLigue)
+                    _staffQuantites[st.Id] = st.MinCreation;
+            }
         }
 
         _chargement = false;
@@ -378,8 +401,6 @@ else
     {
         if (string.IsNullOrWhiteSpace(_nomEquipe) || _ligue is null || _selectedType is null) return;
 
-        if (_estDB) { _coachsAssistants = 0; _cheerleaders = 0; }
-
         _saving = true;
         try
         {
@@ -389,9 +410,7 @@ else
             if (_modeEdition)
             {
                 equipe = await TeamService.ModifierEquipeAsync(
-                    TeamId, _userId, _nomEquipe, _budgetRestant,
-                    _nombreRelances, _fansDevoues, _coachsAssistants, _cheerleaders, _apothicaire,
-                    joueurs);
+                    TeamId, _userId, _nomEquipe, _budgetRestant, _staffQuantites, joueurs);
                 Snackbar.Add("Équipe modifiée avec succès !", Severity.Success);
             }
             else
@@ -402,13 +421,8 @@ else
                     CoachId = _userId,
                     LeagueId = LigueId,
                     TeamTypeId = _selectedType.Id,
-                    Tresorerie = _budgetRestant,
-                    NombreRelances = _nombreRelances,
-                    FansDevoues = _fansDevoues,
-                    NombreCoachsAssistants = _coachsAssistants,
-                    NombreCheerleaders = _cheerleaders,
-                    Apothicaire = _apothicaire
-                }, joueurs);
+                    Tresorerie = _budgetRestant
+                }, joueurs, _staffQuantites);
                 Snackbar.Add("Équipe créée avec succès !", Severity.Success);
             }
 

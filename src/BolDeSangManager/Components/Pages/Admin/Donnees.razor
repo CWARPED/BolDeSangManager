@@ -6,6 +6,7 @@
 @using BolDeSangManager.Data.Enums
 @using BolDeSangManager.Services
 @inject DataEditService DataEditService
+@inject StaffService StaffService
 @inject LeagueService LeagueService
 @inject GameDataExportService GameDataExportService
 @inject NavigationManager Nav
@@ -94,6 +95,73 @@
                     <MudTd DataLabel="Actions">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small" OnClick="@(() => EditerReservePoste(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error" OnClick="@(() => SupprimerReservePoste(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Staff">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_staff.Count élément(s) de staff</b></MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           OnClick="AjouterStaff">Ajouter un staff</MudButton>
+            </MudStack>
+            <MudText Typo="Typo.body2" Class="mb-2" Style="color:#9e9e9e">
+                Éléments achetables par les équipes : fans dévoués, relances, apothicaire…
+                Ces valeurs sont celles des <b>règles</b> : chaque ligue en prend une copie
+                à sa création, que le commissaire peut ensuite ajuster pour son format.
+                Modifier ici n'affecte donc pas les ligues déjà créées.
+            </MudText>
+            <MudTable Items="@_staff" Dense="true" Hover="true" Style="font-size:12px">
+                <HeaderContent>
+                    <MudTh>Nom</MudTh>
+                    <MudTh Style="text-align:right">Coût</MudTh>
+                    <MudTh Style="text-align:center">Création (min–max)</MudTh>
+                    <MudTh Style="text-align:center">Plafond ligue</MudTh>
+                    <MudTh Style="text-align:center">Actif</MudTh>
+                    <MudTh>Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Nom">
+                        <div style="font-weight:600">@context.Nom</div>
+                        @if (!string.IsNullOrWhiteSpace(context.Description))
+                        {
+                            <div style="font-size:10px; color:#9e9e9e; font-style:italic">@context.Description</div>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Coût" Style="text-align:right">
+                        @if (context.CoutDepuisTypeEquipe)
+                        {
+                            <span style="font-size:11px; color:#90caf9" title="Le prix vient de la fiche de la race (Coût relance)">
+                                selon la race
+                            </span>
+                        }
+                        else
+                        {
+                            @context.Cout.ToString("N0")
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Création" Style="text-align:center">
+                        @context.MinCreation – @context.MaxCreation
+                    </MudTd>
+                    <MudTd DataLabel="Plafond ligue" Style="text-align:center">
+                        @(context.MaxLigue?.ToString() ?? "—")
+                    </MudTd>
+                    <MudTd DataLabel="Actif" Style="text-align:center">
+                        @if (context.EstActif)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Size="Size.Small" Color="Color.Success" />
+                        }
+                        else
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.DoNotDisturbOn" Size="Size.Small" Color="Color.Default" />
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditerStaff(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerStaff(context))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -299,6 +367,7 @@
 @code {
     List<Game> _games = [];
     List<RulesVersion> _versions = [];
+    List<StaffDefinition> _staff = [];
     List<TeamType> _teamTypes = [];
     List<PoolPosition> _reserve = [];
     List<Skill> _skills = [];
@@ -332,13 +401,97 @@
 
     async Task ChargerDonneesAsync()
     {
-        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; _categories = []; return; }
+        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; _categories = []; _staff = []; return; }
         _teamTypes = await DataEditService.GetTeamTypesAsync(_selectedVersionId);
         _categories = await DataEditService.GetCategoriesAsync(_selectedVersionId);
         _skills = await DataEditService.GetSkillsAsync(_selectedVersionId);
         _reserve = await DataEditService.GetReserveAsync(_selectedVersionId);
+        _staff = await StaffService.GetStaffTypesAsync(_selectedVersionId);
         // Le filtre pointe sur une catégorie d'une autre version : le réinitialiser
         if (_categorieFiltre is int f && !_categories.Any(c => c.Id == f)) _categorieFiltre = null;
+    }
+
+    // ─── Staff ────────────────────────────────────────────────────────────────
+
+    async Task AjouterStaff()
+    {
+        if (_selectedVersionId == 0) return;
+
+        var modele = new StaffDefinition
+        {
+            RulesVersionId = _selectedVersionId,
+            Ordre = (_staff.LastOrDefault()?.Ordre ?? 0) + 1,
+            MaxCreation = 1
+        };
+        await OuvrirDialogueStaffAsync("Ajouter un staff", modele, async m =>
+        {
+            await StaffService.AjouterStaffTypeAsync(m);
+            Snackbar.Add($"« {m.Nom} » ajouté.", Severity.Success);
+        });
+    }
+
+    async Task EditerStaff(StaffDefinition staff)
+    {
+        // Copie de travail : le dialogue ne doit pas modifier l'entité suivie
+        // tant que l'utilisateur n'a pas validé.
+        var copie = new StaffDefinition
+        {
+            Id = staff.Id, RulesVersionId = staff.RulesVersionId,
+            Nom = staff.Nom, Description = staff.Description, Ordre = staff.Ordre,
+            EstActif = staff.EstActif, Cout = staff.Cout,
+            CoutDepuisTypeEquipe = staff.CoutDepuisTypeEquipe,
+            MinCreation = staff.MinCreation, MaxCreation = staff.MaxCreation,
+            MaxLigue = staff.MaxLigue
+        };
+
+        await OuvrirDialogueStaffAsync($"Modifier « {staff.Nom} »", copie, async m =>
+        {
+            await StaffService.ModifierStaffTypeAsync(m);
+            Snackbar.Add($"« {m.Nom} » modifié.", Severity.Success);
+        });
+    }
+
+    async Task OuvrirDialogueStaffAsync(string titre, StaffDefinition modele, Func<StaffDefinition, Task> action)
+    {
+        var parametres = new DialogParameters<EditionStaffDialog> { { x => x.Modele, modele } };
+        var dialog = await DialogService.ShowAsync<EditionStaffDialog>(titre, parametres);
+        var res = await dialog.Result;
+        if (res is null || res.Canceled || res.Data is not StaffDefinition valide) return;
+
+        try
+        {
+            await action(valide);
+            await ChargerDonneesAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible d'enregistrer ce staff.", Severity.Error);
+        }
+    }
+
+    async Task SupprimerStaff(StaffDefinition staff)
+    {
+        var ok = await DialogService.ShowMessageBox(
+            "Supprimer ce staff",
+            $"Supprimer « {staff.Nom} » de cette version de règles ? "
+            + "Les ligues déjà créées conservent leur copie : elles ne sont pas affectées.",
+            "Supprimer", "Annuler");
+        if (ok != true) return;
+
+        try
+        {
+            await StaffService.SupprimerStaffTypeAsync(staff.Id);
+            await ChargerDonneesAsync();
+            Snackbar.Add($"« {staff.Nom} » supprimé.", Severity.Success);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible de supprimer ce staff.", Severity.Error);
+        }
     }
 
     async Task OnGameChanged(int id)

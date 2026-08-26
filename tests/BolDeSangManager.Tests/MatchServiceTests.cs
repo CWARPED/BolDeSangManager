@@ -314,12 +314,11 @@ public class MatchServiceTests : IDisposable
         await using (var dbSetup = _factory.CreateContext())
         {
             var ligueId = (await dbSetup.Teams.FindAsync(dom.Id))!.LeagueId;
-            var type = new LeagueStaffType
-            {
-                LeagueId = ligueId, Nom = StaffService.NomFans,
-                Cout = 10_000, MinCreation = 1, MaxCreation = 9, MaxLigue = 12
-            };
-            dbSetup.LeagueStaffTypes.Add(type);
+
+            // Le seed fournit déjà « Fans dévoués » : on lui pose un plafond de 12.
+            var type = await dbSetup.LeagueStaffTypes
+                .FirstAsync(l => l.LeagueId == ligueId && l.Nom == StaffService.NomFans);
+            type.MaxLigue = 12;
             await dbSetup.SaveChangesAsync();
 
             dbSetup.TeamStaffs.Add(new TeamStaff { TeamId = dom.Id, LeagueStaffTypeId = type.Id, Quantite = 11 });

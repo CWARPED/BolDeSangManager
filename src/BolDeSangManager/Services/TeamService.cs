@@ -76,7 +76,14 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .OrderByDescending(t => t.PointsLigue)
             .ToListAsync();
 
-    public async Task<Team> CreerEquipeAsync(Team equipe, List<(int positionId, string nom, int numero)> joueurs)
+    /// <param name="staff">
+    /// Quantités de staff par identifiant de LeagueStaffType. Les bornes de
+    /// création (min/max) sont vérifiées ici, pas seulement dans l'UI.
+    /// </param>
+    public async Task<Team> CreerEquipeAsync(
+        Team equipe,
+        List<(int positionId, string nom, int numero)> joueurs,
+        IReadOnlyDictionary<int, int>? staff = null)
     {
         var ligue = await db.Leagues.FirstOrDefaultAsync(l => l.Id == equipe.LeagueId)
             ?? throw new InvalidOperationException("Ligue introuvable");
@@ -91,6 +98,9 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         equipe.CreeLe = DateTime.UtcNow;
         db.Teams.Add(equipe);
         await db.SaveChangesAsync();
+
+        // Staff : validé contre les bornes de la ligue (min/max à la création).
+        await AppliquerStaffAsync(equipe, staff ?? new Dictionary<int, int>(), aLaCreation: true);
 
         foreach (var (positionId, nom, numero) in joueurs)
         {
@@ -138,16 +148,85 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         return !aJoue;
     }
 
+    /// <summary>
+    /// Écrit les quantités de staff d'une équipe, en validant les bornes de la
+    /// ligue. Un type absent du dictionnaire est remis à zéro : l'écran envoie
+    /// toujours l'état complet.
+    /// </summary>
+    private async Task AppliquerStaffAsync(
+        Team equipe, IReadOnlyDictionary<int, int> staff, bool aLaCreation)
+    {
+        var typesLigue = await db.LeagueStaffTypes
+            .Where(l => l.LeagueId == equipe.LeagueId)
+            .ToListAsync();
+
+        var lignes = await db.TeamStaffs
+            .Where(t => t.TeamId == equipe.Id)
+            .ToListAsync();
+
+        foreach (var type in typesLigue)
+        {
+            var voulu = staff.TryGetValue(type.Id, out var q) ? q : 0;
+
+            if (voulu < 0)
+                throw new InvalidOperationException("Une quantité de staff ne peut pas être négative.");
+            if (!type.EstActif && voulu > 0)
+                throw new InvalidOperationException($"« {type.Nom} » n'est pas disponible dans cette ligue.");
+
+            if (aLaCreation)
+            {
+                if (voulu < type.MinCreation)
+                    throw new InvalidOperationException(
+                        $"« {type.Nom} » : minimum {type.MinCreation} à la création de l'équipe.");
+                if (voulu > type.MaxCreation)
+                    throw new InvalidOperationException(
+                        $"« {type.Nom} » : maximum {type.MaxCreation} à la création de l'équipe.");
+            }
+
+            if (type.MaxLigue is int plafond && voulu > plafond)
+                throw new InvalidOperationException(
+                    $"« {type.Nom} » : plafond de {plafond} atteint pour cette ligue.");
+
+            var ligne = lignes.FirstOrDefault(l => l.LeagueStaffTypeId == type.Id);
+            if (ligne is null)
+            {
+                if (voulu > 0)
+                    db.TeamStaffs.Add(new TeamStaff
+                    {
+                        TeamId = equipe.Id, LeagueStaffTypeId = type.Id, Quantite = voulu
+                    });
+            }
+            else
+            {
+                ligne.Quantite = voulu;
+            }
+
+            // Colonnes historiques tenues en miroir : les exports et écrans qui
+            // les lisent encore restent cohérents.
+            switch (type.Nom)
+            {
+                case StaffService.NomFans:         equipe.FansDevoues = voulu; break;
+                case StaffService.NomRelances:     equipe.NombreRelances = voulu; break;
+                case StaffService.NomCoachs:       equipe.NombreCoachsAssistants = voulu; break;
+                case StaffService.NomCheerleaders: equipe.NombreCheerleaders = voulu; break;
+                case StaffService.NomApothicaire:  equipe.Apothicaire = voulu > 0; break;
+            }
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <param name="staff">
+    /// Quantités par identifiant de LeagueStaffType. Remplace les anciens
+    /// paramètres relances/fans/coachs/cheerleaders/apothicaire : le staff est
+    /// désormais une liste ouverte définie dans les règles.
+    /// </param>
     public async Task<Team> ModifierEquipeAsync(
         int teamId,
         string coachId,
         string nouveauNom,
         int tresorerie,
-        int nombreRelances,
-        int fansDevoues,
-        int coachsAssistants,
-        int cheerleaders,
-        bool apothicaire,
+        IReadOnlyDictionary<int, int> staff,
         List<(int positionId, string nom, int numero)> joueurs)
     {
         var equipe = await db.Teams
@@ -175,13 +254,9 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
         equipe.Nom = nouveauNom;
         equipe.Tresorerie = tresorerie;
-        equipe.NombreRelances = nombreRelances;
-        equipe.FansDevoues = fansDevoues;
-        equipe.NombreCoachsAssistants = coachsAssistants;
-        equipe.NombreCheerleaders = cheerleaders;
-        equipe.Apothicaire = apothicaire;
-
         await db.SaveChangesAsync();
+
+        await AppliquerStaffAsync(equipe, staff, aLaCreation: true);
 
         // Recréer le roster
         foreach (var (positionId, nom, numero) in joueurs)

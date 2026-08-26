@@ -476,9 +476,23 @@ public class TeamServiceTests : IDisposable
         var equipe = new Team { Nom = "Avant", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
         await svc.CreerEquipeAsync(equipe, [(position.Id, "Vieux", 1)]);
 
+        // Le staff passe désormais par un dictionnaire {LeagueStaffTypeId: quantité}.
+        var staffLigue = await new StaffService(db, NullLogger<StaffService>.Instance)
+            .GetStaffLigueAsync(ligue.Id);
+        var quantites = new Dictionary<int, int>();
+        foreach (var st in staffLigue)
+            quantites[st.Id] = st.Nom switch
+            {
+                StaffService.NomRelances    => 2,
+                StaffService.NomFans        => 3,
+                StaffService.NomCoachs      => 1,
+                StaffService.NomApothicaire => 1,
+                _                           => 0
+            };
+
         await svc.ModifierEquipeAsync(
             equipe.Id, coach.Id, "Après", tresorerie: 400_000,
-            nombreRelances: 2, fansDevoues: 3, coachsAssistants: 1, cheerleaders: 0, apothicaire: true,
+            staff: quantites,
             joueurs: [(position.Id, "Nouveau1", 1), (position.Id, "Nouveau2", 2), (position.Id, "Nouveau3", 3)]);
 
         await using var db2 = _factory.CreateContext();
@@ -513,7 +527,7 @@ public class TeamServiceTests : IDisposable
         await using var db3 = _factory.CreateContext();
         var svc2 = CreateService(db3);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc2.ModifierEquipeAsync(equipe.Id, coach.Id, "Renommée", 0, 0, 0, 0, 0, false,
+            svc2.ModifierEquipeAsync(equipe.Id, coach.Id, "Renommée", 0, new Dictionary<int, int>(),
                 [(position.Id, "Z", 1)]));
     }
 
@@ -531,7 +545,7 @@ public class TeamServiceTests : IDisposable
         await svc.CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            svc.ModifierEquipeAsync(equipe.Id, autre.Id, "Hack", 0, 0, 0, 0, 0, false,
+            svc.ModifierEquipeAsync(equipe.Id, autre.Id, "Hack", 0, new Dictionary<int, int>(),
                 [(position.Id, "Z", 1)]));
     }
 

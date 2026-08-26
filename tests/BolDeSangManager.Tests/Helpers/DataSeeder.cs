@@ -1,6 +1,8 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Services;
+using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Tests.Helpers;
 
@@ -147,6 +149,41 @@ public static class DataSeeder
         };
         db.Leagues.Add(ligue);
         await db.SaveChangesAsync();
+
+        // Staff standard de la ligue. En production c'est CreerLigueAsync qui le
+        // copie depuis les règles ; ici les ligues sont insérées directement, il
+        // faut donc le matérialiser sinon aucune équipe ne peut acheter de staff.
+        if (!await db.LeagueStaffTypes.AnyAsync(l => l.LeagueId == ligue.Id))
+        {
+            db.LeagueStaffTypes.AddRange(
+                new LeagueStaffType
+                {
+                    LeagueId = ligue.Id, Nom = StaffService.NomFans, Ordre = 1,
+                    Cout = 10_000, MinCreation = 0, MaxCreation = 9
+                },
+                new LeagueStaffType
+                {
+                    LeagueId = ligue.Id, Nom = StaffService.NomRelances, Ordre = 2,
+                    Cout = 0, CoutDepuisTypeEquipe = true, MinCreation = 0, MaxCreation = 8, MaxLigue = 8
+                },
+                new LeagueStaffType
+                {
+                    LeagueId = ligue.Id, Nom = StaffService.NomCoachs, Ordre = 3,
+                    Cout = 10_000, MinCreation = 0, MaxCreation = 6
+                },
+                new LeagueStaffType
+                {
+                    LeagueId = ligue.Id, Nom = StaffService.NomCheerleaders, Ordre = 4,
+                    Cout = 10_000, MinCreation = 0, MaxCreation = 6
+                },
+                new LeagueStaffType
+                {
+                    LeagueId = ligue.Id, Nom = StaffService.NomApothicaire, Ordre = 5,
+                    Cout = 50_000, MinCreation = 0, MaxCreation = 1, MaxLigue = 1
+                });
+            await db.SaveChangesAsync();
+        }
+
         return ligue;
     }
 
