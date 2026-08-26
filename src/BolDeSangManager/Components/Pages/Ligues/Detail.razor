@@ -26,7 +26,7 @@ else
             <MudText Typo="Typo.h5" Color="Color.Error"><b>@_ligue.Nom</b></MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">
                 @_ligue.Game?.Nom — @_ligue.RulesVersion?.Nom
-                | Commissaire : @(_ligue.Commissaire?.PseudoCoach ?? _ligue.Commissaire?.UserName)
+                | Commissaire : @DisplayHelpers.NomCoach(_ligue.Commissaire)
             </MudText>
         </div>
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
@@ -155,7 +155,7 @@ else
                         <MudListItem T="LeagueCommissioner" Value="@c">
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                 <MudIcon Icon="@Icons.Material.Filled.SupervisorAccount" Size="Size.Small" />
-                                <MudText Typo="Typo.body2">@(c.User?.PseudoCoach ?? c.User?.Email ?? "—")</MudText>
+                                <MudText Typo="Typo.body2">@DisplayHelpers.NomCoach(c.User)</MudText>
                                 @if (_peutGererLigue)
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
@@ -198,7 +198,7 @@ else
                         <MudTd DataLabel="Équipe">
                             <MudLink Href="@($"/equipes/{equipe.Id}")">@equipe.Nom</MudLink>
                         </MudTd>
-                        <MudTd DataLabel="Coach">@(equipe.Coach?.PseudoCoach ?? equipe.Coach?.UserName)</MudTd>
+                        <MudTd DataLabel="Coach">@DisplayHelpers.NomCoach(equipe.Coach)</MudTd>
                         <MudTd DataLabel="Race/Collège">@equipe.TeamType?.Nom</MudTd>
                         <MudTd DataLabel="Joués" Style="text-align:center">@equipe.NombreMatchsJoues</MudTd>
                         <MudTd DataLabel="Victoires" Style="text-align:center">@equipe.NombreVictoires</MudTd>
@@ -377,7 +377,7 @@ else
                             <MudCardContent>
                                 <MudText Typo="Typo.h6"><b>@equipe.Nom</b></MudText>
                                 <MudText Typo="Typo.body2" Color="Color.Secondary">
-                                    @(equipe.Coach?.PseudoCoach ?? equipe.Coach?.UserName)
+                                    @DisplayHelpers.NomCoach(equipe.Coach)
                                 </MudText>
                                 <MudText Typo="Typo.body2">@equipe.TeamType?.Nom</MudText>
                             </MudCardContent>

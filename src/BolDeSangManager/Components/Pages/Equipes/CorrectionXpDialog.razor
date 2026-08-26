@@ -31,7 +31,7 @@
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
                     @c.CorrigeLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm") —
                     @c.AncienneValeur → @c.NouvelleValeur
-                    (@(c.CorrigePar?.PseudoCoach ?? c.CorrigePar?.UserName ?? "compte supprimé")) :
+                    (@DisplayHelpers.NomCoach(c.CorrigePar)) :
                     @c.Motif
                 </MudText>
             }

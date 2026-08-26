@@ -39,7 +39,7 @@ else
             <MudText Typo="Typo.h5" Color="Color.Error"><b>@_equipe.Nom</b></MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">
                 @_equipe.TeamType?.Nom — @_equipe.TeamType?.Game?.Nom
-                | Coach : @(_equipe.Coach?.PseudoCoach ?? _equipe.Coach?.UserName)
+                | Coach : @DisplayHelpers.NomCoach(_equipe.Coach)
                 | Ligue : @_equipe.League?.Nom
             </MudText>
         </div>

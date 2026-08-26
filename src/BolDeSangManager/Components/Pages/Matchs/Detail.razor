@@ -67,13 +67,13 @@ else
             <MudItem xs="6" sm="5" Class="text-center">
                 <MudText Typo="Typo.subtitle1"><b>@_match.EquipeDomicile?.Nom</b></MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @(_match.EquipeDomicile?.Coach?.PseudoCoach ?? _match.EquipeDomicile?.Coach?.UserName)
+                    @DisplayHelpers.NomCoach(_match.EquipeDomicile?.Coach)
                 </MudText>
             </MudItem>
             <MudItem xs="6" sm="5" Class="text-center score-away">
                 <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @(_match.EquipeExterieur?.Coach?.PseudoCoach ?? _match.EquipeExterieur?.Coach?.UserName)
+                    @DisplayHelpers.NomCoach(_match.EquipeExterieur?.Coach)
                 </MudText>
             </MudItem>
             <MudItem xs="12" sm="2" Class="text-center score-value">

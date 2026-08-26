@@ -11,7 +11,7 @@
             <MudText Class="mb-2">Sélectionne les coaches à promouvoir commissaires de cette ligue :</MudText>
             @foreach (var c in Coaches)
             {
-                <MudCheckBox @bind-Value="_selection[c.Id]" Label="@(c.PseudoCoach ?? c.Email)" />
+                <MudCheckBox @bind-Value="_selection[c.Id]" Label="@DisplayHelpers.NomCoach(c)" />
             }
         }
         else

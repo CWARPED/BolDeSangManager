@@ -1,3 +1,4 @@
+using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using MudBlazor;
 
@@ -5,6 +6,21 @@ namespace BolDeSangManager.Helpers;
 
 public static class DisplayHelpers
 {
+    /// <summary>
+    /// Nom d'un coach tel qu'il doit apparaître à l'écran.
+    ///
+    /// Un compte anonymisé garde sa ligne en base (des équipes et des feuilles
+    /// de match y font référence) mais son pseudo a été effacé : il s'affiche
+    /// « Coach supprimé » partout, sans que chaque vue ait à le savoir.
+    ///
+    /// À utiliser systématiquement au lieu de lire PseudoCoach directement.
+    /// </summary>
+    public static string NomCoach(ApplicationUser? u) =>
+        u is null ? "—"
+        : u.EstSupprime ? "Coach supprimé"
+        : string.IsNullOrWhiteSpace(u.PseudoCoach) ? (u.UserName ?? "—")
+        : u.PseudoCoach;
+
     /// <summary>
     /// Libellé du meilleur joueur d'un match : « JPV » (Joueur le Plus Valeureux),
     /// terme français employé par l'association plutôt que l'anglais « MVP ».

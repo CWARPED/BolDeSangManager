@@ -102,7 +102,7 @@ else
                         @_equipeDetail.TeamType?.Nom — @_equipeDetail.TeamType?.Game?.Nom
                     </MudText>
                     <MudText Typo="Typo.body2">
-                        Coach : <b>@(_equipeDetail.Coach?.PseudoCoach ?? _equipeDetail.Coach?.UserName)</b>
+                        Coach : <b>@DisplayHelpers.NomCoach(_equipeDetail.Coach)</b>
                     </MudText>
                     <MudText Typo="Typo.body2">
                         Ligue : <b>@_equipeDetail.League?.Nom</b>
@@ -319,7 +319,7 @@ else
     }
 
     static string NomSelect(Team eq) =>
-        $"{eq.Nom} ({eq.Coach?.PseudoCoach ?? eq.Coach?.UserName ?? "?"})";
+        $"{eq.Nom} ({DisplayHelpers.NomCoach(eq.Coach)})";
 
     static RenderFragment CompetencesJoueur(TeamPlayer j) => builder =>
     {

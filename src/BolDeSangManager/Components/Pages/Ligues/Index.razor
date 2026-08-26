@@ -65,7 +65,7 @@ else
                             <div>
                                 <MudText Typo="Typo.caption">Commissaire</MudText>
                                 <MudText Typo="Typo.body2">
-                                    @(ligue.Commissaire?.PseudoCoach ?? ligue.Commissaire?.UserName)
+                                    @DisplayHelpers.NomCoach(ligue.Commissaire)
                                 </MudText>
                             </div>
                             <div>

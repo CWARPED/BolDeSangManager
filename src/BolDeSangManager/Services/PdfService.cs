@@ -1,5 +1,6 @@
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Helpers;
 using QRCoder;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -57,7 +58,7 @@ public class PdfService
                         });
                         row.ConstantItem(160).Column(inner =>
                         {
-                            inner.Item().Text($"Coach : {equipe.Coach?.PseudoCoach ?? equipe.Coach?.UserName}")
+                            inner.Item().Text($"Coach : {DisplayHelpers.NomCoach(equipe.Coach)}")
                                 .FontSize(10);
                             inner.Item().Text($"Ligue : {equipe.League?.Nom}").FontSize(10);
                         });

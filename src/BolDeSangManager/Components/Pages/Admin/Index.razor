@@ -37,7 +37,7 @@
                 </HeaderContent>
                 <RowTemplate Context="u">
                     <MudTd DataLabel="Pseudo">
-                        <b>@(string.IsNullOrEmpty(u.PseudoCoach) ? u.UserName : u.PseudoCoach)</b>
+                        <b>@DisplayHelpers.NomCoach(u)</b>
                     </MudTd>
                     <MudTd DataLabel="Email">@u.Email</MudTd>
                     <MudTd DataLabel="Rôle">

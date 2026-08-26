@@ -1510,6 +1510,43 @@ public class LeagueServiceTests : IDisposable
         }
     }
 
+    [Fact]
+    public void NomCoach_CompteAnonymise_AfficheCoachSupprime()
+    {
+        // Le pseudo a été effacé à l'anonymisation, mais la ligne subsiste pour
+        // que les équipes et feuilles de match gardent leur référence. Les
+        // autres coaches doivent lire un libellé neutre, pas un identifiant
+        // technique du type « compte-supprime-a1b2c3d4 ».
+        var supprime = new ApplicationUser
+        {
+            PseudoCoach = "Coach supprimé",
+            UserName = "compte-supprime-a1b2c3d4",
+            EstSupprime = true
+        };
+
+        Assert.Equal("Coach supprimé", DisplayHelpers.NomCoach(supprime));
+    }
+
+    [Fact]
+    public void NomCoach_CompteNormal_AfficheLePseudo()
+    {
+        var actif = new ApplicationUser { PseudoCoach = "Ragnar", UserName = "ragnar@test.fr" };
+        Assert.Equal("Ragnar", DisplayHelpers.NomCoach(actif));
+    }
+
+    [Fact]
+    public void NomCoach_SansPseudo_RetombeSurLIdentifiant()
+    {
+        var sansPseudo = new ApplicationUser { PseudoCoach = "", UserName = "coach@test.fr" };
+        Assert.Equal("coach@test.fr", DisplayHelpers.NomCoach(sansPseudo));
+    }
+
+    [Fact]
+    public void NomCoach_Null_NeJettePas()
+    {
+        Assert.Equal("—", DisplayHelpers.NomCoach(null));
+    }
+
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService
     {
