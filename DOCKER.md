@@ -40,6 +40,7 @@ La base de données est persistée dans le volume Docker nommé `boldesang-data`
 | Variable | Défaut | Description |
 |---|---|---|
 | `ConnectionStrings__DefaultConnection` | SQLite `/data/boldesang.db` | Chemin de la base SQLite |
+| `DataProtection__KeysPath` | `/data/DataProtection-Keys` | Dossier des clés de chiffrement des cookies de session (voir avertissement ci-dessous) |
 | `BolDeSang__AdminEmail` | `commissaire@boldesang.fr` | Email du premier Commissaire |
 | `BolDeSang__AdminPassword` | `Commissaire123!` | Mot de passe (≥ 8 chars, ≥ 1 chiffre) |
 | `BolDeSang__AdminPseudo` | `Grand Commissaire` | Pseudo affiché |
@@ -50,6 +51,8 @@ La base de données est persistée dans le volume Docker nommé `boldesang-data`
 > **Important :** `BolDeSang__AdminEmail` / `Password` / `Pseudo` ne sont lus qu'au premier démarrage (quand le compte n'existe pas encore). Pour changer le mot de passe après installation, utilisez l'interface admin.
 
 > **URL externe :** Renseigner `BolDeSang__UrlExterne` dans `docker-compose.yml` OU la configurer dans Admin > Paramètres après connexion. Les deux méthodes sont équivalentes.
+
+> ⚠️ **Clés DataProtection :** elles chiffrent les cookies de session et les jetons anti-CSRF. Le `Dockerfile` les place par défaut dans `/data/DataProtection-Keys`, **à l'intérieur du volume persistant** — c'est ce qu'il faut. Si vous redéfinissez `DataProtection__KeysPath` vers un chemin hors volume, les clés sont régénérées à chaque redémarrage : tous les utilisateurs sont déconnectés et les formulaires ouverts échouent avec « votre session a expiré ».
 
 ---
 
