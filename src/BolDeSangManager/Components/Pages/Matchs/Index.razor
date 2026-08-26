@@ -193,9 +193,9 @@ else
         var equipes = await TeamService.GetEquipesCoachAsync(userId);
         _mesEquipeIds = equipes.Select(e => e.Id).ToHashSet();
 
-        var tous = new List<Match>();
-        foreach (var eq in equipes)
-            tous.AddRange(await MatchService.GetMatchsEquipeAsync(eq.Id));
+        // Une seule requête pour toutes les équipes du coach (voir Home.razor) :
+        // la boucle précédente coûtait un aller-retour SQL par équipe.
+        var tous = await MatchService.GetMatchsEquipesAsync(_mesEquipeIds);
 
         // Mode brouillard : même impératif que sur l'accueil. Cet écran agrège les
         // matchs de toutes les ligues du coach, il doit donc appliquer le réglage

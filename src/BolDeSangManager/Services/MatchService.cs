@@ -35,6 +35,29 @@ public class MatchService(
             .ToListAsync();
 
     /// <summary>
+    /// Matchs de PLUSIEURS équipes en une seule requête.
+    ///
+    /// Les écrans transverses (accueil, « Mes matchs ») bouclaient sur les équipes
+    /// du coach en appelant <see cref="GetMatchsEquipeAsync"/> à chaque tour :
+    /// 15 équipes = 15 allers-retours SQL pour un seul affichage (motif N+1).
+    /// Ici tout est ramené d'un coup, quel que soit le nombre d'équipes.
+    /// </summary>
+    public async Task<List<Match>> GetMatchsEquipesAsync(IReadOnlyCollection<int> teamIds)
+    {
+        if (teamIds.Count == 0) return [];
+
+        return await db.Matches
+            .Include(m => m.EquipeDomicile).ThenInclude(e => e.Coach)
+            .Include(m => m.EquipeExterieur).ThenInclude(e => e.Coach)
+            .Include(m => m.Division).ThenInclude(d => d!.League)
+            .Include(m => m.Feuille)
+            .Where(m => teamIds.Contains(m.EquipeDomicileId)
+                     || teamIds.Contains(m.EquipeExterieurId))
+            .OrderBy(m => m.Ronde)
+            .ToListAsync();
+    }
+
+    /// <summary>
     /// Tous les matchs d'une ligue (#2) — sert à évaluer la règle du mode brouillard
     /// côté serveur, y compris sur accès direct à une page de match.
     /// </summary>

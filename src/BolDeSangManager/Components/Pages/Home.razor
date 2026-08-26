@@ -213,18 +213,18 @@
             _mesEquipes = await TeamService.GetEquipesCoachAsync(userId);
 
             var statuts = new[] { MatchStatus.Programme, MatchStatus.AJouer, MatchStatus.FeuilleEnSaisie, MatchStatus.ValidationCompetences };
-            var tousMatchs = new Dictionary<int, Match>();
-            foreach (var eq in _mesEquipes)
-            {
-                var matchs = await MatchService.GetMatchsEquipeAsync(eq.Id);
-                foreach (var m in matchs.Where(m => statuts.Contains(m.Statut)))
-                    tousMatchs.TryAdd(m.Id, m);
-            }
+
+            // Une seule requête pour toutes les équipes du coach : la boucle
+            // précédente déclenchait un aller-retour SQL par équipe (N+1).
+            var mesEquipeIds = _mesEquipes.Select(e => e.Id).ToHashSet();
+            var tousMatchs = (await MatchService.GetMatchsEquipesAsync(mesEquipeIds))
+                .Where(m => statuts.Contains(m.Statut))
+                .DistinctBy(m => m.Id)
+                .ToList();
 
             // Mode brouillard : cet écran agrège les matchs de TOUTES les ligues du
             // coach. Sans ce filtre, le calendrier masqué sur la fiche de ligue
             // ressortait ici — le coach voyait ses rondes futures sur l'accueil.
-            var mesEquipeIds = _mesEquipes.Select(e => e.Id).ToHashSet();
             var brouillardParLigue = (_ligues ?? []).ToDictionary(l => l.Id, l => l.ModeBrouillard);
             var commissaireDe = (_ligues ?? [])
                 .Where(l => l.CommissaireId == userId
@@ -233,7 +233,7 @@
                 .ToHashSet();
 
             var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
-                tousMatchs.Values, mesEquipeIds, brouillardParLigue, commissaireDe);
+                tousMatchs, mesEquipeIds, brouillardParLigue, commissaireDe);
 
             _mesMatchs = [.. visibles.OrderBy(m => m.Division?.LeagueId).ThenBy(m => m.Ronde)];
         }
