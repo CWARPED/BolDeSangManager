@@ -27,6 +27,9 @@ public class UserAccountServiceTests : IDisposable
     private readonly TestDbFactory _factory = new();
     public void Dispose() => _factory.Dispose();
 
+    /// <summary>Renseigné par <see cref="Creer"/> — utile aux tests de rôles.</summary>
+    private RoleManager<IdentityRole>? _roleManager;
+
     private (UserAccountService svc, UserManager<ApplicationUser> um, ApplicationDbContext db) Creer()
     {
         var db = _factory.CreateContext();
@@ -41,6 +44,7 @@ public class UserAccountServiceTests : IDisposable
         var sp = services.BuildServiceProvider();
 
         var um = sp.GetRequiredService<UserManager<ApplicationUser>>();
+        _roleManager = sp.GetRequiredService<RoleManager<IdentityRole>>();
         var svc = new UserAccountService(db, um, NullLogger<UserAccountService>.Instance);
         return (svc, um, db);
     }
@@ -146,6 +150,128 @@ public class UserAccountServiceTests : IDisposable
 
         Assert.False(verdict.PeutEtreSupprimeDur);
         Assert.Equal(1, verdict.NbCommissariats);
+    }
+
+    // ─── Suppression / anonymisation ──────────────────────────────────────
+
+    [Fact]
+    public async Task Supprimer_CompteVierge_RetireVraimentLaLigne()
+    {
+        var (svc, um, db) = Creer();
+        var user = await CreerUserAsync(um, "jetable@test.fr");
+        var id = user.Id;
+
+        var r = await svc.SupprimerCompteAsync(id, parQui: "self");
+
+        Assert.True(r.Succeeded, string.Join(", ", r.Errors.Select(e => e.Description)));
+        Assert.Null(await db.Users.FindAsync(id));
+    }
+
+    [Fact]
+    public async Task Supprimer_CoachAvecEquipe_AnonymiseMaisConserveLEquipe()
+    {
+        // Le cœur du sujet : l'historique sportif ne doit pas disparaître avec
+        // le compte. L'équipe reste, rattachée au MÊME CoachId.
+        var (svc, um, db) = Creer();
+        var user = await CreerUserAsync(um, "partant@test.fr", "Ragnar");
+        var (gameId, versionId, teamTypeId) = await SeedRefsAsync(db);
+        var tiers = await CreerTiersAsync(db);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, gameId, versionId, tiers.Id);
+        var equipe = await DataSeeder.SeedTeamAsync(db, ligue.Id, user.Id, teamTypeId, "Les Partants");
+
+        var r = await svc.SupprimerCompteAsync(user.Id, parQui: "self");
+        Assert.True(r.Succeeded);
+
+        var apres = await db.Users.FindAsync(user.Id);
+        Assert.NotNull(apres);
+        Assert.True(apres!.EstSupprime);
+        Assert.Equal(UserAccountService.PseudoAnonyme, apres.PseudoCoach);
+        Assert.DoesNotContain("partant@test.fr", apres.Email ?? "");
+        Assert.Null(apres.PasswordHash);
+        Assert.NotNull(apres.SupprimeLe);
+        Assert.Equal("self", apres.SupprimePar);
+
+        // La preuve : l'équipe existe toujours, avec le même coach.
+        var equipeApres = await db.Teams.FindAsync(equipe.Id);
+        Assert.NotNull(equipeApres);
+        Assert.Equal(user.Id, equipeApres!.CoachId);
+        Assert.Equal("Les Partants", equipeApres.Nom);
+    }
+
+    [Fact]
+    public async Task Supprimer_CompteAnonymise_NePeutPlusSeConnecter()
+    {
+        var (svc, um, db) = Creer();
+        var user = await CreerUserAsync(um, "bloque@test.fr");
+        var (gameId, versionId, teamTypeId) = await SeedRefsAsync(db);
+        var tiers = await CreerTiersAsync(db);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, gameId, versionId, tiers.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, user.Id, teamTypeId);
+
+        await svc.SupprimerCompteAsync(user.Id, parQui: "self");
+
+        var apres = await db.Users.FindAsync(user.Id);
+        Assert.False(await um.CheckPasswordAsync(apres!, "Password123!"));
+        Assert.True(apres.LockoutEnabled);
+        Assert.NotNull(apres.LockoutEnd);
+        Assert.True(apres.LockoutEnd > DateTimeOffset.UtcNow.AddYears(50));
+        Assert.Empty(await um.GetRolesAsync(apres));
+    }
+
+    [Fact]
+    public async Task Supprimer_LibereLEmailPourUneNouvelleInscription()
+    {
+        // L'adresse doit redevenir utilisable : l'index unique d'Identity ne
+        // doit pas rester bloqué par le compte anonymisé.
+        var (svc, um, db) = Creer();
+        var user = await CreerUserAsync(um, "revient@test.fr");
+        var (gameId, versionId, teamTypeId) = await SeedRefsAsync(db);
+        var tiers = await CreerTiersAsync(db);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, gameId, versionId, tiers.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, user.Id, teamTypeId);
+
+        await svc.SupprimerCompteAsync(user.Id, parQui: "self");
+
+        var nouveau = await CreerUserAsync(um, "revient@test.fr", "Nouveau départ");
+        Assert.NotEqual(user.Id, nouveau.Id);
+    }
+
+    [Fact]
+    public async Task Supprimer_DeuxFois_NeJettePas()
+    {
+        var (svc, um, db) = Creer();
+        var user = await CreerUserAsync(um, "double@test.fr");
+        var (gameId, versionId, teamTypeId) = await SeedRefsAsync(db);
+        var tiers = await CreerTiersAsync(db);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, gameId, versionId, tiers.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, user.Id, teamTypeId);
+
+        await svc.SupprimerCompteAsync(user.Id, parQui: "self");
+        var r2 = await svc.SupprimerCompteAsync(user.Id, parQui: "self");
+
+        Assert.True(r2.Succeeded);
+    }
+
+    [Fact]
+    public async Task Supprimer_LeDernierAdmin_EstRefuse()
+    {
+        // Garde-fou : se retirer le dernier compte Admin rendrait
+        // l'administration inaccessible à tout le monde.
+        var (svc, um, db) = Creer();
+        var admin = await CreerUserAsync(um, "dernier-admin@test.fr");
+
+        var roleManager = _roleManager!;
+        await roleManager.CreateAsync(new IdentityRole("Admin"));
+        await um.AddToRoleAsync(admin, "Admin");
+
+        var r = await svc.SupprimerCompteAsync(admin.Id, parQui: "self");
+
+        Assert.False(r.Succeeded);
+        Assert.Contains(r.Errors, e => e.Description.Contains("Admin", StringComparison.OrdinalIgnoreCase));
+
+        var apres = await db.Users.FindAsync(admin.Id);
+        Assert.NotNull(apres);
+        Assert.False(apres!.EstSupprime);
     }
 
     // ─── Helpers de seed ──────────────────────────────────────────────────
