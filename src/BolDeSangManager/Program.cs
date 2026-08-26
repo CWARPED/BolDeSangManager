@@ -51,8 +51,21 @@ builder.Services.AddAuthentication(options =>
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
     ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
+// SplitQuery : quand une requête charge plusieurs collections à la fois
+// (les équipes ET les matchs d'une ligue, par exemple), EF produit par défaut
+// une seule jointure — donc le PRODUIT CROISÉ des deux listes. Sur une ligue
+// de 16 équipes et 120 matchs, SQLite renvoyait 1920 lignes pour 136 lignes
+// utiles, et EF recomposait le tout en mémoire à chaque affichage.
+// En mode Split, EF émet une requête par collection : le volume redevient une
+// addition au lieu d'une multiplication.
+//
+// Contrepartie assumée : les requêtes séparées ne sont pas dans une transaction
+// unique, donc une écriture concurrente pourrait théoriquement produire un
+// ensemble incohérent. Sur ce projet les lectures d'affichage tolèrent ce
+// risque, et SQLite ne sert qu'un processus.
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(connectionString));
+    options.UseSqlite(connectionString,
+        sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
 // Permet la lecture des headers X-Forwarded-For / X-Forwarded-Proto envoyés par un reverse proxy
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
