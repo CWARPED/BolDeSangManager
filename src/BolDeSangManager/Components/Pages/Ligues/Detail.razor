@@ -737,6 +737,30 @@ else
     {
         try
         {
+            // Garde-fou : générer les play-offs fige le classement et rend les
+            // matchs de saison régulière restants sans objet. Constaté en QA :
+            // on pouvait lancer les play-offs avec 5 matchs sur 6 non joués,
+            // donc un tirage arbitraire entre équipes à 0 point, sans aucun
+            // avertissement. On demande confirmation plutôt que de bloquer :
+            // un commissaire peut légitimement écourter une saison.
+            var restants = _ligue?.Divisions
+                .SelectMany(d => d.Matchs)
+                .Count(m => m.Ronde < 100
+                            && m.Statut is not (MatchStatus.Termine or MatchStatus.Concede))
+                ?? 0;
+
+            if (restants > 0)
+            {
+                var ok = await DialogService.ShowMessageBox(
+                    "Générer les play-offs ?",
+                    $"{restants} match(s) de la saison régulière ne sont pas encore joués. "
+                    + "Les play-offs seront tirés sur le classement actuel, et ces rencontres "
+                    + "resteront sans effet sur la qualification.",
+                    yesText: "Générer quand même", cancelText: "Annuler");
+
+                if (ok != true) return;
+            }
+
             await LeagueService.GenererPlayoffsAsync(Id);
             Snackbar.Add("Play-offs générés !", Severity.Success);
             _ligue = await LeagueService.GetLigueAsync(Id);
