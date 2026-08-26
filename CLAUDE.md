@@ -68,7 +68,7 @@ src/BolDeSangManager/
 
 Affichage : utiliser `DisplayHelpers.NomCoach(user)` et **jamais** `PseudoCoach` directement, sinon un identifiant technique (`compte-supprime-a1b2c3d4`) s'affiche aux autres coaches.
 
-**Rôles** : `Commissaire` et `Coach` (ASP.NET Identity). Le commissaire crée les ligues et valide les matchs. Les coaches créent des équipes et saisissent les feuilles.
+**Rôles** : `Commissaire` et `Coach` (ASP.NET Identity). Le commissaire crée les ligues et administre ; les coaches créent des équipes, saisissent les feuilles et **font tourner le match de bout en bout sans lui**.
 
 **Cycle de vie d'une ligue** :
 `Creation` → `Inscription` → `EnCours` → `PlayOffs` → `Termine`
@@ -76,7 +76,11 @@ Affichage : utiliser `DisplayHelpers.NomCoach(user)` et **jamais** `PseudoCoach`
 **Cycle de vie d'un match** :
 `Programme` → `AJouer` → `FeuilleEnSaisie` → `ValidationCompetences` → `Termine`
 
-**PSP (Points Star Player)** : calculés à la saisie de la feuille (TD×3, Completion×1, Interception×2, Élim×2, MVP+4). À 6 PSP, le joueur a droit à une compétence (validée par le commissaire).
+⚠️ **`ValidationCompetences` est mal nommé** : ce n'est PAS une attente de validation par le commissaire, c'est la **phase d'après-match des deux coaches** (c'est d'ailleurs le libellé affiché par `DisplayHelpers` : « Après-match »). Chaque coach y dépense ses XP, recrute et achète ses relances via `ValiderApresMatchAsync` ; **quand les deux ont validé, le match passe à `Termine` tout seul** (auto-clôture dans `MatchService`). Le commissaire n'est sur le chemin de personne.
+
+**Le commissaire n'est jamais requis pour jouer.** Ses actions sur un match sont toutes *optionnelles et correctives* : éditer une feuille erronée, et « Forcer la clôture » — explicitement décrit dans l'UI comme réservé au cas où un coach ne peut pas faire son après-match. Le bouton « Valider les XP » de `Matchs/Detail.razor` ouvre cette page corrective ; **il ne conditionne aucune progression**. Conséquence vérifiée en conditions réelles : une ligue dont le commissaire supprime son compte **continue normalement** — saisie, confirmation, après-match, classement, tout fonctionne entre coaches.
+
+**PSP (Points Star Player)** : calculés à la saisie de la feuille (TD×3, Completion×1, Interception×2, Élim×2, MVP+4). Les seuils ouvrent droit à une amélioration que **le coach choisit lui-même** pendant son après-match (`AppliquerAmeliorationAsync`) — aucune approbation d'un tiers n'est requise.
 
 **Gains de match** : saisis manuellement par le coach sur la feuille de match. `MatchService.CalculerGains` fournit une estimation (affluence × 10k × 0,5 + TDs × 10k) affichée en indication, mais la valeur saisie dans les champs `GainsDomicile` / `GainsExterieur` est celle persistée.
 
