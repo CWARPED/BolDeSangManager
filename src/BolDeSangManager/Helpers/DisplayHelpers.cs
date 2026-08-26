@@ -34,6 +34,9 @@ public static class DisplayHelpers
         LeagueStatus.Creation    => "En création",
         LeagueStatus.Inscription => "Inscriptions",
         LeagueStatus.EnCours     => "En cours",
+        // Manquait au switch : l'état était inatteignable faute d'écran pour le
+        // déclencher, et s'affichait donc « PhaseDeRepos » brut.
+        LeagueStatus.PhaseDeRepos => "Phase de repos",
         LeagueStatus.PlayOffs    => "Play-offs",
         LeagueStatus.Termine     => "Terminée",
         _                        => s.ToString()

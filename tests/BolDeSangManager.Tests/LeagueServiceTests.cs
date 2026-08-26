@@ -1440,6 +1440,76 @@ public class LeagueServiceTests : IDisposable
         Assert.Equal("Play-off T2", DisplayHelpers.RondeLabelCourt(101));
     }
 
+    [Fact]
+    public async Task PhaseDeRepos_LeveLesRateLeProchainMatch_EtTraceLaValidation()
+    {
+        // La phase de repos existait côté service sans aucun écran pour la
+        // déclencher (constaté en QA). On verrouille ici son contrat métier :
+        // levée des indisponibilités, puis validation traçée une seule fois.
+        var (ligueId, equipeIds) = await SetupLigueLibreAsync(4, LeagueFormat.RoundRobinAvecPlayoffs);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var ligue = await db.Leagues.FindAsync(ligueId);
+        ligue!.Statut = LeagueStatus.EnCours;
+
+        // Le seed de ligue ne crée pas de joueurs : on en ajoute un, sanctionné.
+        var position = await db.PlayerPositions.FirstAsync();
+        var joueur = new TeamPlayer
+        {
+            TeamId = equipeIds[0], PlayerPositionId = position.Id,
+            Nom = "Blessé", Numero = 1, ValeurActuelle = 50_000,
+            ManqueSuivantMatch = true, RecruteLe = DateTime.UtcNow
+        };
+        db.TeamPlayers.Add(joueur);
+        await db.SaveChangesAsync();
+
+        await svc.LancerPhaseDeReposAsync(ligueId);
+
+        var apres = await db.TeamPlayers.FindAsync(joueur.Id);
+        Assert.False(apres!.ManqueSuivantMatch);
+        Assert.Equal(LeagueStatus.PhaseDeRepos,
+            (await db.Leagues.FindAsync(ligueId))!.Statut);
+
+        // Pas encore validée pour cette équipe…
+        Assert.False(await svc.ADejaValideReposAsync(ligueId, equipeIds[0]));
+
+        var teamService = new TeamService(db, NullLogger<TeamService>.Instance);
+        await svc.ValiderApresMatchReposAsync(
+            ligueId, equipeIds[0], [], [], nouvellesRelances: 0, teamService);
+
+        Assert.True(await svc.ADejaValideReposAsync(ligueId, equipeIds[0]));
+
+        // …et on ne valide pas deux fois.
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.ValiderApresMatchReposAsync(
+                ligueId, equipeIds[0], [], [], nouvellesRelances: 0, teamService));
+    }
+
+    [Fact]
+    public void LeagueLabel_CouvreTousLesStatuts()
+    {
+        // Garde-fou : PhaseDeRepos manquait au switch et s'affichait
+        // « PhaseDeRepos » brut à l'écran. Le défaut est passé inaperçu parce que
+        // l'état était inatteignable faute d'écran pour le déclencher.
+        foreach (var statut in Enum.GetValues<LeagueStatus>())
+        {
+            var libelle = DisplayHelpers.LeagueLabel(statut);
+            Assert.NotEqual(statut.ToString(), libelle);
+        }
+    }
+
+    [Fact]
+    public void MatchLabel_CouvreTousLesStatuts()
+    {
+        foreach (var statut in Enum.GetValues<MatchStatus>())
+        {
+            var libelle = DisplayHelpers.MatchLabel(statut);
+            Assert.NotEqual(statut.ToString(), libelle);
+        }
+    }
+
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService
     {

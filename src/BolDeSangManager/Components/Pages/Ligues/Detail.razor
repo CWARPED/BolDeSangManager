@@ -65,7 +65,28 @@ else
                         @(_ligue.Statut < LeagueStatus.EnCours ? "Préparer le calendrier" : "Composer le calendrier")
                     </MudButton>
                 }
-                @if (_ligue.Statut == LeagueStatus.EnCours && DisplayHelpers.AvecPlayoffs(_ligue.Format))
+                @* Phase de repos en cours : chaque coach concerné doit pouvoir
+                   valider son après-match sans match. Ce bloc est HORS du test
+                   commissaire (voir plus bas) : il s'adresse aux coaches. *@
+                @* — bloc déplacé hors de @if (_estCommissaire) — *@
+                @* Phase de repos : entre saison régulière et play-offs, chaque
+                   équipe fait un après-match sans avoir joué (progression,
+                   recrutement) et les « rate le prochain match » sont levés.
+                   Le service existait sans aucun écran pour le déclencher. *@
+                @if (_ligue.Statut == LeagueStatus.EnCours
+                     && DisplayHelpers.AvecPlayoffs(_ligue.Format))
+                {
+                    <MudButton Variant="Variant.Outlined" Color="Color.Info" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Bedtime"
+                               OnClick="LancerPhaseDeRepos">
+                        Phase de repos
+                    </MudButton>
+                }
+                @* Le service accepte EnCours ET PhaseDeRepos : sans ce second cas,
+                   une ligue passée en phase de repos n'aurait plus aucun bouton
+                   pour lancer ses play-offs — impasse. *@
+                @if (_ligue.Statut is LeagueStatus.EnCours or LeagueStatus.PhaseDeRepos
+                     && DisplayHelpers.AvecPlayoffs(_ligue.Format))
                 {
                     <MudButton Variant="Variant.Outlined" Color="Color.Warning" Size="Size.Small"
                               OnClick="LancerPlayoffs">
@@ -86,6 +107,20 @@ else
                         <MudSwitch T="bool" Value="_ligue.ModeBrouillard" ValueChanged="BasculerBrouillard"
                                    Color="Color.Error" Size="Size.Small" Label="Mode brouillard" />
                     </MudTooltip>
+                }
+            }
+            @* Phase de repos : accessible aux COACHES, donc hors du bloc
+               commissaire ci-dessus. Sans ce lien, l'écran de validation serait
+               inatteignable pour ceux à qui il s'adresse. *@
+            @if (_ligue.Statut == LeagueStatus.PhaseDeRepos)
+            {
+                @foreach (var eq in _ligue.Equipes.Where(e => e.CoachId == _currentUserId))
+                {
+                    <MudButton Variant="Variant.Filled" Color="Color.Info" Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Bedtime"
+                               Href="@($"/ligues/{Id}/repos/{eq.Id}")">
+                        Phase de repos — @eq.Nom
+                    </MudButton>
                 }
             }
             @if (DisplayHelpers.InscriptionOuverte(_ligue.Statut, _ligue.Format))
@@ -726,6 +761,42 @@ else
 
             _echeances = (await LeagueService.GetEcheancesRondesAsync(Id))
                 .ToDictionary(e => e.Key, e => e.Value);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Error);
+        }
+    }
+
+    /// <summary>
+    /// Ouvre la phase de repos : chaque équipe pourra faire son après-match sans
+    /// avoir joué, et les indisponibilités « rate le prochain match » sont levées.
+    /// </summary>
+    async Task LancerPhaseDeRepos()
+    {
+        try
+        {
+            var restants = _ligue?.Divisions
+                .SelectMany(d => d.Matchs)
+                .Count(m => m.Ronde < 100
+                            && m.Statut is not (MatchStatus.Termine or MatchStatus.Concede))
+                ?? 0;
+
+            var message = "Chaque équipe pourra progresser et recruter sans avoir joué, "
+                        + "et les joueurs qui ratent le prochain match redeviennent disponibles."
+                        + (restants > 0
+                            ? $" Attention : {restants} match(s) de la saison régulière ne sont pas encore joués."
+                            : "");
+
+            var ok = await DialogService.ShowMessageBox(
+                "Lancer la phase de repos ?", message,
+                yesText: "Lancer", cancelText: "Annuler");
+
+            if (ok != true) return;
+
+            await LeagueService.LancerPhaseDeReposAsync(Id);
+            Snackbar.Add("Phase de repos ouverte.", Severity.Success);
+            _ligue = await LeagueService.GetLigueAsync(Id);
         }
         catch (Exception ex)
         {

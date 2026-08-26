@@ -1,0 +1,258 @@
+@page "/ligues/{LigueId:int}/repos/{TeamId:int}"
+@rendermode InteractiveServer
+@attribute [Authorize]
+@inject LeagueService LeagueService
+@inject StaffService StaffService
+@inject TeamService TeamService
+@inject AuthenticationStateProvider AuthProvider
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+
+<PageTitle>Phase de repos</PageTitle>
+
+@if (_chargement)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="my-4" />
+}
+else if (_equipe is null || _ligue is null)
+{
+    <MudAlert Severity="Severity.Error" Class="ma-4">Équipe introuvable.</MudAlert>
+}
+else if (!_estMonEquipe)
+{
+    <MudAlert Severity="Severity.Warning" Class="ma-4">
+        Seul le coach de cette équipe peut valider sa phase de repos.
+    </MudAlert>
+}
+else if (_ligue.Statut != LeagueStatus.PhaseDeRepos)
+{
+    <MudAlert Severity="Severity.Info" Class="ma-4">
+        La ligue n'est pas en phase de repos.
+        <MudLink Href="@($"/ligues/{LigueId}")" Class="ml-1">Retour à la ligue</MudLink>
+    </MudAlert>
+}
+else if (_dejaValide)
+{
+    <MudAlert Severity="Severity.Success" Class="ma-4">
+        Vous avez déjà validé la phase de repos pour <b>@_equipe.Nom</b>.
+        <MudLink Href="@($"/ligues/{LigueId}")" Class="ml-1">Retour à la ligue</MudLink>
+    </MudAlert>
+}
+else
+{
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-1">
+        <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Href="@($"/ligues/{LigueId}")" />
+        <MudText Typo="Typo.h5"><b>Phase de repos</b></MudText>
+    </MudStack>
+    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
+        <b>@_equipe.Nom</b> — @_ligue.Nom. Entre la saison régulière et les play-offs,
+        votre équipe progresse et recrute sans avoir joué de match.
+    </MudText>
+
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudStack Row="true" Spacing="4" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.body2">
+                Trésorerie : <b>@_equipe.Tresorerie.ToString("N0") po</b>
+            </MudText>
+            <MudText Typo="Typo.body2">
+                Relances : <b>@_equipe.NombreRelances</b>@(_plafondRelances is int p ? $" / {p}" : "")
+            </MudText>
+        </MudStack>
+    </MudPaper>
+
+    @* ─── Améliorations ─────────────────────────────────────────────────── *@
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Améliorations disponibles</b></MudText>
+        @if (_joueursAmeliorables.Count == 0)
+        {
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                Aucun joueur n'a assez d'XP pour progresser.
+            </MudText>
+        }
+        else
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                Choisissez l'XP dépensée pour chaque compétence, dans la limite de l'XP
+                disponible. Principale +20 000 po de valeur, secondaire +40 000 po.
+            </MudText>
+            @foreach (var j in _joueursAmeliorables)
+            {
+                <MudPaper Elevation="0" Class="pa-3 mb-2" Style="background:rgba(255,255,255,0.03)">
+                    <MudText Typo="Typo.body2"><b>@j.Nom</b> — @j.PlayerPosition?.Nom
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined"
+                                 Style="height:18px;font-size:10px" Class="ml-2">
+                            @j.PointsStarPlayer PSP
+                        </MudChip>
+                    </MudText>
+                    <MudSelect T="int?" Label="Compétence" Variant="Variant.Outlined" Margin="Margin.Dense"
+                               Value="@(_choix.TryGetValue(j.Id, out var c) ? c.SkillId : null)"
+                               ValueChanged="@(v => DefinirSkill(j.Id, v))" Clearable="true" Class="mt-2">
+                        @foreach (var c in SkillsPour(j))
+                        {
+                            <MudSelectItem T="int?" Value="@((int?)c.Skill.Id)">
+                                @c.Skill.Nom (@(c.EstPrincipale ? "principale" : "secondaire"))
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (_choix.TryGetValue(j.Id, out var ch) && ch.SkillId is not null)
+                    {
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-2" Wrap="Wrap.Wrap">
+                            <MudNumericField T="int" Label="XP dépensée" Min="1" Max="@j.PointsStarPlayer"
+                                             Value="@ch.Xp" ValueChanged="@(v => DefinirXp(j.Id, v))"
+                                             Variant="Variant.Outlined" Margin="Margin.Dense"
+                                             Style="max-width:130px" />
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                @(ch.EstPrincipale
+                                    ? "Principale — +20 000 po de valeur"
+                                    : "Secondaire — +40 000 po de valeur")
+                            </MudText>
+                        </MudStack>
+                    }
+                </MudPaper>
+            }
+        }
+    </MudPaper>
+
+    @* ─── Relances ──────────────────────────────────────────────────────── *@
+    @if (_coutRelance > 0 && (_plafondRelances is null || _equipe.NombreRelances < _plafondRelances))
+    {
+        <MudPaper Elevation="2" Class="pa-4 mb-4">
+            <MudText Typo="Typo.subtitle1" Class="mb-1"><b>Acheter des relances</b></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                @_coutRelance.ToString("N0") po chacune (double du tarif normal).
+                Actuellement @_equipe.NombreRelances@(_plafondRelances is int pl ? $", max {pl}" : "").
+            </MudText>
+            <MudNumericField T="int" Label="Relances à acheter" Min="0" Max="@_maxRelancesAchetables"
+                             @bind-Value="_nouvellesRelances" Variant="Variant.Outlined"
+                             Margin="Margin.Dense" Style="max-width:160px" />
+        </MudPaper>
+    }
+
+    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+        <MudButton Href="@($"/ligues/{LigueId}")" Variant="Variant.Text" Disabled="@_saving">
+            Annuler
+        </MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.CheckCircle"
+                   OnClick="Valider" Disabled="@_saving">
+            @(_saving ? "Validation..." : "Valider ma phase de repos")
+        </MudButton>
+    </MudStack>
+}
+
+@code {
+    [Parameter] public int LigueId { get; set; }
+    [Parameter] public int TeamId { get; set; }
+
+    League? _ligue;
+    Team? _equipe;
+    bool _estMonEquipe, _dejaValide, _chargement = true, _saving;
+    string _userId = "";
+
+    List<TeamPlayer> _joueursAmeliorables = [];
+    List<Skill> _skillsDisponibles = [];
+    int? _plafondRelances;
+    int _coutRelance;
+    int _nouvellesRelances;
+
+    record Choix(int? SkillId, int Xp, bool EstPrincipale);
+    readonly Dictionary<int, Choix> _choix = [];
+
+    int _maxRelancesAchetables =>
+        _plafondRelances is int p ? Math.Max(0, p - (_equipe?.NombreRelances ?? 0)) : 20;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+            _ligue = await LeagueService.GetLigueAsync(LigueId);
+            _equipe = await TeamService.GetEquipeAsync(TeamId);
+            if (_ligue is null || _equipe is null) return;
+
+            _estMonEquipe = _equipe.CoachId == _userId;
+            if (!_estMonEquipe) return;
+
+            _dejaValide = await LeagueService.ADejaValideReposAsync(LigueId, TeamId);
+            if (_dejaValide) return;
+
+            _joueursAmeliorables = _equipe.Joueurs
+                .Where(j => !j.EstMort && !j.EstRetraite && j.PointsStarPlayer > 0)
+                .OrderBy(j => j.Numero)
+                .ToList();
+
+            _skillsDisponibles = await TeamService.GetCompetencesAsync(
+                rulesVersionId: _ligue.RulesVersionId);
+
+            var typeRelances = (await StaffService.GetStaffLigueAsync(LigueId, actifsSeulement: true))
+                .FirstOrDefault(s => s.Nom == StaffService.NomRelances);
+            _plafondRelances = typeRelances?.MaxLigue;
+            _coutRelance = (_equipe.TeamType?.CoutRelance ?? 50_000) * 2;
+        }
+        finally
+        {
+            _chargement = false;
+        }
+    }
+
+    /// <summary>
+    /// Compétences proposées pour ce joueur : mêmes règles d'accès que
+    /// l'après-match classique (accès du poste, hors-accès exclus).
+    /// </summary>
+    IEnumerable<AccesCompetencesHelpers.CompetenceProposee> SkillsPour(TeamPlayer j) =>
+        AccesCompetencesHelpers.Filtrer(
+            _skillsDisponibles,
+            j.PlayerPosition?.AccesCategories?.ToList() ?? [],
+            inclureHorsAcces: false);
+
+    void DefinirSkill(int joueurId, int? skillId)
+    {
+        if (skillId is null) { _choix.Remove(joueurId); return; }
+
+        // Principale ou secondaire découle de l'accès du poste, pas d'un choix
+        // du coach : on reprend la nature calculée par AccesCompetencesHelpers.
+        var joueur = _joueursAmeliorables.FirstOrDefault(j => j.Id == joueurId);
+        var principale = joueur is not null
+            && SkillsPour(joueur).FirstOrDefault(c => c.Skill.Id == skillId)?.EstPrincipale == true;
+
+        var existant = _choix.TryGetValue(joueurId, out var c) ? c : new Choix(null, 1, principale);
+        _choix[joueurId] = existant with { SkillId = skillId, EstPrincipale = principale };
+    }
+
+    void DefinirXp(int joueurId, int xp)
+    {
+        if (_choix.TryGetValue(joueurId, out var c)) _choix[joueurId] = c with { Xp = xp };
+    }
+
+    async Task Valider()
+    {
+        _saving = true;
+        try
+        {
+            var competences = _choix
+                .Where(kv => kv.Value.SkillId is not null)
+                .Select(kv => (kv.Key, kv.Value.SkillId!.Value, kv.Value.EstPrincipale, kv.Value.Xp))
+                .ToList();
+
+            await LeagueService.ValiderApresMatchReposAsync(
+                LigueId, TeamId, competences, [], _nouvellesRelances, TeamService);
+
+            Snackbar.Add("Phase de repos validée.", Severity.Success);
+            Nav.NavigateTo($"/ligues/{LigueId}");
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception)
+        {
+            Snackbar.Add("Impossible de valider la phase de repos.", Severity.Error);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

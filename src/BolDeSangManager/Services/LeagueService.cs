@@ -709,6 +709,14 @@ public class LeagueService(
             teamId, ligueId, competences.Count, nouveauxJoueurs.Count, nouvellesRelances);
     }
 
+    /// <summary>
+    /// Cette équipe a-t-elle déjà validé sa phase de repos ? Sert à l'écran de
+    /// validation, qui ne doit pas laisser un coach progresser deux fois.
+    /// </summary>
+    public async Task<bool> ADejaValideReposAsync(int ligueId, int teamId) =>
+        await db.PhaseDeReposValidations
+            .AnyAsync(v => v.LeagueId == ligueId && v.TeamId == teamId);
+
     public async Task TerminerLigueAsync(int ligueId)
     {
         var ligue = await db.Leagues.FindAsync(ligueId)
