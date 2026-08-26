@@ -2,6 +2,7 @@ using BolDeSangManager.Components;
 using BolDeSangManager.Components.Account;
 using BolDeSangManager.Data;
 using BolDeSangManager.Services;
+using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -179,6 +180,43 @@ else
 if (Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") != "true")
     app.UseHttpsRedirection();
 app.UseAntiforgery();
+
+// Un POST dont le jeton antiforgery est absent ou périmé produit par défaut une
+// page blanche avec un message technique en anglais (« A valid antiforgery token
+// was not provided… »), exactement ce qu'un coach a vu sur son téléphone. C'est
+// le cas typique de l'onglet mobile laissé ouvert : le système purge l'onglet,
+// le cookie de session disparaît, et le formulaire restauré depuis le cache part
+// avec un jeton orphelin. Le coach n'a rien fait de mal.
+//
+// UseAntiforgery valide le jeton et RANGE le verdict dans IAntiforgeryValidationFeature
+// sans interrompre le pipeline : c'est l'endpoint, plus bas, qui renvoie le 400.
+// Ce middleware s'intercale entre les deux, tant que rien n'est encore écrit dans
+// la réponse, et redirige vers la connexion avec un message en clair.
+app.Use(async (context, next) =>
+{
+    var verdict = context.Features.Get<IAntiforgeryValidationFeature>();
+    if (verdict is not null && !verdict.IsValid && !context.Response.HasStarted)
+    {
+        var retour = context.Request.Path.Value ?? "/";
+        context.Response.Redirect("/Account/Login?expire=1&ReturnUrl=" + Uri.EscapeDataString(retour));
+        return;
+    }
+
+    try
+    {
+        await next(context);
+    }
+    catch (Exception ex) when (
+        (ex is AntiforgeryValidationException || ex.InnerException is AntiforgeryValidationException)
+        && !context.Response.HasStarted)
+    {
+        // Même cause, autre chemin : les endpoints Identity (Logout, LinkExternalLogin…)
+        // lient le formulaire eux-mêmes et lèvent l'exception au lieu de passer par la feature.
+        var retour = context.Request.Path.Value ?? "/";
+        context.Response.Redirect("/Account/Login?expire=1&ReturnUrl=" + Uri.EscapeDataString(retour));
+    }
+});
+
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();

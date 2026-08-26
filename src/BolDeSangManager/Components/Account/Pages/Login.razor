@@ -26,6 +26,16 @@
                 </MudText>
             </div>
 
+            @if (Expire == 1 && string.IsNullOrEmpty(errorMessage))
+            {
+                @* Arrivée depuis un POST au jeton antiforgery périmé : typiquement un
+                   onglet mobile resté ouvert et purgé par le système. Rien de cassé,
+                   il suffit de se reconnecter. *@
+                <MudAlert Severity="Severity.Info" Class="mb-4" Dense="true">
+                    Votre session a expiré — reconnectez-vous pour continuer.
+                </MudAlert>
+            }
+
             @if (!string.IsNullOrEmpty(errorMessage))
             {
                 <MudAlert Severity="Severity.Error" Class="mb-4" Dense="true">@errorMessage</MudAlert>
@@ -96,6 +106,14 @@
 
     [SupplyParameterFromQuery]
     private string? ReturnUrl { get; set; }
+
+    /// <summary>
+    /// Posé par le middleware antiforgery quand un POST arrive avec un jeton
+    /// périmé : affiche « votre session a expiré » plutôt que le message
+    /// technique par défaut du framework.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "expire")]
+    private int Expire { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
