@@ -280,4 +280,75 @@ public class BrouillardHelpersTests
         Assert.True(BrouillardHelpers.PeutVoirFicheEquipe(
             4, cal, MesEquipes, modeBrouillard: true, estCommissaire: false));
     }
+
+    // ─── Écrans transverses (accueil, « Mes matchs ») ─────────────────────────
+
+    private static Match MDiv(int id, int ronde, int dom, int ext, int ligueId,
+        MatchStatus statut = MatchStatus.Programme, int? score = null) =>
+        new()
+        {
+            Id = id, Ronde = ronde,
+            EquipeDomicileId = dom, EquipeExterieurId = ext,
+            Statut = statut, ScoreDomicile = score,
+            Division = new Division { Id = ligueId * 100, LeagueId = ligueId, Nom = "D" }
+        };
+
+    [Fact]
+    public void MultiLigues_AppliqueLeReglageDeChaqueLigue()
+    {
+        // Le coach joue dans deux ligues : l'une en brouillard, l'autre non.
+        // L'accueil agrège les deux — sans filtrage par ligue, le calendrier
+        // masqué sur la fiche de ligue ressortait ici (bug constaté en QA).
+        List<Match> matchs =
+        [
+            MDiv(10, 1, 1, 3, ligueId: 1, statut: MatchStatus.Termine, score: 2),
+            MDiv(20, 2, 1, 4, ligueId: 1),   // prochain match, ligue brouillard
+            MDiv(30, 3, 1, 5, ligueId: 1),   // ultérieur → doit être MASQUÉ
+            MDiv(40, 1, 1, 6, ligueId: 2),   // ligue sans brouillard
+            MDiv(50, 2, 1, 7, ligueId: 2),   // → doit rester VISIBLE
+        ];
+
+        var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
+            matchs, MesEquipes,
+            brouillardParLigue: new Dictionary<int, bool> { [1] = true, [2] = false },
+            commissaireDeLigues: new HashSet<int>());
+
+        var ids = visibles.Select(m => m.Id).ToHashSet();
+        Assert.Contains(10, ids);           // joué
+        Assert.Contains(20, ids);           // prochain
+        Assert.DoesNotContain(30, ids);     // ultérieur en brouillard
+        Assert.Contains(40, ids);           // ligue sans brouillard
+        Assert.Contains(50, ids);           // idem
+    }
+
+    [Fact]
+    public void MultiLigues_CommissaireVoitToutDansSaLigue()
+    {
+        List<Match> matchs =
+        [
+            MDiv(20, 2, 1, 4, ligueId: 1),
+            MDiv(30, 3, 1, 5, ligueId: 1),
+        ];
+
+        var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
+            matchs, MesEquipes,
+            brouillardParLigue: new Dictionary<int, bool> { [1] = true },
+            commissaireDeLigues: new HashSet<int> { 1 });
+
+        Assert.Equal(2, visibles.Count);
+    }
+
+    [Fact]
+    public void MultiLigues_MatchSansDivision_ResteVisible()
+    {
+        // Format Open : pas de division, donc aucun calendrier à masquer.
+        List<Match> matchs = [M(70, 0, 1, 4)];
+
+        var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
+            matchs, MesEquipes,
+            brouillardParLigue: new Dictionary<int, bool>(),
+            commissaireDeLigues: new HashSet<int>());
+
+        Assert.Single(visibles);
+    }
 }

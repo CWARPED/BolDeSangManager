@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject MatchService MatchService
+@inject LeagueService LeagueService
 @inject TeamService TeamService
 @inject AuthenticationStateProvider AuthProvider
 @inject IDialogService DialogService
@@ -196,6 +197,20 @@ else
         foreach (var eq in equipes)
             tous.AddRange(await MatchService.GetMatchsEquipeAsync(eq.Id));
 
-        _matchs = tous.DistinctBy(m => m.Id).OrderBy(m => m.Ronde).ToList();
+        // Mode brouillard : même impératif que sur l'accueil. Cet écran agrège les
+        // matchs de toutes les ligues du coach, il doit donc appliquer le réglage
+        // de CHAQUE ligue — sinon le calendrier masqué ailleurs ressort ici.
+        var ligues = await LeagueService.GetAllLiguesAsync();
+        var brouillardParLigue = ligues.ToDictionary(l => l.Id, l => l.ModeBrouillard);
+        var commissaireDe = ligues
+            .Where(l => l.CommissaireId == userId
+                        || l.CommissairesDeLigue.Any(c => c.UserId == userId))
+            .Select(l => l.Id)
+            .ToHashSet();
+
+        var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
+            tous.DistinctBy(m => m.Id), _mesEquipeIds, brouillardParLigue, commissaireDe);
+
+        _matchs = visibles.OrderBy(m => m.Ronde).ToList();
     }
 }

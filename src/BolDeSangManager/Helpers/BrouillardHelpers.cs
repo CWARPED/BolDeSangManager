@@ -60,6 +60,51 @@ public static class BrouillardHelpers
     }
 
     /// <summary>
+    /// Filtre une liste de matchs appartenant à PLUSIEURS ligues, en appliquant à
+    /// chacune son propre réglage de brouillard.
+    ///
+    /// Les écrans transverses (accueil, « Mes matchs ») agrègent les matchs de
+    /// toutes les équipes du coach : filtrer ligue par ligue est indispensable,
+    /// sinon le calendrier masqué sur la fiche de ligue ressort ailleurs.
+    /// Le regroupement se fait sur la ligue de la division du match ; un match
+    /// sans division rattachée reste visible (format Open, par exemple).
+    /// </summary>
+    /// <param name="matchs">Matchs de toutes ligues confondues.</param>
+    /// <param name="equipesDuCoach">Toutes les équipes du coach, toutes ligues.</param>
+    /// <param name="brouillardParLigue">
+    /// Pour chaque identifiant de ligue, le mode brouillard y est-il actif ?
+    /// Une ligue absente du dictionnaire est traitée comme sans brouillard.
+    /// </param>
+    /// <param name="commissaireDeLigues">
+    /// Ligues dont le coach est commissaire : il y voit tout le calendrier.
+    /// </param>
+    public static List<Match> FiltrerVisiblesMultiLigues(
+        IEnumerable<Match> matchs,
+        IReadOnlySet<int> equipesDuCoach,
+        IReadOnlyDictionary<int, bool> brouillardParLigue,
+        IReadOnlySet<int> commissaireDeLigues)
+    {
+        var resultat = new List<Match>();
+
+        foreach (var groupe in matchs.GroupBy(m => m.Division?.LeagueId))
+        {
+            if (groupe.Key is not int ligueId)
+            {
+                // Hors division (format Open) : aucun calendrier à masquer.
+                resultat.AddRange(groupe);
+                continue;
+            }
+
+            var brouillard = brouillardParLigue.TryGetValue(ligueId, out var actif) && actif;
+            var estCommissaire = commissaireDeLigues.Contains(ligueId);
+
+            resultat.AddRange(FiltrerVisibles(groupe, equipesDuCoach, brouillard, estCommissaire));
+        }
+
+        return resultat;
+    }
+
+    /// <summary>
     /// Ce match précis est-il visible ? Même règle que <see cref="FiltrerVisibles"/>,
     /// pour protéger l'accès direct à une page de match (le masquage doit être
     /// côté serveur, pas seulement visuel).

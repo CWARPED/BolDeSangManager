@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject TeamService TeamService
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject MatchService MatchService
 @inject PdfService PdfService
 @inject SettingsService SettingsService
@@ -202,6 +203,12 @@ else
     string _selectedTeamNom = "";
     Team? _equipeDetail;
     Match? _matchProchain;
+
+    /// <summary>Coach connecté — sert au filtrage brouillard du bandeau QR code.</summary>
+    string _userId = "";
+
+    /// <summary>Un commissaire voit toujours l'intégralité du calendrier.</summary>
+    bool _estCommissaire;
     string? _urlExterne;
     bool _exporting;
 
@@ -209,6 +216,7 @@ else
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+        _userId = userId;
 
         _urlExterne = await SettingsService.GetAsync(SettingsService.CleUrlExterne);
 
@@ -239,6 +247,9 @@ else
         _selectedTeamNom = NomSelect(equipeDepart);
         _equipeDetail = await TeamService.GetEquipeAsync(equipeDepart.Id);
 
+        if (equipeDepart.LeagueId > 0)
+            _estCommissaire = await Auth.PeutGererLigueAsync(userId, equipeDepart.LeagueId);
+
         await ChargerMatchProchain();
     }
 
@@ -260,10 +271,24 @@ else
     {
         if (_equipeDetail is null) return;
         var matchs = await MatchService.GetMatchsEquipeAsync(_equipeDetail.Id);
-        _matchProchain = matchs
+        var prochain = matchs
             .Where(m => m.Statut == MatchStatus.Programme || m.Statut == MatchStatus.AJouer)
             .OrderBy(m => m.Ronde)
             .FirstOrDefault();
+
+        // Mode brouillard : cet écran affiche les fiches de TOUTES les équipes de
+        // la ligue (choix produit). Annoncer « prochain match : Ronde 2 » pour une
+        // équipe adverse dévoilerait le calendrier que la fiche de ligue masque.
+        // Le QR code n'a de sens que pour SES propres équipes de toute façon.
+        if (prochain is not null
+            && _equipeDetail.League is { ModeBrouillard: true }
+            && _equipeDetail.CoachId != _userId
+            && !_estCommissaire)
+        {
+            prochain = null;
+        }
+
+        _matchProchain = prochain;
     }
 
     /// <summary>Orientation choisie pour l'export PDF (#4).</summary>

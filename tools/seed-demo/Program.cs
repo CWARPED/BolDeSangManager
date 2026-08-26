@@ -1,12 +1,6 @@
-// Jeu de données de démonstration pour tester les 3 devs en local.
-// Idempotent : relancer le script ne duplique rien.
-//
-// Créé :
-//   - 3 comptes coach (mot de passe commun)
-//   - une ligue Open « Open Bol de Sang » avec 3 équipes complètes
-//   - une ligue Round Robin « Saison Test » en Inscription (dev 3 : dater les
-//     rondes et promouvoir un commissaire avant le lancement)
-//   - un staff maison « Chef de bande » dans les règles (dev 1)
+// Jeu de données QA : 6 coaches, une ligue par format, équipes complètes.
+// Idempotent. Les ligues sont créées via LeagueService pour passer par le vrai
+// chemin de code (copie du staff comprise).
 
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
@@ -34,12 +28,10 @@ var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 var users = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
 var staffSvc = scope.ServiceProvider.GetRequiredService<StaffService>();
 
-// ── Comptes coach ─────────────────────────────────────────────────────────────
 async Task<ApplicationUser> CoachAsync(string email, string pseudo)
 {
     var u = await users.FindByEmailAsync(email);
     if (u is not null) return u;
-
     u = new ApplicationUser
     {
         UserName = email, Email = email, EmailConfirmed = true,
@@ -47,49 +39,36 @@ async Task<ApplicationUser> CoachAsync(string email, string pseudo)
     };
     var res = await users.CreateAsync(u, MotDePasse);
     if (!res.Succeeded)
-        throw new Exception($"Création {email} : {string.Join(", ", res.Errors.Select(e => e.Description))}");
+        throw new Exception($"{email} : {string.Join(", ", res.Errors.Select(e => e.Description))}");
     await users.AddToRoleAsync(u, "Coach");
     Console.WriteLine($"  + coach {email}");
     return u;
 }
 
-var c1 = await CoachAsync("coach1@test.fr", "Ragnar");
-var c2 = await CoachAsync("coach2@test.fr", "Silvara");
-var c3 = await CoachAsync("coach3@test.fr", "Grim");
+var coaches = new List<ApplicationUser>();
+foreach (var (mail, pseudo) in new[]
+         {
+             ("qa1@test.fr", "Ragnar"), ("qa2@test.fr", "Silvara"), ("qa3@test.fr", "Grim"),
+             ("qa4@test.fr", "Ulrik"), ("qa5@test.fr", "Nyx"), ("qa6@test.fr", "Bran")
+         })
+    coaches.Add(await CoachAsync(mail, pseudo));
 
-var commissaire = await users.FindByEmailAsync("commissaire@boldesang.fr")
-    ?? throw new Exception("Compte commissaire introuvable");
-
+var commissaire = await users.FindByEmailAsync("commissaire@boldesang.fr")!
+    ?? throw new Exception("commissaire introuvable");
 var game = await db.Games.FirstAsync(g => g.Type == GameType.BloodBowl);
 var rv = await db.RulesVersions.FirstAsync(v => v.GameId == game.Id && v.EstActive);
 
-// ── Dev 1 : un staff maison, pour montrer la liste ouverte ────────────────────
-if (!await db.StaffTypes.AnyAsync(s => s.RulesVersionId == rv.Id && s.Nom == "Chef de bande"))
-{
-    await staffSvc.AjouterStaffTypeAsync(new StaffDefinition
-    {
-        RulesVersionId = rv.Id,
-        Nom = "Chef de bande",
-        Description = "Relance un jet d'intimidation par mi-temps.",
-        Ordre = 6, Cout = 25_000, MinCreation = 0, MaxCreation = 2, MaxLigue = 3
-    });
-    Console.WriteLine("  + staff « Chef de bande » (règles)");
-}
-
-// ── Ligues ────────────────────────────────────────────────────────────────────
-async Task<League> LigueAsync(string nom, LeagueFormat format, LeagueStatus statut, string description)
+async Task<League> LigueAsync(string nom, LeagueFormat format, LeagueStatus statut, bool brouillard = false)
 {
     var l = await db.Leagues.FirstOrDefaultAsync(x => x.Nom == nom);
     if (l is not null) return l;
 
     l = new League
     {
-        Nom = nom, Description = description,
-        CommissaireId = commissaire.Id,
-        GameId = game.Id, RulesVersionId = rv.Id,
-        Format = format, Statut = statut,
-        BudgetDepart = 1_000_000, NombreEquipesPlayoff = 4,
-        CreeLe = DateTime.UtcNow
+        Nom = nom, Description = $"QA — format {format}",
+        CommissaireId = commissaire.Id, GameId = game.Id, RulesVersionId = rv.Id,
+        Format = format, Statut = statut, ModeBrouillard = brouillard,
+        BudgetDepart = 1_000_000, NombreEquipesPlayoff = 4, CreeLe = DateTime.UtcNow
     };
     db.Leagues.Add(l);
     await db.SaveChangesAsync();
@@ -98,39 +77,22 @@ async Task<League> LigueAsync(string nom, LeagueFormat format, LeagueStatus stat
     return l;
 }
 
-var open = await LigueAsync("Open Bol de Sang", LeagueFormat.Open, LeagueStatus.EnCours,
-    "Ligue sans fin : inscrivez-vous quand vous voulez, jouez quand vous voulez.");
-
-var saison = await LigueAsync("Saison Test", LeagueFormat.RoundRobin, LeagueStatus.Inscription,
-    "Round Robin en phase d'inscription : préparez les dates avant de lancer.");
-
-// Division technique de la ligue Open (sinon la suppression laisse des orphelins)
-if (!await db.Divisions.AnyAsync(d => d.LeagueId == open.Id))
+async Task<Team> EquipeAsync(League ligue, ApplicationUser coach, string nom, string race, int? divisionId)
 {
-    db.Divisions.Add(new Division { LeagueId = open.Id, Nom = "Division Unique", Ordre = 1 });
-    await db.SaveChangesAsync();
-}
-var divOpen = await db.Divisions.FirstAsync(d => d.LeagueId == open.Id);
+    var existante = await db.Teams.FirstOrDefaultAsync(t => t.Nom == nom);
+    if (existante is not null) return existante;
 
-// ── Équipes ───────────────────────────────────────────────────────────────────
-async Task EquipeAsync(League ligue, ApplicationUser coach, string nom, string race,
-    int fans, int relances, int coachs, int cheer, bool apo, int? divisionId)
-{
-    if (await db.Teams.AnyAsync(t => t.Nom == nom)) return;
-
-    var tt = await db.TeamTypes
-        .Include(t => t.Postes)
+    var tt = await db.TeamTypes.Include(t => t.Postes)
         .FirstAsync(t => t.RulesVersionId == rv.Id && t.Nom == race);
 
     var equipe = new Team
     {
         Nom = nom, CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = tt.Id,
-        DivisionId = divisionId, Tresorerie = 0, CreeLe = DateTime.UtcNow
+        DivisionId = divisionId, CreeLe = DateTime.UtcNow
     };
     db.Teams.Add(equipe);
     await db.SaveChangesAsync();
 
-    // 11 joueurs sur le poste de base le moins cher autorisé en nombre
     var poste = tt.Postes.Where(p => p.QuantiteMax >= 11).OrderBy(p => p.Cout).First();
     var depense = 0;
     for (var i = 1; i <= 11; i++)
@@ -138,62 +100,56 @@ async Task EquipeAsync(League ligue, ApplicationUser coach, string nom, string r
         db.TeamPlayers.Add(new TeamPlayer
         {
             TeamId = equipe.Id, PlayerPositionId = poste.Id,
-            Nom = $"{poste.Nom} #{i}", Numero = i,
-            ValeurActuelle = poste.Cout, RecruteLe = DateTime.UtcNow
+            Nom = $"J{i}", Numero = i, ValeurActuelle = poste.Cout, RecruteLe = DateTime.UtcNow
         });
         depense += poste.Cout;
     }
 
-    // Staff, via les copies de la ligue. On n'achète que ce que le budget permet :
-    // les races chères (Nains) partiraient sinon en trésorerie négative.
     var types = await db.LeagueStaffTypes.Where(l => l.LeagueId == ligue.Id).ToListAsync();
-    var achats = new List<(LeagueStaffType type, int qte)>();
-    foreach (var (nomStaff, qteVoulue) in new[]
+    foreach (var (nomStaff, voulu) in new[]
              {
-                 (StaffService.NomFans, fans), (StaffService.NomRelances, relances),
-                 (StaffService.NomCoachs, coachs), (StaffService.NomCheerleaders, cheer),
-                 (StaffService.NomApothicaire, apo ? 1 : 0)
+                 (StaffService.NomFans, 3), (StaffService.NomRelances, 2),
+                 (StaffService.NomApothicaire, 1)
              })
     {
         var type = types.FirstOrDefault(t => t.Nom == nomStaff);
-        if (type is null || qteVoulue <= 0) continue;
-
+        if (type is null) continue;
         var unitaire = StaffService.CoutUnitaire(type, tt);
-        var possible = unitaire <= 0
-            ? qteVoulue
-            : Math.Min(qteVoulue, (ligue.BudgetDepart - depense) / unitaire);
-        if (possible <= 0) continue;
+        var qte = unitaire <= 0 ? voulu : Math.Min(voulu, (ligue.BudgetDepart - depense) / unitaire);
+        if (qte <= 0) continue;
 
-        achats.Add((type, possible));
-        depense += possible * unitaire;
+        db.TeamStaffs.Add(new TeamStaff { TeamId = equipe.Id, LeagueStaffTypeId = type.Id, Quantite = qte });
+        depense += qte * unitaire;
+
+        if (nomStaff == StaffService.NomFans) equipe.FansDevoues = qte;
+        if (nomStaff == StaffService.NomRelances) equipe.NombreRelances = qte;
+        if (nomStaff == StaffService.NomApothicaire) equipe.Apothicaire = qte > 0;
     }
 
-    foreach (var (type, qte) in achats)
-        db.TeamStaffs.Add(new TeamStaff
-        {
-            TeamId = equipe.Id, LeagueStaffTypeId = type.Id, Quantite = qte
-        });
-
-    int Qte(string nomStaff) =>
-        achats.FirstOrDefault(a => a.type.Nom == nomStaff).qte;
-
-    equipe.FansDevoues = Qte(StaffService.NomFans);
-    equipe.NombreRelances = Qte(StaffService.NomRelances);
-    equipe.NombreCoachsAssistants = Qte(StaffService.NomCoachs);
-    equipe.NombreCheerleaders = Qte(StaffService.NomCheerleaders);
-    equipe.Apothicaire = Qte(StaffService.NomApothicaire) > 0;
     equipe.Tresorerie = ligue.BudgetDepart - depense;
-
     await db.SaveChangesAsync();
-    Console.WriteLine($"  + équipe « {nom} » ({race}) — trésorerie {equipe.Tresorerie:N0} po");
+    Console.WriteLine($"    · {nom} ({race}) — {equipe.Tresorerie:N0} po");
+    return equipe;
 }
 
-await EquipeAsync(open, c1, "Les Crocs d'Acier", "Nains", 5, 3, 1, 1, true, divOpen.Id);
-await EquipeAsync(open, c2, "Flèches Sylvestres", "Elfes Sylvains", 4, 2, 0, 2, true, divOpen.Id);
-await EquipeAsync(open, c3, "Horde Verte", "Orques", 6, 3, 2, 0, false, divOpen.Id);
+// ── Round Robin + playoffs, prête à lancer (4 équipes) ────────────────────────
+var rr = await LigueAsync("QA RoundRobin", LeagueFormat.RoundRobinAvecPlayoffs, LeagueStatus.Inscription);
+await EquipeAsync(rr, coaches[0], "RR Nains", "Nains", null);
+await EquipeAsync(rr, coaches[1], "RR Elfes", "Elfes Sylvains", null);
+await EquipeAsync(rr, coaches[2], "RR Orques", "Orques", null);
+await EquipeAsync(rr, coaches[3], "RR Humains", "Humains", null);
 
-// Une seule équipe en Saison Test : il en faut 2 pour lancer, à toi d'en créer une.
-await EquipeAsync(saison, c1, "Les Bretteurs", "Humains", 3, 2, 1, 1, false, null);
+// ── Libre, prête à lancer (4 équipes) ─────────────────────────────────────────
+var libre = await LigueAsync("QA Libre", LeagueFormat.Libre, LeagueStatus.Inscription);
+await EquipeAsync(libre, coaches[0], "LB Nains", "Nains", null);
+await EquipeAsync(libre, coaches[1], "LB Elfes", "Elfes Sylvains", null);
+await EquipeAsync(libre, coaches[4], "LB Amazones", "Amazones", null);
+await EquipeAsync(libre, coaches[5], "LB Bretonniens", "Bretonniens", null);
+
+// ── Mode brouillard, pour vérifier le masquage du calendrier ──────────────────
+var brouillard = await LigueAsync("QA Brouillard", LeagueFormat.RoundRobin, LeagueStatus.Inscription, brouillard: true);
+await EquipeAsync(brouillard, coaches[2], "BR Orques", "Orques", null);
+await EquipeAsync(brouillard, coaches[3], "BR Humains", "Humains", null);
 
 Console.WriteLine();
-Console.WriteLine("Jeu de données prêt.");
+Console.WriteLine("Jeu QA prêt.");

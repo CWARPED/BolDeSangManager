@@ -962,3 +962,25 @@ h1:focus {
         flex-wrap: wrap;
     }
 }
+
+/* ─── Anti-débordement : chaînes longues sans espace ─────────────────────────
+   Un nom saisi sans espace (nom de ligue, d'équipe, pseudo de coach, e-mail)
+   ne peut pas être coupé par le navigateur : il pousse alors toute la page en
+   largeur. Constaté en QA : une ligue au nom très long faisait passer la page
+   de 360 à 1022 px, avec défilement horizontal sur tout le site.
+   `overflow-wrap: anywhere` autorise la coupure en dernier recours, sans
+   couper les mots normaux (contrairement à `word-break: break-all`). */
+.mud-typography,
+.mud-card-content,
+.mud-list-item-text,
+.mud-table-cell,
+.mud-chip-content {
+    overflow-wrap: anywhere;
+}
+
+/* Les cartes et conteneurs ne doivent jamais s'élargir au-delà du viewport. */
+.mud-card,
+.mud-paper,
+.mud-container {
+    max-width: 100%;
+}

@@ -220,7 +220,22 @@
                 foreach (var m in matchs.Where(m => statuts.Contains(m.Statut)))
                     tousMatchs.TryAdd(m.Id, m);
             }
-            _mesMatchs = [.. tousMatchs.Values.OrderBy(m => m.Division?.LeagueId).ThenBy(m => m.Ronde)];
+
+            // Mode brouillard : cet écran agrège les matchs de TOUTES les ligues du
+            // coach. Sans ce filtre, le calendrier masqué sur la fiche de ligue
+            // ressortait ici — le coach voyait ses rondes futures sur l'accueil.
+            var mesEquipeIds = _mesEquipes.Select(e => e.Id).ToHashSet();
+            var brouillardParLigue = (_ligues ?? []).ToDictionary(l => l.Id, l => l.ModeBrouillard);
+            var commissaireDe = (_ligues ?? [])
+                .Where(l => l.CommissaireId == userId
+                            || l.CommissairesDeLigue.Any(c => c.UserId == userId))
+                .Select(l => l.Id)
+                .ToHashSet();
+
+            var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
+                tousMatchs.Values, mesEquipeIds, brouillardParLigue, commissaireDe);
+
+            _mesMatchs = [.. visibles.OrderBy(m => m.Division?.LeagueId).ThenBy(m => m.Ronde)];
         }
     }
 
