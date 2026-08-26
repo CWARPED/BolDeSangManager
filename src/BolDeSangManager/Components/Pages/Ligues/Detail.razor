@@ -47,12 +47,12 @@ else
                         Lancer la saison
                     </MudButton>
                 }
-                @if (_ligue.Statut == LeagueStatus.EnCours && DisplayHelpers.EstFormatLibre(_ligue.Format))
+                @if (DisplayHelpers.CalendrierEditable(_ligue.Statut, _ligue.Format))
                 {
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                               StartIcon="@Icons.Material.Filled.EditCalendar"
                               OnClick="@(() => Nav.NavigateTo($"/ligues/{Id}/calendrier"))">
-                        Composer le calendrier
+                        @(_ligue.Statut < LeagueStatus.EnCours ? "Préparer le calendrier" : "Composer le calendrier")
                     </MudButton>
                 }
                 @if (_ligue.Statut == LeagueStatus.EnCours && DisplayHelpers.AvecPlayoffs(_ligue.Format))
@@ -84,7 +84,7 @@ else
         </MudStack>
     </MudStack>
 
-    @if (_ligue is not null && _ligue.Statut >= LeagueStatus.EnCours)
+    @if (_ligue is not null)
     {
         <MudPaper Class="pa-3 mb-3" Elevation="1">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
@@ -627,13 +627,26 @@ else
     {
         try
         {
-            await LeagueService.LancerSaisonAsync(Id);
+            var orphelines = await LeagueService.LancerSaisonAsync(Id);
             _ligue = await LeagueService.GetLigueAsync(Id);
             Snackbar.Add(
                 _ligue is not null && DisplayHelpers.EstFormatLibre(_ligue.Format)
                     ? "Saison lancée ! Composez maintenant le calendrier."
                     : "Saison lancée ! Pool de matchs généré.",
                 Severity.Success);
+
+            // Les dates préparées avant le lancement peuvent viser des rondes que
+            // le calendrier final ne contient pas : on le dit plutôt que de les
+            // faire disparaître en silence.
+            if (orphelines.Count > 0)
+            {
+                Snackbar.Add(
+                    $"Échéance(s) retirée(s) : la ronde {string.Join(", ", orphelines)} n'existe pas dans le calendrier généré.",
+                    Severity.Warning);
+            }
+
+            _echeances = (await LeagueService.GetEcheancesRondesAsync(Id))
+                .ToDictionary(e => e.Key, e => e.Value);
         }
         catch (Exception ex)
         {

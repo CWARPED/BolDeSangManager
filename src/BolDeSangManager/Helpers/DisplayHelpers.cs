@@ -60,6 +60,26 @@ public static class DisplayHelpers
     public static bool AvecPlayoffs(LeagueFormat f) =>
         f is LeagueFormat.RoundRobinAvecPlayoffs or LeagueFormat.LibreAvecPlayoffs;
 
+    /// <summary>
+    /// L'écran calendrier est-il accessible ?
+    ///
+    /// Avant le lancement (Creation / Inscription) le commissaire prépare les
+    /// DATES de ronde, quel que soit le format : dater son planning à l'avance a
+    /// du sens aussi en Round Robin, où le calendrier sera généré ensuite.
+    /// Une fois la saison lancée, seul le format Libre garde un intérêt : c'est
+    /// là qu'on compose les rencontres à la main.
+    /// </summary>
+    public static bool CalendrierEditable(LeagueStatus statut, LeagueFormat format) =>
+        statut < LeagueStatus.EnCours || (statut == LeagueStatus.EnCours && EstFormatLibre(format));
+
+    /// <summary>
+    /// Les rencontres d'une ronde sont-elles composées à la main sur cet écran ?
+    /// Réservé au format Libre et une fois la saison lancée : avant, les équipes
+    /// ne sont pas toutes inscrites, il n'y a personne à apparier.
+    /// </summary>
+    public static bool AppariementsEditables(LeagueStatus statut, LeagueFormat format) =>
+        statut == LeagueStatus.EnCours && EstFormatLibre(format);
+
     public static Color MatchColor(MatchStatus s) => s switch
     {
         MatchStatus.Termine               => Color.Success,

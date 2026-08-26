@@ -1163,6 +1163,128 @@ public class LeagueServiceTests : IDisposable
         Assert.Contains("Valeureux", DisplayHelpers.LabelMvpLong);
     }
 
+    // ─── Dev 3 : préparation du calendrier avant le lancement ─────────────────
+
+    [Fact]
+    public async Task DefinirEcheanceRonde_EstPossibleAvantLeLancementDeLaSaison()
+    {
+        // Le commissaire prépare son planning dès la configuration de la ligue,
+        // avant même que les équipes soient inscrites : à ce stade aucune ronde
+        // n'existe encore (le pool de matchs est généré au lancement).
+        var (ligueId, _) = await SetupLigueLibreAsync(2, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        // Phase Creation : la ligue est encore en cours de configuration.
+        var ligue = await db.Leagues.FindAsync(ligueId);
+        ligue!.Statut = LeagueStatus.Creation;
+        await db.SaveChangesAsync();
+
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15));
+        Assert.Equal(new DateTime(2026, 9, 15), (await svc.GetEcheancesRondesAsync(ligueId))[1].Date);
+
+        // Phase Inscription : les coaches arrivent, le planning reste éditable.
+        await svc.DemarrerInscriptionsAsync(ligueId);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 2, new DateTime(2026, 9, 22));
+
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.Equal(2, echeances.Count);
+        Assert.Equal(new DateTime(2026, 9, 22), echeances[2].Date);
+    }
+
+    [Fact]
+    public async Task LancerSaison_ConserveLesEcheancesDesRondesReellementCreees()
+    {
+        // Les dates préparées en amont ne doivent pas être perdues au lancement.
+        var (ligueId, _) = await SetupLigueLibreAsync(4, format: LeagueFormat.RoundRobin, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15));
+
+        await svc.LancerSaisonAsync(ligueId);
+
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.Equal(new DateTime(2026, 9, 15), echeances[1].Date);
+    }
+
+    [Fact]
+    public async Task LancerSaison_NettoieLesEcheancesDesRondesQuiNexistentPas()
+    {
+        // Option A : la saisie des rondes est libre avant le lancement, on ne
+        // connaît pas encore le nombre réel de rondes. Celles qui dépassent le
+        // calendrier finalement généré sont retirées pour ne pas afficher des
+        // échéances fantômes.
+        var (ligueId, _) = await SetupLigueLibreAsync(4, format: LeagueFormat.RoundRobin, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15));
+        await svc.DefinirEcheanceRondeAsync(ligueId, 99, new DateTime(2027, 1, 1));
+
+        var orphelines = await svc.LancerSaisonAsync(ligueId);
+
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.True(echeances.ContainsKey(1));
+        Assert.False(echeances.ContainsKey(99));
+        Assert.Contains(99, orphelines);
+    }
+
+    [Fact]
+    public async Task LancerSaison_FormatLibre_ConserveToutesLesEcheances()
+    {
+        // En format Libre le commissaire compose ses rondes APRÈS le lancement :
+        // aucune ronde n'existe à cet instant, donc rien ne doit être nettoyé —
+        // sinon on effacerait tout le planning préparé en amont.
+        var (ligueId, _) = await SetupLigueLibreAsync(4, format: LeagueFormat.Libre, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15));
+        await svc.DefinirEcheanceRondeAsync(ligueId, 5, new DateTime(2026, 10, 20));
+
+        var orphelines = await svc.LancerSaisonAsync(ligueId);
+
+        var echeances = await svc.GetEcheancesRondesAsync(ligueId);
+        Assert.Equal(2, echeances.Count);
+        Assert.Empty(orphelines);
+    }
+
+    [Fact]
+    public void CalendrierEditable_AvantLeLancement_QuelQueSoitLeFormat()
+    {
+        // Dater son planning à l'avance a du sens aussi en Round Robin, où le
+        // calendrier sera généré automatiquement au lancement.
+        foreach (var format in Enum.GetValues<LeagueFormat>())
+        {
+            Assert.True(DisplayHelpers.CalendrierEditable(LeagueStatus.Creation, format));
+            Assert.True(DisplayHelpers.CalendrierEditable(LeagueStatus.Inscription, format));
+        }
+    }
+
+    [Fact]
+    public void CalendrierEditable_ApresLancement_SeulementEnFormatLibre()
+    {
+        // Saison lancée : en Round Robin le calendrier est figé, il n'y a plus
+        // rien à composer.
+        Assert.True(DisplayHelpers.CalendrierEditable(LeagueStatus.EnCours, LeagueFormat.Libre));
+        Assert.True(DisplayHelpers.CalendrierEditable(LeagueStatus.EnCours, LeagueFormat.LibreAvecPlayoffs));
+        Assert.False(DisplayHelpers.CalendrierEditable(LeagueStatus.EnCours, LeagueFormat.RoundRobin));
+        Assert.False(DisplayHelpers.CalendrierEditable(LeagueStatus.PlayOffs, LeagueFormat.Libre));
+    }
+
+    [Fact]
+    public void AppariementsEditables_JamaisAvantLeLancement()
+    {
+        // Avant le lancement les équipes ne sont pas toutes inscrites : composer
+        // des rencontres n'aurait aucun sens, seules les dates sont éditables.
+        Assert.False(DisplayHelpers.AppariementsEditables(LeagueStatus.Creation, LeagueFormat.Libre));
+        Assert.False(DisplayHelpers.AppariementsEditables(LeagueStatus.Inscription, LeagueFormat.Libre));
+        Assert.True(DisplayHelpers.AppariementsEditables(LeagueStatus.EnCours, LeagueFormat.Libre));
+        Assert.False(DisplayHelpers.AppariementsEditables(LeagueStatus.EnCours, LeagueFormat.RoundRobin));
+    }
+
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService
     {

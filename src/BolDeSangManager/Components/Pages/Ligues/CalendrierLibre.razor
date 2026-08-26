@@ -24,7 +24,7 @@ else if (!_peutGerer)
         Seul le commissaire de cette ligue peut composer le calendrier.
     </MudAlert>
 }
-else if (!DisplayHelpers.EstFormatLibre(_ligue.Format))
+else if (!DisplayHelpers.CalendrierEditable(_ligue.Statut, _ligue.Format))
 {
     <MudAlert Severity="Severity.Info" Class="ma-4">
         Cette ligue est au format <b>@DisplayHelpers.LeagueFormatLabel(_ligue.Format)</b> :
@@ -37,7 +37,7 @@ else
 
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
             <div>
-                <MudText Typo="Typo.h5">Composer le calendrier</MudText>
+                <MudText Typo="Typo.h5">@(_appariements ? "Composer le calendrier" : "Préparer les dates")</MudText>
                 <MudText Typo="Typo.body2" Color="Color.Secondary">@_ligue.Nom</MudText>
             </div>
             <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack"
@@ -46,11 +46,24 @@ else
             </MudButton>
         </MudStack>
 
-        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
-            Composez chaque ronde en choisissant les rencontres. Une équipe non citée
-            dans une ronde est simplement <b>au repos</b> ce tour-là. Une ronde dont un
-            match a commencé est verrouillée.
-        </MudAlert>
+        @if (_appariements)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                Composez chaque ronde en choisissant les rencontres. Une équipe non citée
+                dans une ronde est simplement <b>au repos</b> ce tour-là. Une ronde dont un
+                match a commencé est verrouillée.
+            </MudAlert>
+        }
+        else
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                La saison n'est pas lancée : vous préparez ici les <b>dates</b> de chaque ronde.
+                Les rencontres seront @(DisplayHelpers.EstFormatLibre(_ligue.Format)
+                    ? "composées après le lancement"
+                    : "générées automatiquement au lancement").
+                Les dates visant une ronde qui n'existera pas seront retirées à ce moment-là.
+            </MudAlert>
+        }
 
         @* ── Barre de synthèse ─────────────────────────────────────────── *@
         <MudPaper Class="pa-3 mb-4" Elevation="1">
@@ -61,9 +74,12 @@ else
                 <MudChip T="string" Icon="@Icons.Material.Filled.CalendarMonth" Variant="Variant.Text">
                     @_rondes.Count ronde(s)
                 </MudChip>
-                <MudChip T="string" Icon="@Icons.Material.Filled.SportsScore" Variant="Variant.Text">
-                    @_rondes.Sum(r => r.Paires.Count) rencontre(s)
-                </MudChip>
+                @if (_appariements)
+                {
+                    <MudChip T="string" Icon="@Icons.Material.Filled.SportsScore" Variant="Variant.Text">
+                        @_rondes.Sum(r => r.Paires.Count) rencontre(s)
+                    </MudChip>
+                }
                 <MudSpacer />
                 <MudButton Variant="Variant.Filled" Color="Color.Primary"
                            StartIcon="@Icons.Material.Filled.Add"
@@ -73,7 +89,7 @@ else
             </MudStack>
         </MudPaper>
 
-        @if (_equipes.Count < 2)
+        @if (_appariements && _equipes.Count < 2)
         {
             <MudAlert Severity="Severity.Warning">
                 Il faut au moins deux équipes inscrites pour composer des rencontres.
@@ -115,7 +131,11 @@ else
                     <MudSpacer />
 
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        @ronde.Paires.Count rencontre(s)@(RepresenterRepos(ronde))
+                        @if (_appariements)
+                        {
+                            @($"{ronde.Paires.Count} rencontre(s)")
+                            @RepresenterRepos(ronde)
+                        }
                     </MudText>
 
                     @if (!ronde.Verrouillee)
@@ -146,6 +166,8 @@ else
                 </MudStack>
 
                 @* ── Rencontres ────────────────────────────────────────── *@
+                @if (_appariements)
+                {
                 @foreach (var paire in ronde.Paires)
                 {
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
@@ -182,11 +204,14 @@ else
                         }
                     </MudStack>
                 }
+                }
 
                 @* ── Actions de ronde ──────────────────────────────────── *@
                 @if (!ronde.Verrouillee)
                 {
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
+                        @if (_appariements)
+                        {
                         <MudButton Variant="Variant.Outlined" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Add"
                                    Disabled="@(!PeutAjouterRencontre(ronde))"
@@ -204,7 +229,7 @@ else
                                    OnClick="@(() => CompleterRonde(ronde))">
                             Compléter
                         </MudButton>
-
+                        }
                         <MudSpacer />
 
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
@@ -228,6 +253,14 @@ else
     List<RondeVm> _rondes = [];
     Dictionary<int, DateTime> _echeances = [];
     bool _peutGerer, _chargement = true, _enregistrement;
+
+    /// <summary>
+    /// Vrai quand l'écran sert à composer les RENCONTRES (format Libre, saison
+    /// lancée). Faux avant le lancement : seules les DATES de ronde sont
+    /// éditables, car les équipes ne sont pas toutes inscrites et le calendrier
+    /// n'existe pas encore.
+    /// </summary>
+    bool _appariements;
 
     /// <summary>Ronde en cours d'édition côté écran (état local, pas encore en base).</summary>
     class RondeVm
@@ -261,6 +294,7 @@ else
         if (_ligue is not null)
         {
             _peutGerer = await Auth.PeutGererLigueAsync(userId, Id);
+            _appariements = DisplayHelpers.AppariementsEditables(_ligue.Statut, _ligue.Format);
             _equipes = _ligue.Equipes.OrderBy(e => e.Nom).ToList();
             _echeances = await LeagueService.GetEcheancesRondesAsync(Id);
             ChargerRondes();
@@ -301,6 +335,20 @@ else
         // (une ronde qui vient d'être enregistrée revient par la requête).
         foreach (var r in enAttente.Where(r => _rondes.All(x => x.Numero != r.Numero)))
             _rondes.Add(r);
+
+        // Avant le lancement il n'existe aucun match : les rondes sont alors
+        // portées par les seules échéances déjà saisies, sinon les dates
+        // préparées disparaîtraient de l'écran au rechargement.
+        foreach (var (numero, date) in _echeances.OrderBy(e => e.Key))
+        {
+            if (_rondes.Any(r => r.Numero == numero)) continue;
+            _rondes.Add(new RondeVm
+            {
+                Numero      = numero,
+                Enregistree = true,
+                DateLimite  = date.Date
+            });
+        }
 
         _rondes = _rondes.OrderBy(r => r.Numero).ToList();
     }
@@ -368,6 +416,11 @@ else
         var ronde = new RondeVm { Numero = numero, Modifiee = true, Enregistree = false };
         _rondes.Add(ronde);
 
+        // Avant le lancement une ronde n'est qu'une date : pré-remplir une
+        // rencontre afficherait un appariement que l'écran ne permet pas
+        // d'éditer et qui ne serait de toute façon jamais enregistré.
+        if (!_appariements) return;
+
         // Première rencontre pré-remplie, en tenant compte des rondes déjà
         // composées pour ne pas reproposer systématiquement le même duel.
         var libres = EquipesLibres(ronde).Select(e => e.Id).ToList();
@@ -422,12 +475,21 @@ else
         _enregistrement = true;
         try
         {
-            var paires = ronde.Paires.Select(p => (p.DomicileId, p.ExterieurId)).ToList();
-            await LeagueService.DefinirRondeAsync(Id, ronde.Numero, paires);
+            // Avant le lancement, seule la DATE est enregistrée : DefinirRondeAsync
+            // n'accepte que le format Libre et exige des équipes inscrites.
+            if (_appariements)
+            {
+                var paires = ronde.Paires.Select(p => (p.DomicileId, p.ExterieurId)).ToList();
+                await LeagueService.DefinirRondeAsync(Id, ronde.Numero, paires);
+            }
             await LeagueService.DefinirEcheanceRondeAsync(Id, ronde.Numero, ronde.DateLimite?.Date);
             ronde.Modifiee = false;
             ronde.Enregistree = true;
-            Snackbar.Add($"Ronde {ronde.Numero} enregistrée.", Severity.Success);
+            Snackbar.Add(
+                _appariements
+                    ? $"Ronde {ronde.Numero} enregistrée."
+                    : $"Date de la ronde {ronde.Numero} enregistrée.",
+                Severity.Success);
             await RechargerAsync();
         }
         catch (InvalidOperationException ex)
@@ -454,6 +516,24 @@ else
             _rondes.Remove(ronde);
             await RenumeroterAsync();
             Snackbar.Add($"Ronde {ronde.Numero} retirée.", Severity.Success);
+            return;
+        }
+
+        // Avant le lancement, une ronde n'est qu'une date : rien à supprimer côté
+        // matchs, et SupprimerRondeAsync n'accepte que le format Libre.
+        if (!_appariements)
+        {
+            try
+            {
+                await LeagueService.DefinirEcheanceRondeAsync(Id, ronde.Numero, null);
+                _rondes.Remove(ronde);
+                Snackbar.Add($"Date de la ronde {ronde.Numero} retirée.", Severity.Success);
+                await RechargerAsync();
+            }
+            catch (Exception)
+            {
+                Snackbar.Add("Impossible de retirer cette date.", Severity.Error);
+            }
             return;
         }
 

@@ -58,7 +58,20 @@ public class LeagueService(
         await db.SaveChangesAsync();
     }
 
-    public async Task LancerSaisonAsync(int ligueId)
+    /// <summary>
+    /// Lance la saison : crée la division par défaut puis génère le pool de
+    /// matchs (sauf en format Libre, où le commissaire compose lui-même).
+    /// </summary>
+    /// <returns>
+    /// Les numéros de ronde dont l'échéance a été retirée parce qu'ils
+    /// dépassent le calendrier réellement généré. Le commissaire peut dater ses
+    /// rondes avant le lancement, alors que le nombre de rondes n'est pas encore
+    /// connu (il dépend du nombre d'équipes inscrites) : les dates en trop sont
+    /// nettoyées ici pour ne pas afficher d'échéances fantômes.
+    /// Liste vide en format Libre — aucune ronde n'existe encore au lancement,
+    /// et tout nettoyer effacerait le planning préparé en amont.
+    /// </returns>
+    public async Task<IReadOnlyList<int>> LancerSaisonAsync(int ligueId)
     {
         var ligue = await db.Leagues
             .Include(l => l.Equipes)
@@ -85,12 +98,48 @@ public class LeagueService(
         // Format Libre : le commissaire compose lui-même les rondes après le
         // lancement. On crée quand même la division ci-dessus, il en a besoin
         // pour y rattacher ses rencontres.
-        if (!DisplayHelpers.EstFormatLibre(ligue.Format))
+        var calendrierGenere = !DisplayHelpers.EstFormatLibre(ligue.Format);
+        if (calendrierGenere)
             await GenererPoolMatchsAsync(ligue);
 
         ligue.Statut = LeagueStatus.EnCours;
         await db.SaveChangesAsync();
+
+        var orphelines = calendrierGenere
+            ? await NettoyerEcheancesOrphelinesAsync(ligueId)
+            : [];
+
         logger.LogInformation("Saison lancée pour la ligue {NomLigue} (id={Id}) avec {NbEquipes} équipes (format={Format})", ligue.Nom, ligue.Id, ligue.Equipes.Count, ligue.Format);
+        return orphelines;
+    }
+
+    /// <summary>
+    /// Retire les échéances dont la ronde n'existe pas dans le calendrier généré.
+    /// Appelé uniquement quand le calendrier est produit automatiquement : en
+    /// format Libre les rondes sont créées après coup, il n'y a rien à comparer.
+    /// </summary>
+    private async Task<IReadOnlyList<int>> NettoyerEcheancesOrphelinesAsync(int ligueId)
+    {
+        var rondesReelles = await db.Matches
+            .Where(m => m.Division!.LeagueId == ligueId)
+            .Select(m => m.Ronde)
+            .Distinct()
+            .ToListAsync();
+
+        var orphelines = await db.EcheancesRondes
+            .Where(e => e.LeagueId == ligueId && !rondesReelles.Contains(e.Ronde))
+            .ToListAsync();
+
+        if (orphelines.Count == 0) return [];
+
+        db.EcheancesRondes.RemoveRange(orphelines);
+        await db.SaveChangesAsync();
+
+        var numeros = orphelines.Select(e => e.Ronde).OrderBy(r => r).ToList();
+        logger.LogInformation(
+            "Ligue {Id} : {Nb} échéance(s) retirée(s), rondes {Rondes} absentes du calendrier généré",
+            ligueId, numeros.Count, string.Join(", ", numeros));
+        return numeros;
     }
 
     /// <summary>
