@@ -59,9 +59,19 @@
                     <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.RoundRobin">Round Robin</MudSelectItem>
                     <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.LibreAvecPlayoffs">Libre + play-offs</MudSelectItem>
                     <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.Libre">Libre</MudSelectItem>
+                    <MudSelectItem T="LeagueFormat" Value="@LeagueFormat.Open">Open — sans fin, sans calendrier</MudSelectItem>
                 </MudSelect>
                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
-                    @if (DisplayHelpers.EstFormatLibre(_format))
+                    @if (DisplayHelpers.SansCalendrier(_format))
+                    {
+                        <text>
+                            <b>Open</b> : ligue sans fin, ni rondes ni calendrier. Les inscriptions
+                            restent ouvertes en permanence — une équipe peut rejoindre à tout moment —
+                            et n'importe quel participant propose une rencontre quand il le souhaite,
+                            l'adversaire confirmant ensuite la feuille de match. Pas de play-offs.
+                        </text>
+                    }
+                    else if (DisplayHelpers.EstFormatLibre(_format))
                     {
                         <text>
                             <b>Libre</b> : aucun calendrier n'est généré. Une fois les inscriptions

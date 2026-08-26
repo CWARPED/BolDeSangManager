@@ -45,6 +45,7 @@ public static class DisplayHelpers
         LeagueFormat.RoundRobinAvecPlayoffs => "RR + Play-offs",
         LeagueFormat.Libre                  => "Libre",
         LeagueFormat.LibreAvecPlayoffs      => "Libre + Play-offs",
+        LeagueFormat.Open                   => "Open (sans fin)",
         _                                   => f.ToString()
     };
 
@@ -61,6 +62,27 @@ public static class DisplayHelpers
         f is LeagueFormat.RoundRobinAvecPlayoffs or LeagueFormat.LibreAvecPlayoffs;
 
     /// <summary>
+    /// Le format se passe-t-il totalement de calendrier ?
+    /// En Open il n'y a ni ronde ni pool de matchs : les rencontres sont créées
+    /// à la volée. À ne pas confondre avec le format Libre, qui a bien des
+    /// rondes — simplement composées à la main.
+    /// </summary>
+    public static bool SansCalendrier(LeagueFormat f) => f is LeagueFormat.Open;
+
+    /// <summary>
+    /// Peut-on encore inscrire une équipe ?
+    ///
+    /// Le format Open est « sans fin » : la ligue est simultanément en cours et
+    /// ouverte aux inscriptions, un état que <see cref="LeagueStatus"/> ne sait
+    /// pas exprimer. Plutôt qu'un statut supplémentaire à traiter dans chaque
+    /// switch, la règle est portée ici — comme <see cref="EstFormatLibre"/>.
+    /// Une ligue Open clôturée (Termine) n'accepte évidemment plus personne.
+    /// </summary>
+    public static bool InscriptionOuverte(LeagueStatus statut, LeagueFormat format) =>
+        statut == LeagueStatus.Inscription
+        || (format == LeagueFormat.Open && statut is LeagueStatus.Creation or LeagueStatus.EnCours);
+
+    /// <summary>
     /// L'écran calendrier est-il accessible ?
     ///
     /// Avant le lancement (Creation / Inscription) le commissaire prépare les
@@ -68,9 +90,11 @@ public static class DisplayHelpers
     /// du sens aussi en Round Robin, où le calendrier sera généré ensuite.
     /// Une fois la saison lancée, seul le format Libre garde un intérêt : c'est
     /// là qu'on compose les rencontres à la main.
+    /// Jamais en Open : ce format n'a aucune ronde à dater.
     /// </summary>
     public static bool CalendrierEditable(LeagueStatus statut, LeagueFormat format) =>
-        statut < LeagueStatus.EnCours || (statut == LeagueStatus.EnCours && EstFormatLibre(format));
+        !SansCalendrier(format)
+        && (statut < LeagueStatus.EnCours || (statut == LeagueStatus.EnCours && EstFormatLibre(format)));
 
     /// <summary>
     /// Les rencontres d'une ronde sont-elles composées à la main sur cet écran ?
@@ -79,6 +103,27 @@ public static class DisplayHelpers
     /// </summary>
     public static bool AppariementsEditables(LeagueStatus statut, LeagueFormat format) =>
         statut == LeagueStatus.EnCours && EstFormatLibre(format);
+
+    /// <summary>
+    /// Libellé d'une ronde. Centralisé ici plutôt que répété dans chaque
+    /// composant : trois conventions cohabitent sur la colonne Ronde.
+    /// 0 = hors ronde (format Open, qui n'a pas de calendrier),
+    /// >= 100 = tour de play-off, le reste = numéro de ronde classique.
+    /// </summary>
+    public static string RondeLabel(int ronde) => ronde switch
+    {
+        0                 => "Rencontre libre",
+        >= 100            => $"Play-off — Tour {ronde - 99}",
+        _                 => $"Ronde {ronde}"
+    };
+
+    /// <summary>Variante courte du libellé de ronde (bandeaux, listes denses).</summary>
+    public static string RondeLabelCourt(int ronde) => ronde switch
+    {
+        0                 => "Libre",
+        >= 100            => $"Play-off T{ronde - 99}",
+        _                 => $"Ronde {ronde}"
+    };
 
     public static Color MatchColor(MatchStatus s) => s switch
     {

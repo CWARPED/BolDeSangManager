@@ -38,7 +38,7 @@ else
 {
     <MudText Typo="Typo.h5" Color="Color.Error" Class="mb-1"><b>Après-match</b></MudText>
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
-        @(_match.Ronde >= 100 ? $"Play-off T{_match.Ronde - 99}" : $"Ronde {_match.Ronde}") —
+        @DisplayHelpers.RondeLabelCourt(_match.Ronde) —
         @_match.Division?.League?.Nom
     </MudText>
 

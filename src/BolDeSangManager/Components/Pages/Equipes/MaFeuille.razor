@@ -84,7 +84,7 @@ else
         {
             <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.QrCode">
                 Le PDF inclura un QR code pour saisir la feuille du prochain match
-                (@(_matchProchain.Ronde >= 100 ? $"Play-off T{_matchProchain.Ronde - 99}" : $"Ronde {_matchProchain.Ronde}")).
+                (@DisplayHelpers.RondeLabelCourt(_matchProchain.Ronde)).
                 @if (string.IsNullOrWhiteSpace(_urlExterne))
                 {
                     <MudLink Href="/admin" Class="ml-1">Configurez l'URL externe dans l'admin.</MudLink>

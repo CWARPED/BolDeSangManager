@@ -20,7 +20,7 @@ else
             <MudText Typo="Typo.h5" Color="Color.Error"><b>Validation du match</b></MudText>
             <MudText Typo="Typo.body2" Color="Color.Secondary">
                 @_match.Division?.League?.Nom —
-                @(_match.Ronde >= 100 ? $"Play-off T{_match.Ronde - 99}" : $"Ronde {_match.Ronde}")
+                @DisplayHelpers.RondeLabelCourt(_match.Ronde)
             </MudText>
         </div>
         <MudChip T="string" Color="@MatchColor(_match.Statut)">@MatchLabel(_match.Statut)</MudChip>

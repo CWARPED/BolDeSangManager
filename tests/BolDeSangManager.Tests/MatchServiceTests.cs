@@ -248,6 +248,60 @@ public class MatchServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task SaisirFeuille_PurgeLeManqueSuivantMatchDesJoueursDejaSanctionnes()
+    {
+        // Bug préexistant : ManqueSuivantMatch n'était levé que par la phase de
+        // repos (entre saison régulière et play-offs). Sans phase de repos —
+        // format Open, ou ligue qui n'en lance jamais — le joueur restait
+        // indisponible pour toujours.
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+
+        await using (var dbSetup = _factory.CreateContext())
+        {
+            var j = await dbSetup.TeamPlayers.FindAsync(joueurDom.Id);
+            j!.ManqueSuivantMatch = true;          // sanctionné lors d'un match précédent
+            await dbSetup.SaveChangesAsync();
+        }
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.SaisirFeuilleMatchAsync(
+            match.Id,
+            new MatchSheet { TouchdownsDomicile = 1, TouchdownsExterieur = 0 },
+            [],
+            saisiPar.Id);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.False((await db2.TeamPlayers.FindAsync(joueurDom.Id))!.ManqueSuivantMatch);
+    }
+
+    [Fact]
+    public async Task SaisirFeuille_NePurgePasLaSanctionInfligeeParCeMatchLa()
+    {
+        // La purge doit passer AVANT le traitement des blessures : sinon elle
+        // effacerait aussitôt la sanction issue de la rencontre en cours.
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+
+        await using (var dbSetup = _factory.CreateContext())
+        {
+            var j = await dbSetup.TeamPlayers.FindAsync(joueurDom.Id);
+            j!.ManqueSuivantMatch = true;
+            await dbSetup.SaveChangesAsync();
+        }
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.SaisirFeuilleMatchAsync(
+            match.Id,
+            new MatchSheet { TouchdownsDomicile = 1, TouchdownsExterieur = 0 },
+            [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, Blessure = InjuryType.ManqueSuivant }],
+            saisiPar.Id);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.True((await db2.TeamPlayers.FindAsync(joueurDom.Id))!.ManqueSuivantMatch);
+    }
+
+    [Fact]
     public async Task SaisirFeuille_Mort_MarqueJoueurMort()
     {
         var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();

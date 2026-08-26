@@ -293,7 +293,8 @@ else
     bool _peutEditer =>
         _equipe is not null
         && _equipe.CoachId == _userId
-        && _equipe.League?.Statut == LeagueStatus.Inscription;
+        && _equipe.League is not null
+        && DisplayHelpers.InscriptionOuverte(_equipe.League.Statut, _equipe.League.Format);
 
     protected override async Task OnInitializedAsync()
     {

@@ -9,7 +9,7 @@
             <b>@Match.EquipeDomicile?.Nom</b> vs <b>@Match.EquipeExterieur?.Nom</b>
         </MudText>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4 d-block">
-            @(Match.Ronde >= 100 ? $"Play-off — Tour {Match.Ronde - 99}" : $"Ronde {Match.Ronde}")
+            @DisplayHelpers.RondeLabel(Match.Ronde)
         </MudText>
 
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">

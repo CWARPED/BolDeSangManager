@@ -46,7 +46,7 @@ else
                     <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
                         <div>
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @(match.Ronde >= 100 ? $"Play-off — Tour {match.Ronde - 99}" : $"Ronde {match.Ronde}")
+                                @DisplayHelpers.RondeLabel(match.Ronde)
                             </MudText>
                             <MudText Typo="Typo.body1">
                                 <b>@match.EquipeDomicile?.Nom</b>

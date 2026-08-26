@@ -116,6 +116,11 @@ public class MatchService(
         // Mettre à jour les stats des équipes
         await MettreAJourStatsEquipesAsync(match, feuille);
 
+        // Purger les « rate le prochain match » : ce match EST le prochain match
+        // des deux équipes. À faire impérativement AVANT TraiterBlessuresAsync,
+        // qui pose les sanctions issues de cette rencontre-ci.
+        await PurgerManqueSuivantMatchAsync(match);
+
         // Traiter les blessures
         await TraiterBlessuresAsync(records, matchId);
 
@@ -252,6 +257,37 @@ public class MatchService(
 
     private static int CalculerPSP(MatchPlayerRecord record, GameType gameType)
         => CalculerPSPPublic(record, gameType);
+
+    /// <summary>
+    /// Lève l'indisponibilité « rate le prochain match » des joueurs des deux
+    /// équipes : la sanction est purgée par le match qu'on est en train de saisir.
+    ///
+    /// Auparavant seule la phase de repos (entre saison régulière et play-offs)
+    /// remettait ce drapeau à zéro, ce qui masquait le problème dans les formats
+    /// classiques. En Open il n'y a jamais de phase de repos : sans cette purge,
+    /// un joueur blessé resterait indisponible pour toujours.
+    ///
+    /// À appeler AVANT TraiterBlessuresAsync, sinon on effacerait aussitôt les
+    /// sanctions issues du match courant.
+    /// </summary>
+    private async Task PurgerManqueSuivantMatchAsync(Match match)
+    {
+        var equipeIds = new[] { match.EquipeDomicileId, match.EquipeExterieurId };
+
+        var joueurs = await db.TeamPlayers
+            .Where(j => equipeIds.Contains(j.TeamId) && j.ManqueSuivantMatch)
+            .ToListAsync();
+
+        if (joueurs.Count == 0) return;
+
+        foreach (var j in joueurs)
+            j.ManqueSuivantMatch = false;
+
+        await db.SaveChangesAsync();
+        logger.LogInformation(
+            "Match id={MatchId} : {Nb} joueur(s) ont purgé leur « rate le prochain match »",
+            match.Id, joueurs.Count);
+    }
 
     private async Task MettreAJourStatsEquipesAsync(Match match, MatchSheet feuille)
     {

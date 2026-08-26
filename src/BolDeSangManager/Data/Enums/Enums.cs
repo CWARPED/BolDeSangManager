@@ -7,7 +7,8 @@ public enum LeagueStatus
     Creation,        // Le commissaire configure la ligue
     Inscription,     // Les coaches rejoignent et créent leurs équipes
     EnCours,         // Saison régulière en cours
-    PhaseDeRepos,    // Entre saison régulière et playoffs : reset RPM + après-match
+    PhaseDeRepos,    // Entre saison régulière et playoffs : après-match sans rencontre
+                     // (et levée des « rate le prochain match » encore en cours)
     PlayOffs,        // Phase de playoffs
     Termine          // Ligue terminée
 }
@@ -19,7 +20,9 @@ public enum LeagueFormat
     RoundRobin,                  // Chacun joue contre tous
     RoundRobinAvecPlayoffs,      // Saison régulière + playoffs
     Libre,                       // Le commissaire compose lui-même les rondes
-    LibreAvecPlayoffs            // Rondes composées à la main + playoffs
+    LibreAvecPlayoffs,           // Rondes composées à la main + playoffs
+    Open                         // Sans fin : ni rondes ni calendrier, inscriptions
+                                 // toujours ouvertes, rencontres proposées librement
 }
 
 public enum MatchStatus

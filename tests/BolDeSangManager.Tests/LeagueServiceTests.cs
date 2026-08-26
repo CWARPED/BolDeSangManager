@@ -1256,10 +1256,12 @@ public class LeagueServiceTests : IDisposable
     {
         // Dater son planning à l'avance a du sens aussi en Round Robin, où le
         // calendrier sera généré automatiquement au lancement.
+        // Open est la seule exception : ce format n'a aucune ronde à dater.
         foreach (var format in Enum.GetValues<LeagueFormat>())
         {
-            Assert.True(DisplayHelpers.CalendrierEditable(LeagueStatus.Creation, format));
-            Assert.True(DisplayHelpers.CalendrierEditable(LeagueStatus.Inscription, format));
+            var attendu = format != LeagueFormat.Open;
+            Assert.Equal(attendu, DisplayHelpers.CalendrierEditable(LeagueStatus.Creation, format));
+            Assert.Equal(attendu, DisplayHelpers.CalendrierEditable(LeagueStatus.Inscription, format));
         }
     }
 
@@ -1283,6 +1285,158 @@ public class LeagueServiceTests : IDisposable
         Assert.False(DisplayHelpers.AppariementsEditables(LeagueStatus.Inscription, LeagueFormat.Libre));
         Assert.True(DisplayHelpers.AppariementsEditables(LeagueStatus.EnCours, LeagueFormat.Libre));
         Assert.False(DisplayHelpers.AppariementsEditables(LeagueStatus.EnCours, LeagueFormat.RoundRobin));
+    }
+
+    // ─── Dev 2 : format Open ──────────────────────────────────────────────────
+
+    [Fact]
+    public void LeagueFormat_LesEntiersPersistesNeChangentJamais()
+    {
+        // Les valeurs sont stockées en int en base : insérer une entrée au milieu
+        // réaffecterait silencieusement toutes les lignes existantes.
+        Assert.Equal(0, (int)LeagueFormat.RoundRobin);
+        Assert.Equal(1, (int)LeagueFormat.RoundRobinAvecPlayoffs);
+        Assert.Equal(2, (int)LeagueFormat.Libre);
+        Assert.Equal(3, (int)LeagueFormat.LibreAvecPlayoffs);
+        Assert.Equal(4, (int)LeagueFormat.Open);
+    }
+
+    [Fact]
+    public void Open_NestPasUnFormatLibre()
+    {
+        // Sinon Open hériterait de l'UI de composition de rondes, alors qu'il
+        // n'a pas de rondes du tout.
+        Assert.False(DisplayHelpers.EstFormatLibre(LeagueFormat.Open));
+        Assert.False(DisplayHelpers.AvecPlayoffs(LeagueFormat.Open));
+        Assert.True(DisplayHelpers.SansCalendrier(LeagueFormat.Open));
+        Assert.False(DisplayHelpers.SansCalendrier(LeagueFormat.Libre));
+    }
+
+    [Fact]
+    public void InscriptionOuverte_EnOpen_MemeSaisonLancee()
+    {
+        // Le cœur du mode Open : la ligue est simultanément « en cours » et
+        // ouverte aux inscriptions, un état que LeagueStatus ne sait pas exprimer.
+        Assert.True(DisplayHelpers.InscriptionOuverte(LeagueStatus.EnCours, LeagueFormat.Open));
+        Assert.True(DisplayHelpers.InscriptionOuverte(LeagueStatus.Inscription, LeagueFormat.RoundRobin));
+        Assert.False(DisplayHelpers.InscriptionOuverte(LeagueStatus.EnCours, LeagueFormat.RoundRobin));
+
+        // Une ligue Open clôturée n'accepte plus personne.
+        Assert.False(DisplayHelpers.InscriptionOuverte(LeagueStatus.Termine, LeagueFormat.Open));
+    }
+
+    [Fact]
+    public async Task LancerSaison_EnOpen_CreeLaDivisionMaisAucunMatch()
+    {
+        // La division technique est indispensable : SupprimerLigueAsync retrouve
+        // les matchs VIA les divisions, un match sans division serait orphelin.
+        var (ligueId, _) = await SetupLigueLibreAsync(3, format: LeagueFormat.Open, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.LancerSaisonAsync(ligueId);
+
+        var ligue = await db.Leagues.Include(l => l.Divisions).FirstAsync(l => l.Id == ligueId);
+        Assert.Single(ligue.Divisions);
+        Assert.Equal(0, await CompterMatchsAsync(ligueId));
+        Assert.Equal(LeagueStatus.EnCours, ligue.Statut);
+    }
+
+    [Fact]
+    public async Task LancerSaison_EnOpen_NeNettoiePasLesEcheances()
+    {
+        // Aucune ronde n'existe en Open : le nettoyage effacerait tout.
+        var (ligueId, _) = await SetupLigueLibreAsync(2, format: LeagueFormat.Open, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 15));
+
+        var orphelines = await svc.LancerSaisonAsync(ligueId);
+
+        Assert.Empty(orphelines);
+        Assert.Single(await svc.GetEcheancesRondesAsync(ligueId));
+    }
+
+    [Fact]
+    public async Task SupprimerLigue_EnOpen_NeLaissePasDeMatchOrphelin()
+    {
+        // Le piège du dev : sans division technique, les matchs Open resteraient
+        // en base pour toujours.
+        var (ligueId, ids) = await SetupLigueLibreAsync(2, format: LeagueFormat.Open, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.LancerSaisonAsync(ligueId);
+        await svc.ProposerRencontreAsync(ligueId, ids[0], ids[1]);
+
+        Assert.Equal(1, await CompterMatchsAsync(ligueId));
+
+        await svc.SupprimerLigueAsync(ligueId);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.Empty(await db2.Matches.ToListAsync());
+        Assert.Empty(await db2.MatchSheets.ToListAsync());
+        Assert.Empty(await db2.Teams.Where(t => t.LeagueId == ligueId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task ProposerRencontre_EnOpen_CreeUnMatchHorsRonde()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2, format: LeagueFormat.Open, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.LancerSaisonAsync(ligueId);
+
+        var matchId = await svc.ProposerRencontreAsync(ligueId, ids[0], ids[1]);
+
+        var match = await db.Matches.FindAsync(matchId);
+        Assert.NotNull(match);
+        Assert.Equal(0, match!.Ronde);          // convention « hors ronde »
+        Assert.NotNull(match.DivisionId);       // rattaché à la division technique
+        Assert.Equal(ids[0], match.EquipeDomicileId);
+        Assert.Equal(ids[1], match.EquipeExterieurId);
+    }
+
+    [Fact]
+    public async Task ProposerRencontre_RefuseUneEquipeContreElleMeme()
+    {
+        var (ligueId, ids) = await SetupLigueLibreAsync(2, format: LeagueFormat.Open, lancer: false);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.LancerSaisonAsync(ligueId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.ProposerRencontreAsync(ligueId, ids[0], ids[0]));
+    }
+
+    [Fact]
+    public async Task ProposerRencontre_RefuseHorsFormatOpen()
+    {
+        // Les autres formats passent par le calendrier, pas par des rencontres
+        // proposées à la volée.
+        var (ligueId, ids) = await SetupLigueLibreAsync(2, format: LeagueFormat.Libre);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.ProposerRencontreAsync(ligueId, ids[0], ids[1]));
+    }
+
+    [Fact]
+    public void RondeLabel_DistingueLibreRondeEtPlayoff()
+    {
+        // Trois conventions cohabitent sur Match.Ronde : 0 = hors ronde (Open),
+        // >= 100 = play-off, le reste = ronde classique. « Ronde 0 » n'aurait
+        // aucun sens pour l'utilisateur.
+        Assert.Equal("Rencontre libre", DisplayHelpers.RondeLabel(0));
+        Assert.Equal("Ronde 3", DisplayHelpers.RondeLabel(3));
+        Assert.Equal("Play-off — Tour 1", DisplayHelpers.RondeLabel(100));
+        Assert.Equal("Libre", DisplayHelpers.RondeLabelCourt(0));
+        Assert.Equal("Play-off T2", DisplayHelpers.RondeLabelCourt(101));
     }
 
     private class StubAuthorizationService(

@@ -96,9 +96,13 @@ public class LeagueService(
         }
 
         // Format Libre : le commissaire compose lui-même les rondes après le
-        // lancement. On crée quand même la division ci-dessus, il en a besoin
-        // pour y rattacher ses rencontres.
-        var calendrierGenere = !DisplayHelpers.EstFormatLibre(ligue.Format);
+        // lancement. Format Open : aucune ronde du tout, les rencontres sont
+        // créées à la volée. Dans les deux cas on crée quand même la division
+        // ci-dessus — en Open elle est indispensable, car SupprimerLigueAsync
+        // retrouve les matchs VIA les divisions : un match sans division
+        // resterait orphelin en base pour toujours.
+        var calendrierGenere = !DisplayHelpers.EstFormatLibre(ligue.Format)
+                            && !DisplayHelpers.SansCalendrier(ligue.Format);
         if (calendrierGenere)
             await GenererPoolMatchsAsync(ligue);
 
@@ -218,6 +222,68 @@ public class LeagueService(
             await tx.RollbackAsync();
             throw;
         }
+    }
+
+    /// <summary>
+    /// Format Open : crée une rencontre à la volée entre deux équipes de la
+    /// ligue, sans passer par un calendrier. Proposable par n'importe quel
+    /// participant — l'adversaire confirme ensuite via le flux de validation de
+    /// feuille de match habituel.
+    ///
+    /// Le match est rattaché à la division technique de la ligue (sinon il
+    /// serait invisible de <see cref="SupprimerLigueAsync"/>) et porte
+    /// <c>Ronde = 0</c>, la convention « hors ronde » — le format Open n'a pas
+    /// de rondes, et rendre la colonne nullable imposerait un AlterColumn sur
+    /// une table live.
+    /// </summary>
+    /// <returns>L'identifiant du match créé.</returns>
+    public async Task<int> ProposerRencontreAsync(
+        int ligueId, int domicileId, int exterieurId,
+        DateTime? dateProgrammee = null, string lieu = "")
+    {
+        var ligue = await db.Leagues
+            .Include(l => l.Equipes)
+            .Include(l => l.Divisions)
+            .FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        if (!DisplayHelpers.SansCalendrier(ligue.Format))
+            throw new InvalidOperationException(
+                "Seules les ligues au format Open permettent de proposer une rencontre librement.");
+
+        if (ligue.Statut == LeagueStatus.Termine)
+            throw new InvalidOperationException("Cette ligue est clôturée : plus aucune rencontre ne peut y être créée.");
+
+        if (domicileId == exterieurId)
+            throw new InvalidOperationException("Une équipe ne peut pas se rencontrer elle-même.");
+
+        foreach (var id in new[] { domicileId, exterieurId })
+        {
+            if (ligue.Equipes.All(e => e.Id != id))
+                throw new InvalidOperationException("Une des équipes sélectionnées n'appartient pas à cette ligue.");
+        }
+
+        var division = ligue.Divisions.OrderBy(d => d.Ordre).FirstOrDefault()
+            ?? throw new InvalidOperationException(
+                "La ligue n'a pas encore de division : lancez-la avant de proposer une rencontre.");
+
+        var match = new Match
+        {
+            DivisionId        = division.Id,
+            Ronde             = 0,               // hors ronde : le format Open n'en a pas
+            EquipeDomicileId  = domicileId,
+            EquipeExterieurId = exterieurId,
+            Statut            = MatchStatus.Programme,
+            DateProgrammee    = dateProgrammee,
+            Lieu              = lieu
+        };
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Rencontre Open créée dans la ligue {Id} : équipe {Dom} contre équipe {Ext} (match {MatchId})",
+            ligueId, domicileId, exterieurId, match.Id);
+        return match.Id;
     }
 
     /// <summary>

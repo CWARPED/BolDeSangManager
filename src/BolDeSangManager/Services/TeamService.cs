@@ -2,6 +2,7 @@ using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
 using BolDeSangManager.Data.Seeding;
+using BolDeSangManager.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
@@ -75,7 +76,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     {
         var ligue = await db.Leagues.FirstOrDefaultAsync(l => l.Id == equipe.LeagueId)
             ?? throw new InvalidOperationException("Ligue introuvable");
-        if (ligue.Statut != LeagueStatus.Inscription)
+        if (!DisplayHelpers.InscriptionOuverte(ligue.Statut, ligue.Format))
             throw new InvalidOperationException("Création d'équipe possible uniquement en phase Inscription.");
 
         var teamType = await GetTeamTypeAvecPostesAsync(equipe.TeamTypeId)
@@ -110,6 +111,29 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         return equipe;
     }
 
+    /// <summary>
+    /// Le roster d'une équipe peut-il encore être refondu (modification complète
+    /// ou suppression) ?
+    ///
+    /// En phase Inscription : oui, rien n'a commencé.
+    /// En format Open la ligue reste ouverte indéfiniment, mais autoriser la
+    /// refonte à vie effacerait des joueurs déjà présents dans des feuilles de
+    /// match validées. On la limite donc aux équipes qui n'ont pas encore joué :
+    /// une équipe fraîchement inscrite peut corriger son roster, une équipe
+    /// engagée est figée comme dans les autres formats.
+    /// </summary>
+    private async Task<bool> RosterEncoreEditableAsync(Team equipe)
+    {
+        if (equipe.League!.Statut == LeagueStatus.Inscription) return true;
+        if (!DisplayHelpers.SansCalendrier(equipe.League.Format)) return false;
+        if (equipe.League.Statut == LeagueStatus.Termine) return false;
+
+        var aJoue = await db.Matches.AnyAsync(m =>
+            (m.EquipeDomicileId == equipe.Id || m.EquipeExterieurId == equipe.Id)
+            && m.Statut != MatchStatus.Programme);
+        return !aJoue;
+    }
+
     public async Task<Team> ModifierEquipeAsync(
         int teamId,
         string coachId,
@@ -130,7 +154,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
         if (equipe.CoachId != coachId)
             throw new InvalidOperationException("Vous n'êtes pas le coach de cette équipe.");
-        if (equipe.League is null || equipe.League.Statut != LeagueStatus.Inscription)
+        if (equipe.League is null || !await RosterEncoreEditableAsync(equipe))
             throw new InvalidOperationException("Modification possible uniquement en phase Inscription.");
 
         var teamType = await GetTeamTypeAvecPostesAsync(equipe.TeamTypeId)
@@ -189,7 +213,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
         if (equipe.CoachId != coachId)
             throw new InvalidOperationException("Vous n'êtes pas le coach de cette équipe.");
-        if (equipe.League is null || equipe.League.Statut != LeagueStatus.Inscription)
+        if (equipe.League is null || !await RosterEncoreEditableAsync(equipe))
             throw new InvalidOperationException("Suppression possible uniquement en phase Inscription.");
 
         var competences = equipe.Joueurs.SelectMany(j => j.Competences).ToList();

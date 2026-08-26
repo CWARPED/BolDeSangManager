@@ -276,7 +276,9 @@ else
         {
             _modeEdition = true;
             var equipe = await TeamService.GetEquipeAsync(TeamId);
-            if (equipe is null || equipe.CoachId != _userId || equipe.League?.Statut != LeagueStatus.Inscription)
+            if (equipe is null || equipe.CoachId != _userId
+                || equipe.League is null
+                || !DisplayHelpers.InscriptionOuverte(equipe.League.Statut, equipe.League.Format))
             {
                 Snackbar.Add("Édition impossible : équipe inaccessible ou phase verrouillée.", Severity.Error);
                 Nav.NavigateTo(equipe is null ? "/" : $"/equipes/{TeamId}");
