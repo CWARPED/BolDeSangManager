@@ -157,6 +157,83 @@ public class PdfServiceTests
     }
 
     [Fact]
+    public void GenererFeuilleEquipe_RappelCompetencesEnPaysage_TientSurMoinsDePagesQuEnPortrait()
+    {
+        // Signalé par l'utilisateur : en paysage le rappel des compétences
+        // s'affichait sur une colonne unique, laissant la moitié droite vide et
+        // débordant sur une page supplémentaire. En deux colonnes, le paysage ne
+        // doit jamais coûter PLUS de pages que le portrait à contenu égal.
+        var svc = new PdfService();
+
+        // Assez de compétences pour que la mise en page compte vraiment : sur une
+        // seule colonne ce volume déborde en page 2, sur deux colonnes il tient.
+        var equipe = EquipeAvecCompetences(nbCategories: 3, parCategorie: 6);
+
+        var paysage = svc.GenererFeuilleEquipe(equipe, inclureDescriptionsCompetences: true, paysage: true);
+
+        Assert.Equal(1, NombreDePages(paysage));
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_PaysageAvecUneSeuleCategorie_NeCassePas()
+    {
+        // Cas limite : la répartition en deux colonnes découpe par catégorie.
+        // Avec une seule catégorie il n'y a rien à répartir — on doit retomber
+        // proprement sur le rendu une colonne, sans exception.
+        var svc = new PdfService();
+        var equipe = EquipeAvecCompetences(nbCategories: 1, parCategorie: 5);
+
+        var bytes = svc.GenererFeuilleEquipe(equipe, inclureDescriptionsCompetences: true, paysage: true);
+
+        Assert.True(bytes.Length > 1_000);
+        Assert.Equal(1, NombreDePages(bytes));
+    }
+
+    /// <summary>Compte les objets /Type /Page du PDF (suffisant pour ces tests).</summary>
+    private static int NombreDePages(byte[] pdf)
+    {
+        var texte = System.Text.Encoding.Latin1.GetString(pdf);
+        return System.Text.RegularExpressions.Regex.Matches(texte, @"/Type\s*/Page[^s]").Count;
+    }
+
+    /// <summary>Équipe dont les joueurs portent des compétences réparties en catégories.</summary>
+    private static Team EquipeAvecCompetences(int nbCategories, int parCategorie)
+    {
+        var equipe = MinimalTeam();
+        var joueur = new TeamPlayer
+        {
+            Numero = 1,
+            Nom = "Porteur de compétences",
+            PointsStarPlayer = 0,
+            Blessures = [],
+            Competences = []
+        };
+        equipe.Joueurs = [joueur];
+
+        var categories = new[] { SkillCategory.Agilite, SkillCategory.Force, SkillCategory.Generale };
+
+        for (var c = 0; c < nbCategories; c++)
+        {
+            for (var i = 0; i < parCategorie; i++)
+            {
+                joueur.Competences.Add(new TeamPlayerSkill
+                {
+                    EstCompetenceDepart = false,
+                    Skill = new Skill
+                    {
+                        Id = c * 100 + i,
+                        Nom = $"Comp {c}-{i}",
+                        Description = "Description courte de la compétence, une ligne.",
+                        Categorie = categories[c % categories.Length]
+                    }
+                });
+            }
+        }
+
+        return equipe;
+    }
+
+    [Fact]
     public void GenererFeuilleEquipe_ParDefaut_ResteEnPortrait()
     {
         // #4 : l'orientation est une option, le portrait reste le comportement par défaut

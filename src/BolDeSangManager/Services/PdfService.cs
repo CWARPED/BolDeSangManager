@@ -227,30 +227,96 @@ public class PdfService
 
                         if (toutesCompetences.Count > 0)
                         {
-                            col.Item().PaddingTop(14).Text("Rappel des Compétences")
-                                .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
-                            col.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
-
-                            string? lastCat = null;
-                            col.Item().PaddingTop(6).Column(comp =>
+                            // Titre, filet et contenu dans un SEUL item : sinon QuestPDF
+                            // peut couper entre eux et laisser le titre orphelin en bas
+                            // de page, le rappel commençant sur la page suivante.
+                            col.Item().PaddingTop(14).Column(bloc =>
                             {
-                                foreach (var skill in toutesCompetences)
+                            bloc.Item().Text("Rappel des Compétences")
+                                .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
+                            bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
+
+                            // En paysage la largeur utile passe à ~267 mm, mais une
+                            // description de compétence tient en une ligne : le rappel
+                            // s'étalait donc sur une colonne unique, moitié droite vide,
+                            // et débordait sur une 2e page. On répartit en deux colonnes
+                            // côte à côte pour occuper la largeur réellement disponible.
+                            //
+                            // Découpe par CATÉGORIE et non par nombre de lignes : couper
+                            // une catégorie en deux placerait son titre dans une colonne
+                            // et une partie de ses compétences dans l'autre.
+                            var parCategorie = toutesCompetences
+                                .GroupBy(s => s.Categorie.ToString())
+                                .Select(g => (Titre: g.Key, Skills: g.ToList()))
+                                .ToList();
+
+                            void RendreGroupes(
+                                QuestPDF.Infrastructure.IContainer cible,
+                                List<(string Titre, List<Skill> Skills)> groupes,
+                                int largeurNom)
+                            {
+                                cible.Column(comp =>
                                 {
-                                    var cat = skill.Categorie.ToString();
-                                    if (cat != lastCat)
+                                    var premier = true;
+                                    foreach (var (titre, skills) in groupes)
                                     {
-                                        comp.Item().PaddingTop(lastCat is null ? 0 : 6)
-                                            .Text(cat).Bold().FontSize(8)
+                                        comp.Item().PaddingTop(premier ? 0 : 6)
+                                            .Text(titre).Bold().FontSize(8)
                                             .FontColor(Colors.Red.Darken2);
-                                        lastCat = cat;
+                                        premier = false;
+
+                                        foreach (var skill in skills)
+                                        {
+                                            comp.Item().PaddingVertical(2).PaddingLeft(8).Row(row =>
+                                            {
+                                                row.ConstantItem(largeurNom)
+                                                    .Text(skill.Nom).Bold().FontSize(8);
+                                                row.RelativeItem().Text(skill.Description).FontSize(8)
+                                                    .FontColor(Colors.Grey.Darken2);
+                                            });
+                                        }
                                     }
-                                    comp.Item().PaddingVertical(2).PaddingLeft(8).Row(row =>
+                                });
+                            }
+
+                            if (paysage && parCategorie.Count > 1)
+                            {
+                                // Équilibrage sur le nombre de compétences, titre compris,
+                                // pour que les deux colonnes finissent à peu près à la
+                                // même hauteur.
+                                var total = parCategorie.Sum(g => g.Skills.Count + 1);
+                                var gauche = new List<(string, List<Skill>)>();
+                                var droite = new List<(string, List<Skill>)>();
+                                var cumul = 0;
+
+                                foreach (var groupe in parCategorie)
+                                {
+                                    var poids = groupe.Skills.Count + 1;
+                                    // Tant qu'on n'a pas dépassé la moitié, on remplit la
+                                    // colonne de gauche ; le groupe qui fait basculer y
+                                    // reste s'il déborde moins qu'il ne manquerait à droite.
+                                    if (cumul + poids <= (total + 1) / 2 || gauche.Count == 0)
                                     {
-                                        row.ConstantItem(110).Text(skill.Nom).Bold().FontSize(8);
-                                        row.RelativeItem().Text(skill.Description).FontSize(8)
-                                            .FontColor(Colors.Grey.Darken2);
-                                    });
+                                        gauche.Add(groupe);
+                                        cumul += poids;
+                                    }
+                                    else
+                                    {
+                                        droite.Add(groupe);
+                                    }
                                 }
+
+                                bloc.Item().PaddingTop(6).Row(row =>
+                                {
+                                    RendreGroupes(row.RelativeItem(), gauche, 95);
+                                    row.ConstantItem(16);   // gouttière entre les colonnes
+                                    RendreGroupes(row.RelativeItem(), droite, 95);
+                                });
+                            }
+                            else
+                            {
+                                RendreGroupes(bloc.Item().PaddingTop(6), parCategorie, 110);
+                            }
                             });
                         }
                         else
