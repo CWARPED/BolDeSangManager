@@ -279,7 +279,30 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
-        logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count);
+        // Cloner les définitions de staff. Étape obligatoire : sans elle, une
+        // nouvelle édition de règles naîtrait sans aucun staff et les ligues
+        // créées dessus n'auraient ni fans, ni relances, ni apothicaire.
+        var sourceStaff = await db.StaffTypes
+            .Where(s => s.RulesVersionId == sourceVersionId)
+            .ToListAsync();
+
+        foreach (var src in sourceStaff)
+            db.StaffTypes.Add(new StaffDefinition
+            {
+                RulesVersionId       = destVersionId,
+                Nom                  = src.Nom,
+                Description          = src.Description,
+                Ordre                = src.Ordre,
+                EstActif             = src.EstActif,
+                Cout                 = src.Cout,
+                CoutDepuisTypeEquipe = src.CoutDepuisTypeEquipe,
+                MinCreation          = src.MinCreation,
+                MaxCreation          = src.MaxCreation,
+                MaxLigue             = src.MaxLigue
+            });
+        await db.SaveChangesAsync();
+
+        logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types, {NbStaff} staff)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count, sourceStaff.Count);
     }
 
     /// <summary>
@@ -388,6 +411,13 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
             var categories = await db.SkillCategories.Where(c => c.RulesVersionId == id).ToListAsync();
             db.SkillCategories.RemoveRange(categories);
+            await db.SaveChangesAsync();
+
+            // Staff de la version. Les copies déjà prises par les ligues
+            // (LeagueStaffType) survivent : leur FK vers StaffType est SetNull,
+            // sinon supprimer une version viderait le staff de ligues en cours.
+            var staffTypes = await db.StaffTypes.Where(s => s.RulesVersionId == id).ToListAsync();
+            db.StaffTypes.RemoveRange(staffTypes);
             await db.SaveChangesAsync();
 
             db.RulesVersions.Remove(version);

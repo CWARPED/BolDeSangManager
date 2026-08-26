@@ -9,7 +9,8 @@ namespace BolDeSangManager.Services;
 public class LeagueService(
     ApplicationDbContext db,
     ILogger<LeagueService> logger,
-    IAuthorizationService authService)
+    IAuthorizationService authService,
+    StaffService staffService)
 {
     public async Task<List<League>> GetAllLiguesAsync() =>
         await db.Leagues
@@ -46,6 +47,12 @@ public class LeagueService(
 
         db.Leagues.Add(ligue);
         await db.SaveChangesAsync();
+
+        // Le staff des règles est COPIÉ dans la ligue : le commissaire pourra
+        // l'ajuster pour son format sans toucher aux règles, et une évolution
+        // ultérieure des règles ne rétro-modifiera pas cette ligue.
+        await staffService.CopierVersLigueAsync(ligue.Id, ligue.RulesVersionId);
+
         logger.LogInformation("Ligue créée : {NomLigue} (id={Id}) par commissaire {CommissaireId}", ligue.Nom, ligue.Id, commissaireId);
         return ligue;
     }

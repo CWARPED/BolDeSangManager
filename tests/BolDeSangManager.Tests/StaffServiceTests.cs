@@ -1,0 +1,309 @@
+using BolDeSangManager.Data;
+using BolDeSangManager.Data.Models;
+using BolDeSangManager.Services;
+using BolDeSangManager.Tests.Helpers;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging.Abstractions;
+
+namespace BolDeSangManager.Tests;
+
+/// <summary>
+/// Staff configurable : définitions portées par les règles, copiées dans la
+/// ligue, quantités détenues par les équipes.
+/// </summary>
+public class StaffServiceTests : IDisposable
+{
+    private readonly TestDbFactory _factory = new();
+    public void Dispose() => _factory.Dispose();
+
+    private static StaffService CreateService(ApplicationDbContext db) =>
+        new(db, NullLogger<StaffService>.Instance);
+
+    private static StaffDefinition Def(int versionId, string nom, int cout = 10_000,
+        int min = 0, int max = 6, int? maxLigue = null, bool coutRace = false) =>
+        new()
+        {
+            RulesVersionId = versionId, Nom = nom, Cout = cout,
+            MinCreation = min, MaxCreation = max, MaxLigue = maxLigue,
+            CoutDepuisTypeEquipe = coutRace
+        };
+
+    // ─── Définitions côté règles ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task AjouterStaffType_EnregistreLaDefinition()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, rv) = await DataSeeder.SeedGameAsync(db);
+        var svc = CreateService(db);
+
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Sorcier de touche", 30_000, max: 2));
+
+        var liste = await svc.GetStaffTypesAsync(rv.Id);
+        Assert.Contains(liste, s => s.Nom == "Sorcier de touche" && s.Cout == 30_000);
+    }
+
+    [Fact]
+    public async Task AjouterStaffType_RefuseUnNomDejaPrisDansLaVersion()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, rv) = await DataSeeder.SeedGameAsync(db);
+        var svc = CreateService(db);
+
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Apothicaire"));
+
+        // insensible à la casse, comme partout ailleurs dans le projet
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AjouterStaffTypeAsync(Def(rv.Id, "APOTHICAIRE")));
+    }
+
+    [Fact]
+    public async Task AjouterStaffType_RefuseDesBornesIncoherentes()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, rv) = await DataSeeder.SeedGameAsync(db);
+        var svc = CreateService(db);
+
+        // min > max
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AjouterStaffTypeAsync(Def(rv.Id, "Incoherent", min: 5, max: 2)));
+
+        // plafond de ligue sous le max de création : l'équipe naîtrait hors-la-loi
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.AjouterStaffTypeAsync(Def(rv.Id, "Plafond bas", min: 0, max: 6, maxLigue: 3)));
+    }
+
+    // ─── Copie vers la ligue ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task CopierVersLigue_ReprendLesValeursDesRegles()
+    {
+        await using var db = _factory.CreateContext();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var coach = DataSeeder.CreateUser("com_copie");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id);
+
+        var svc = CreateService(db);
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Cheerleaders", 10_000, max: 6));
+        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
+
+        var staffLigue = await svc.GetStaffLigueAsync(ligue.Id);
+        var chee = Assert.Single(staffLigue, s => s.Nom == "Cheerleaders");
+        Assert.Equal(10_000, chee.Cout);
+        Assert.Equal(6, chee.MaxCreation);
+    }
+
+    [Fact]
+    public async Task CopierVersLigue_NeFigePasLePrixDunStaffTarifeParRace()
+    {
+        // Les relances coûtent plus cher aux Nains qu'aux Elfes : figer un prix
+        // unique dans la ligue casserait la règle.
+        await using var db = _factory.CreateContext();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var coach = DataSeeder.CreateUser("com_race");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id);
+
+        var svc = CreateService(db);
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Relances", cout: 0, max: 8, maxLigue: 8, coutRace: true));
+        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
+
+        var relances = Assert.Single(await svc.GetStaffLigueAsync(ligue.Id), s => s.Nom == "Relances");
+        Assert.True(relances.CoutDepuisTypeEquipe);
+        Assert.Equal(0, relances.Cout);
+    }
+
+    [Fact]
+    public async Task CoutUnitaire_PrendLePrixDeLaRacePourUnStaffTarifeParRace()
+    {
+        var teamType = new TeamType { Nom = "Nains", CoutRelance = 70_000 };
+
+        var relances = new LeagueStaffType { Nom = "Relances", CoutDepuisTypeEquipe = true, Cout = 0 };
+        var fans     = new LeagueStaffType { Nom = "Fans dévoués", Cout = 10_000 };
+
+        Assert.Equal(70_000, StaffService.CoutUnitaire(relances, teamType));
+        Assert.Equal(10_000, StaffService.CoutUnitaire(fans, teamType));
+    }
+
+    [Fact]
+    public async Task CopierVersLigue_EstIdempotent()
+    {
+        await using var db = _factory.CreateContext();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var coach = DataSeeder.CreateUser("com_idem");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id);
+
+        var svc = CreateService(db);
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Apothicaire", 50_000, max: 1, maxLigue: 1));
+
+        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
+        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);   // second appel
+
+        Assert.Single(await svc.GetStaffLigueAsync(ligue.Id));
+    }
+
+    // ─── Bornes appliquées aux équipes ────────────────────────────────────────
+
+    private async Task<(int ligueId, int staffId, int teamId)> SetupEquipeAsync(
+        ApplicationDbContext db, int min = 0, int max = 6, int? maxLigue = null)
+    {
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var coach = DataSeeder.CreateUser($"c_{Guid.NewGuid():N}");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id);
+        var equipe = await DataSeeder.SeedTeamAsync(db, ligue.Id, coach.Id, teamType.Id);
+
+        var svc = CreateService(db);
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Fans dévoués", 10_000, min, max, maxLigue));
+        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
+
+        var staff = Assert.Single(await svc.GetStaffLigueAsync(ligue.Id));
+        return (ligue.Id, staff.Id, equipe.Id);
+    }
+
+    [Fact]
+    public async Task DefinirQuantite_RespecteLesBornesDeCreation()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, staffId, teamId) = await SetupEquipeAsync(db, min: 1, max: 3);
+        var svc = CreateService(db);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirQuantiteAsync(teamId, staffId, 0, aLaCreation: true));   // sous le min
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirQuantiteAsync(teamId, staffId, 4, aLaCreation: true));   // au-dessus du max
+
+        await svc.DefinirQuantiteAsync(teamId, staffId, 2, aLaCreation: true);
+        Assert.Equal(2, await svc.GetQuantiteAsync(teamId, staffId));
+    }
+
+    [Fact]
+    public async Task DefinirQuantite_EnCoursDeLigue_IgnoreLeMaxDeCreationMaisPasLePlafond()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, staffId, teamId) = await SetupEquipeAsync(db, min: 1, max: 3, maxLigue: 8);
+        var svc = CreateService(db);
+
+        // 5 dépasse le max de création (3) mais reste sous le plafond de ligue (8)
+        await svc.DefinirQuantiteAsync(teamId, staffId, 5, aLaCreation: false);
+        Assert.Equal(5, await svc.GetQuantiteAsync(teamId, staffId));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirQuantiteAsync(teamId, staffId, 9, aLaCreation: false));
+    }
+
+    [Fact]
+    public async Task DefinirQuantite_SansPlafond_NestPasLimitee()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, staffId, teamId) = await SetupEquipeAsync(db, maxLigue: null);
+        var svc = CreateService(db);
+
+        await svc.DefinirQuantiteAsync(teamId, staffId, 250, aLaCreation: false);
+        Assert.Equal(250, await svc.GetQuantiteAsync(teamId, staffId));
+    }
+
+    [Fact]
+    public async Task PlafondAbaisse_BloqueLesAchatsMaisConserveLexistant()
+    {
+        // Décision produit : pas de vente forcée.
+        await using var db = _factory.CreateContext();
+        var (ligueId, staffId, teamId) = await SetupEquipeAsync(db, max: 6, maxLigue: 10);
+        var svc = CreateService(db);
+
+        await svc.DefinirQuantiteAsync(teamId, staffId, 9, aLaCreation: false);
+
+        var staff = Assert.Single(await svc.GetStaffLigueAsync(ligueId));
+        staff.MaxLigue = 5;
+        staff.MaxCreation = 5;
+        await svc.ModifierStaffLigueAsync(staff);
+
+        // l'équipe garde ses 9…
+        Assert.Equal(9, await svc.GetQuantiteAsync(teamId, staffId));
+        // …mais ne peut plus en acheter
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirQuantiteAsync(teamId, staffId, 10, aLaCreation: false));
+    }
+
+    [Fact]
+    public async Task DefinirQuantite_RefuseUnStaffDesactive()
+    {
+        await using var db = _factory.CreateContext();
+        var (ligueId, staffId, teamId) = await SetupEquipeAsync(db);
+        var svc = CreateService(db);
+
+        var staff = Assert.Single(await svc.GetStaffLigueAsync(ligueId));
+        staff.EstActif = false;
+        await svc.ModifierStaffLigueAsync(staff);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(
+            () => svc.DefinirQuantiteAsync(teamId, staffId, 1, aLaCreation: false));
+    }
+
+    // ─── Écrêtage ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Ecreter_AppliquePlancherEtPlafond()
+    {
+        // Le plafond est DUR : il vaut pour les gains de match comme pour les achats.
+        Assert.Equal(12, StaffService.Ecreter(14, minimum: 1, maxLigue: 12));
+        Assert.Equal(1,  StaffService.Ecreter(-3, minimum: 1, maxLigue: 12));
+        Assert.Equal(7,  StaffService.Ecreter(7,  minimum: 1, maxLigue: 12));
+        Assert.Equal(99, StaffService.Ecreter(99, minimum: 1, maxLigue: null));
+    }
+
+    // ─── Clone / export / suppression de version ──────────────────────────────
+
+    [Fact]
+    public async Task ClonerVersion_EmporteLeStaff()
+    {
+        // Oubli classique du projet : sans ça, une nouvelle édition de règles
+        // naîtrait sans aucun staff.
+        await using var db = _factory.CreateContext();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var svc = CreateService(db);
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Apothicaire", 50_000, max: 1, maxLigue: 1));
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Relances", 0, max: 8, maxLigue: 8, coutRace: true));
+
+        var edit = new DataEditService(db, NullLogger<DataEditService>.Instance);
+        var nouvelle = await edit.CreerVersionAsync(game.Id, "Saison 4", cloneFromVersionId: rv.Id);
+
+        var clone = await svc.GetStaffTypesAsync(nouvelle.Id);
+        Assert.Equal(2, clone.Count);
+        var relances = Assert.Single(clone, s => s.Nom == "Relances");
+        Assert.True(relances.CoutDepuisTypeEquipe);
+        Assert.Equal(8, relances.MaxLigue);
+    }
+
+    [Fact]
+    public async Task SupprimerDefinition_NeVidePasLeStaffDesLiguesDejaCreees()
+    {
+        // La copie de ligue doit survivre à la suppression de sa définition
+        // d'origine (FK SetNull), sinon une ligue en cours perdrait son staff.
+        await using var db = _factory.CreateContext();
+        var (game, rv) = await DataSeeder.SeedGameAsync(db);
+        var coach = DataSeeder.CreateUser("com_del");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+
+        var svc = CreateService(db);
+        await svc.AjouterStaffTypeAsync(Def(rv.Id, "Cheerleaders", 10_000, max: 6));
+
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, coach.Id);
+        await svc.CopierVersLigueAsync(ligue.Id, rv.Id);
+
+        foreach (var def in await svc.GetStaffTypesAsync(rv.Id))
+            await svc.SupprimerStaffTypeAsync(def.Id);
+
+        var chee = Assert.Single(await svc.GetStaffLigueAsync(ligue.Id));
+        Assert.Equal("Cheerleaders", chee.Nom);
+        Assert.Null(chee.StaffTypeId);          // le lien est coupé, la copie reste
+    }
+}

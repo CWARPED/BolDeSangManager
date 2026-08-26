@@ -16,7 +16,8 @@ public class LeagueServiceTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private LeagueService CreateService(ApplicationDbContext db) =>
-        new(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        new(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(),
+            new StaffService(db, NullLogger<StaffService>.Instance));
 
     // ─── Setup helpers ────────────────────────────────────────────────────────
 
@@ -370,7 +371,7 @@ public class LeagueServiceTests : IDisposable
         var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
         // Stub configured to grant access for the commissaire on this specific league
         var stub = new StubAuthorizationService(peutGerer: (commissaire.Id, ligue.Id));
-        var svc = new LeagueService(db, NullLogger<LeagueService>.Instance, stub);
+        var svc = new LeagueService(db, NullLogger<LeagueService>.Instance, stub, new StaffService(db, NullLogger<StaffService>.Instance));
 
         var result = await svc.EstCommissaireAsync(ligue.Id, commissaire.Id);
 
@@ -412,7 +413,7 @@ public class LeagueServiceTests : IDisposable
         db.TeamPlayers.AddRange(j1, j2);
         await db.SaveChangesAsync();
 
-        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(), new StaffService(db, NullLogger<StaffService>.Instance));
         await service.LancerPhaseDeReposAsync(ligue.Id);
 
         var maj = await db.Leagues.FindAsync(ligue.Id);
@@ -454,7 +455,7 @@ public class LeagueServiceTests : IDisposable
         await db.SaveChangesAsync();
 
         var teamService = new TeamService(db, NullLogger<TeamService>.Instance);
-        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(), new StaffService(db, NullLogger<StaffService>.Instance));
 
         await service.ValiderApresMatchReposAsync(
             ligueId: ligue.Id,
@@ -493,7 +494,7 @@ public class LeagueServiceTests : IDisposable
         await db.SaveChangesAsync();
 
         var teamService = new TeamService(db, NullLogger<TeamService>.Instance);
-        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(), new StaffService(db, NullLogger<StaffService>.Instance));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.ValiderApresMatchReposAsync(ligue.Id, equipe.Id, [], [], 0, teamService));
@@ -515,7 +516,7 @@ public class LeagueServiceTests : IDisposable
         await db.SaveChangesAsync();
 
         var teamService = new TeamService(db, NullLogger<TeamService>.Instance);
-        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(), new StaffService(db, NullLogger<StaffService>.Instance));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             service.ValiderApresMatchReposAsync(ligue.Id, equipe.Id, [], [], 0, teamService));
@@ -543,7 +544,7 @@ public class LeagueServiceTests : IDisposable
         );
         await db.SaveChangesAsync();
 
-        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(), new StaffService(db, NullLogger<StaffService>.Instance));
         var top = await service.GetTopJoueursParPspAsync(ligue.Id, limit: 2);
 
         Assert.Equal(2, top.Count);
@@ -569,7 +570,7 @@ public class LeagueServiceTests : IDisposable
         db.TeamPlayers.Add(joueur);
         await db.SaveChangesAsync();
 
-        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService());
+        var service = new LeagueService(db, NullLogger<LeagueService>.Instance, new StubAuthorizationService(), new StaffService(db, NullLogger<StaffService>.Instance));
         await service.AttribuerAwardAsync(ligue.Id, AwardType.MVP, teamPlayerId: joueur.Id);
 
         var awards = await service.GetAwardsAsync(ligue.Id);

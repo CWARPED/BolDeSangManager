@@ -35,6 +35,9 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<LeagueAward> LeagueAwards => Set<LeagueAward>();
     public DbSet<TeamTypeKeywordLimit> TeamTypeKeywordLimits => Set<TeamTypeKeywordLimit>();
     public DbSet<LeagueCommissioner> LeagueCommissioners => Set<LeagueCommissioner>();
+    public DbSet<StaffDefinition> StaffTypes => Set<StaffDefinition>();
+    public DbSet<LeagueStaffType> LeagueStaffTypes => Set<LeagueStaffType>();
+    public DbSet<TeamStaff> TeamStaffs => Set<TeamStaff>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -47,6 +50,48 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // PoolPositionSkill — clé composite (miroir de PlayerPositionSkill)
         builder.Entity<PoolPositionSkill>()
             .HasKey(pps => new { pps.PoolPositionId, pps.SkillId });
+
+        // ── Staff configurable ────────────────────────────────────────────────
+        // StaffType → RulesVersion : cascade, comme la Réserve. Supprimer une
+        // version emporte ses définitions de staff.
+        builder.Entity<StaffDefinition>()
+            .HasOne(s => s.RulesVersion)
+            .WithMany(v => v.StaffTypes)
+            .HasForeignKey(s => s.RulesVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // LeagueStaffType → League : cascade (supprimer la ligue emporte ses copies).
+        builder.Entity<LeagueStaffType>()
+            .HasOne(l => l.League)
+            .WithMany(g => g.StaffTypes)
+            .HasForeignKey(l => l.LeagueId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // LeagueStaffType → StaffType : SetNull. La copie doit survivre à la
+        // suppression de sa définition d'origine, sinon supprimer une version de
+        // règles effacerait le staff de ligues déjà lancées.
+        builder.Entity<LeagueStaffType>()
+            .HasOne(l => l.StaffDefinition)
+            .WithMany()
+            .HasForeignKey(l => l.StaffTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.Entity<TeamStaff>()
+            .HasOne(t => t.Team)
+            .WithMany(e => e.Staff)
+            .HasForeignKey(t => t.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<TeamStaff>()
+            .HasOne(t => t.LeagueStaffType)
+            .WithMany(l => l.Achats)
+            .HasForeignKey(t => t.LeagueStaffTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Une équipe ne détient qu'une ligne par type de staff.
+        builder.Entity<TeamStaff>()
+            .HasIndex(t => new { t.TeamId, t.LeagueStaffTypeId })
+            .IsUnique();
 
         // PoolPosition → RulesVersion (cascade : suppression version => suppression pool)
         builder.Entity<PoolPosition>()

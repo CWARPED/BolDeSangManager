@@ -18,7 +18,12 @@ public class Team
     // Finances
     public int Tresorerie { get; set; } = 0;
 
-    // Staff
+    // Staff — colonnes HISTORIQUES.
+    // Conservées en base (migration purement additive, principe #1 : aucune
+    // équipe live ne doit casser), mais elles ne sont plus la source de vérité :
+    // le staff est désormais porté par la collection Staff ci-dessous, qui gère
+    // une liste ouverte de types configurés dans les règles.
+    // Ne pas lire ces champs dans du code nouveau.
     public int FansDevoues { get; set; } = 0;
     public int NombreRelances { get; set; } = 0;
     public int NombreCoachsAssistants { get; set; } = 0;
@@ -38,6 +43,9 @@ public class Team
     public DateTime CreeLe { get; set; } = DateTime.UtcNow;
 
     public ICollection<TeamPlayer> Joueurs { get; set; } = [];
+
+    /// <summary>Staff détenu par l'équipe (source de vérité depuis le dev staff).</summary>
+    public ICollection<TeamStaff> Staff { get; set; } = [];
 }
 
 public class TeamPlayer

@@ -55,6 +55,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .OrderBy(c => c.Nom)
             .ToListAsync();
 
+        var staffTypes = await db.StaffTypes
+            .Where(s => s.RulesVersionId == rulesVersionId)
+            .OrderBy(s => s.Ordre).ThenBy(s => s.Nom)
+            .ToListAsync();
+
         // F3 : chaque export produit une nouvelle révision, persistée sur la
         // version. Sans persistance le numéro repartirait à 1 à chaque fois et
         // ne prouverait rien.
@@ -109,7 +114,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             XpParPasse: version.XpParPasse,
             XpParInterception: version.XpParInterception,
             XpParElimination: version.XpParElimination,
-            XpBonusMvp: version.XpBonusMvp
+            XpBonusMvp: version.XpBonusMvp,
+            Staff: staffTypes.Select(s => new StaffTypeGdDto(
+                s.Nom, s.Description, s.Ordre, s.EstActif, s.Cout,
+                s.CoutDepuisTypeEquipe, s.MinCreation, s.MaxCreation, s.MaxLigue
+            )).ToList()
         );
 
         var json = JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
@@ -342,6 +351,26 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 await db.SaveChangesAsync();
             }
 
+            // Staff configurable. Absent d'un JSON antérieur : la version reprend
+            // alors le staff standard, matérialisé par la migration.
+            var staffDto = dto.Staff is { Count: > 0 } ? dto.Staff : StaffParDefaut();
+
+            foreach (var s in staffDto)
+                db.StaffTypes.Add(new StaffDefinition
+                {
+                    RulesVersionId       = version.Id,
+                    Nom                  = s.Nom,
+                    Description          = s.Description,
+                    Ordre                = s.Ordre,
+                    EstActif             = s.EstActif,
+                    Cout                 = s.Cout,
+                    CoutDepuisTypeEquipe = s.CoutDepuisTypeEquipe,
+                    MinCreation          = s.MinCreation,
+                    MaxCreation          = s.MaxCreation,
+                    MaxLigue             = s.MaxLigue
+                });
+            await db.SaveChangesAsync();
+
             await tx.CommitAsync();
             logger.LogInformation("Import game data '{V}' : {NbTT} types, {NbS} skills, {NbErr} avertissements",
                 versionNom, dto.TypesEquipes.Count, dto.Skills.Count, errors.Count);
@@ -354,6 +383,19 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             return (false, [$"Erreur lors de l'import : {ex.Message}"]);
         }
     }
+
+    /// <summary>
+    /// Staff standard, utilisé quand un JSON antérieur à cette fonctionnalité
+    /// est importé. Mêmes valeurs que le backfill de la migration.
+    /// </summary>
+    private static List<StaffTypeGdDto> StaffParDefaut() =>
+    [
+        new("Fans dévoués", "Public fidèle de l'équipe. Influence l'affluence et les gains de match.", 1, true, 10_000, false, 1, 9, null),
+        new("Relances", "Relances d'équipe disponibles au début de chaque match. Leur prix dépend de la race.", 2, true, 0, true, 0, 8, 8),
+        new("Coachs assistants", "Chaque coach assistant aide à récupérer l'avantage de terrain.", 3, true, 10_000, false, 0, 6, null),
+        new("Cheerleaders", "Chaque cheerleader aide à récupérer l'avantage de terrain.", 4, true, 10_000, false, 0, 6, null),
+        new("Apothicaire", "Permet de relancer un jet de blessure une fois par match.", 5, true, 50_000, false, 0, 1, 1),
+    ];
 
     // ── Réserve seule ─────────────────────────────────────────────────────────
 
@@ -538,7 +580,23 @@ record GameDataExportDto(
     int? XpParPasse = null,
     int? XpParInterception = null,
     int? XpParElimination = null,
-    int? XpBonusMvp = null
+    int? XpBonusMvp = null,
+    // Staff configurable. Optionnel : un JSON exporté avant cette fonctionnalité
+    // reste importable, la version reprend alors le staff standard.
+    List<StaffTypeGdDto>? Staff = null
+);
+
+/// <summary>Définition de staff exportée. Référencée par NOM, comme le reste.</summary>
+record StaffTypeGdDto(
+    string Nom,
+    string Description,
+    int Ordre,
+    bool EstActif,
+    int Cout,
+    bool CoutDepuisTypeEquipe,
+    int MinCreation,
+    int MaxCreation,
+    int? MaxLigue
 );
 
 record ReserveExportDto(

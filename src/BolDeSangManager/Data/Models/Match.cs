@@ -54,6 +54,21 @@ public class MatchSheet
     public int VariationFansDomicile { get; set; }
     public int VariationFansExterieur { get; set; }
 
+    /// <summary>
+    /// Variation de fans RÉELLEMENT appliquée, après écrêtage par le plancher (1)
+    /// et le plafond de ligue. L'annulation d'un match doit soustraire cette
+    /// valeur-là, pas la variation théorique saisie ci-dessus.
+    ///
+    /// Sans ça : plafond 12, équipe à 11 qui gagne +3 → écrêtée à 12 ; annuler le
+    /// match ferait 12 − 3 = 9 alors qu'elle avait 11. Deux fans disparaissent en
+    /// silence à chaque annulation.
+    ///
+    /// Nullable : les feuilles saisies avant cette colonne n'ont pas
+    /// l'information, on retombe alors sur la variation théorique.
+    /// </summary>
+    public int? VariationFansDomicileAppliquee { get; set; }
+    public int? VariationFansExterieurAppliquee { get; set; }
+
     // Inducements pré-match (JSON simple: {"entrainement": 2, "potDeVin": 1})
     public string InducementsDomicile { get; set; } = "{}";
     public string InducementsExterieur { get; set; } = "{}";

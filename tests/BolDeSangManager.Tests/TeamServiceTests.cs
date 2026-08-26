@@ -161,18 +161,35 @@ public class TeamServiceTests : IDisposable
         await using var db = _factory.CreateContext();
         var svc = CreateService(db);
 
+        // Le staff est désormais une liste ouverte : on compose les lignes
+        // TeamStaff plutôt que les anciennes colonnes dédiées.
         var equipe = new Team
         {
             Nom = "VEA Test",
             CoachId = coach.Id,
             LeagueId = ligue.Id,
             TeamTypeId = teamType.Id,
-            NombreRelances = 2,    // 2 × 50 000 = 100 000
-            FansDevoues = 3,       // 3 × 10 000 = 30 000
-            NombreCoachsAssistants = 1,  // 10 000
-            NombreCheerleaders = 0,
-            Apothicaire = false
+            TeamType = teamType          // requis : le prix des relances vient de la race
         };
+        // Relances : prix pris sur la race (CoutRelance), pas sur la ligue.
+        equipe.Staff.Add(new TeamStaff
+        {
+            Quantite = 2,
+            LeagueStaffType = new LeagueStaffType
+            { Nom = "Relances", CoutDepuisTypeEquipe = true, LeagueId = ligue.Id }
+        });
+        equipe.Staff.Add(new TeamStaff
+        {
+            Quantite = 3,
+            LeagueStaffType = new LeagueStaffType
+            { Nom = "Fans dévoués", Cout = 10_000, LeagueId = ligue.Id }
+        });
+        equipe.Staff.Add(new TeamStaff
+        {
+            Quantite = 1,
+            LeagueStaffType = new LeagueStaffType
+            { Nom = "Coachs assistants", Cout = 10_000, LeagueId = ligue.Id }
+        });
         equipe.Joueurs.Add(new TeamPlayer
         {
             PlayerPositionId = position.Id,
@@ -200,8 +217,7 @@ public class TeamServiceTests : IDisposable
             CoachId = coach.Id,
             LeagueId = ligue.Id,
             TeamTypeId = teamType.Id,
-            NombreRelances = 0,
-            FansDevoues = 0
+            TeamType = teamType
         };
         equipe.Joueurs.Add(new TeamPlayer
             { PlayerPositionId = position.Id, Nom = "Vivant", Numero = 1, ValeurActuelle = 60_000, RecruteLe = DateTime.UtcNow });
@@ -228,10 +244,15 @@ public class TeamServiceTests : IDisposable
             CoachId = coach.Id,
             LeagueId = ligue.Id,
             TeamTypeId = teamType.Id,
-            NombreRelances = 0,
-            FansDevoues = 0,
-            Apothicaire = true
+            TeamType = teamType
         };
+        // L'apothicaire n'est plus un booléen : c'est un staff plafonné à 1.
+        equipe.Staff.Add(new TeamStaff
+        {
+            Quantite = 1,
+            LeagueStaffType = new LeagueStaffType
+            { Nom = "Apothicaire", Cout = 50_000, MaxLigue = 1, LeagueId = ligue.Id }
+        });
 
         var vea = svc.CalculerVEA(equipe);
         Assert.Equal(50_000, vea);

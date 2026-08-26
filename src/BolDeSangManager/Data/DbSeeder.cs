@@ -114,6 +114,12 @@ public static class DbSeeder
         foreach (var versionId in new[] { versionBB.Id, versionDB.Id })
             categoriesParVersion[versionId] = await SeedCategoriesStandardAsync(db, versionId);
 
+        // Staff standard : sur une base NEUVE la migration de backfill n'a rien à
+        // reprendre, il faut donc créer les définitions ici — sinon une nouvelle
+        // installation n'aurait ni fans, ni relances, ni apothicaire.
+        foreach (var versionId in new[] { versionBB.Id, versionDB.Id })
+            await SeedStaffStandardAsync(db, versionId);
+
         foreach (var (versionId, gameType) in new[]
                  { (versionBB.Id, GameType.BloodBowl), (versionDB.Id, GameType.DungeonBowl) })
         {
@@ -124,6 +130,51 @@ public static class DbSeeder
                 db.Skills.Add(skill);
             }
         }
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Crée les cinq staff standard d'une version de règles. Mêmes valeurs que
+    /// le backfill de la migration AddStaffConfigurable, pour qu'une base neuve
+    /// et une base migrée partent du même état.
+    /// Idempotent : ne fait rien si la version a déjà du staff.
+    /// </summary>
+    private static async Task SeedStaffStandardAsync(ApplicationDbContext db, int versionId)
+    {
+        if (await db.StaffTypes.AnyAsync(s => s.RulesVersionId == versionId)) return;
+
+        db.StaffTypes.AddRange(
+            new StaffDefinition
+            {
+                RulesVersionId = versionId, Nom = "Fans dévoués", Ordre = 1,
+                Description = "Public fidèle de l'équipe. Influence l'affluence et les gains de match.",
+                Cout = 10_000, MinCreation = 1, MaxCreation = 9, MaxLigue = null
+            },
+            new StaffDefinition
+            {
+                RulesVersionId = versionId, Nom = "Relances", Ordre = 2,
+                Description = "Relances d'équipe disponibles au début de chaque match. Leur prix dépend de la race.",
+                Cout = 0, CoutDepuisTypeEquipe = true, MinCreation = 0, MaxCreation = 8, MaxLigue = 8
+            },
+            new StaffDefinition
+            {
+                RulesVersionId = versionId, Nom = "Coachs assistants", Ordre = 3,
+                Description = "Chaque coach assistant aide à récupérer l'avantage de terrain.",
+                Cout = 10_000, MinCreation = 0, MaxCreation = 6, MaxLigue = null
+            },
+            new StaffDefinition
+            {
+                RulesVersionId = versionId, Nom = "Cheerleaders", Ordre = 4,
+                Description = "Chaque cheerleader aide à récupérer l'avantage de terrain.",
+                Cout = 10_000, MinCreation = 0, MaxCreation = 6, MaxLigue = null
+            },
+            new StaffDefinition
+            {
+                RulesVersionId = versionId, Nom = "Apothicaire", Ordre = 5,
+                Description = "Permet de relancer un jet de blessure une fois par match.",
+                Cout = 50_000, MinCreation = 0, MaxCreation = 1, MaxLigue = 1
+            });
+
         await db.SaveChangesAsync();
     }
 

@@ -328,11 +328,72 @@ public class MatchService(
         domicile.Tresorerie += feuille.GainsDomicile;
         exterieur.Tresorerie += feuille.GainsExterieur;
 
-        // Variation des fans dévoués
-        domicile.FansDevoues = Math.Max(1, domicile.FansDevoues + feuille.VariationFansDomicile);
-        exterieur.FansDevoues = Math.Max(1, exterieur.FansDevoues + feuille.VariationFansExterieur);
+        // Variation des fans dévoués.
+        // Le plafond de ligue est DUR : il s'applique aussi aux fans gagnés par
+        // les résultats, pas seulement aux achats. On mémorise la variation
+        // RÉELLEMENT appliquée, car l'annulation doit soustraire celle-ci et non
+        // la variation théorique — sinon l'écrêtage fait disparaître des fans.
+        var plafondFans = await db.LeagueStaffTypes
+            .Where(l => l.LeagueId == domicile.LeagueId && l.Nom == StaffService.NomFans)
+            .Select(l => l.MaxLigue)
+            .FirstOrDefaultAsync();
+
+        feuille.VariationFansDomicileAppliquee =
+            await AppliquerVariationFansAsync(domicile, feuille.VariationFansDomicile, plafondFans);
+        feuille.VariationFansExterieurAppliquee =
+            await AppliquerVariationFansAsync(exterieur, feuille.VariationFansExterieur, plafondFans);
 
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Applique une variation de fans à une équipe en respectant le plancher (1)
+    /// et le plafond de ligue, et retourne la variation réellement appliquée.
+    /// </summary>
+    private async Task<int> AppliquerVariationFansAsync(Team equipe, int variation, int? plafond)
+    {
+        var ligne = await db.TeamStaffs
+            .Include(t => t.LeagueStaffType)
+            .FirstOrDefaultAsync(t => t.TeamId == equipe.Id
+                                   && t.LeagueStaffType.Nom == StaffService.NomFans);
+
+        var avant = ligne?.Quantite ?? equipe.FansDevoues;
+        var apres = StaffService.Ecreter(avant + variation, minimum: 1, maxLigue: plafond);
+
+        if (ligne is not null) ligne.Quantite = apres;
+        else if (apres > 0)
+        {
+            var type = await db.LeagueStaffTypes.FirstOrDefaultAsync(
+                l => l.LeagueId == equipe.LeagueId && l.Nom == StaffService.NomFans);
+            if (type is not null)
+                db.TeamStaffs.Add(new TeamStaff
+                {
+                    TeamId = equipe.Id, LeagueStaffTypeId = type.Id, Quantite = apres
+                });
+        }
+
+        // Colonne historique tenue à jour en miroir : les anciens écrans et les
+        // exports qui la lisent encore restent cohérents.
+        equipe.FansDevoues = apres;
+
+        return apres - avant;
+    }
+
+    /// <summary>
+    /// Retire d'une équipe une variation de fans précédemment appliquée.
+    /// </summary>
+    private async Task AnnulerVariationFansAsync(Team equipe, int variationAppliquee)
+    {
+        var ligne = await db.TeamStaffs
+            .Include(t => t.LeagueStaffType)
+            .FirstOrDefaultAsync(t => t.TeamId == equipe.Id
+                                   && t.LeagueStaffType.Nom == StaffService.NomFans);
+
+        var avant = ligne?.Quantite ?? equipe.FansDevoues;
+        var apres = Math.Max(1, avant - variationAppliquee);
+
+        if (ligne is not null) ligne.Quantite = apres;
+        equipe.FansDevoues = apres;
     }
 
     private async Task TraiterBlessuresAsync(List<MatchPlayerRecord> records, int matchId)
@@ -538,8 +599,15 @@ public class MatchService(
 
         dom.Tresorerie -= feuille.GainsDomicile;
         ext.Tresorerie -= feuille.GainsExterieur;
-        dom.FansDevoues = Math.Max(1, dom.FansDevoues - feuille.VariationFansDomicile);
-        ext.FansDevoues = Math.Max(1, ext.FansDevoues - feuille.VariationFansExterieur);
+        // Annulation des fans : on soustrait la variation RÉELLEMENT appliquée,
+        // pas la variation théorique. Avec un plafond (ou le plancher à 1), les
+        // deux diffèrent — soustraire la théorique ferait disparaître des fans à
+        // chaque annulation. Repli sur la théorique pour les feuilles saisies
+        // avant l'ajout de la colonne.
+        await AnnulerVariationFansAsync(
+            dom, feuille.VariationFansDomicileAppliquee ?? feuille.VariationFansDomicile);
+        await AnnulerVariationFansAsync(
+            ext, feuille.VariationFansExterieurAppliquee ?? feuille.VariationFansExterieur);
 
         // Inverser PSP des joueurs (chargement groupé)
         var pspIds = feuille.RecordsJoueurs.Select(r => r.TeamPlayerId).Distinct().ToList();

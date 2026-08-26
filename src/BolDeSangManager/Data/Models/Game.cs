@@ -56,4 +56,7 @@ public class RulesVersion
     public int XpBonusMvp { get; set; } = 4;
 
     public ICollection<PoolPosition> PoolPositions { get; set; } = [];
+
+    /// <summary>Définitions de staff livrées avec cette version de règles.</summary>
+    public ICollection<StaffDefinition> StaffTypes { get; set; } = [];
 }

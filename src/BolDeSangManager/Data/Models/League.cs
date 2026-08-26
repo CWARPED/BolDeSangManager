@@ -61,6 +61,11 @@ public class League
     public ICollection<PhaseDeReposValidation> ValidationsRepos { get; set; } = [];
     public ICollection<LeagueAward> Awards { get; set; } = [];
     public ICollection<LeagueCommissioner> CommissairesDeLigue { get; set; } = [];
+
+    /// <summary>
+    /// Copie du staff des règles, ajustable par le commissaire pour cette ligue.
+    /// </summary>
+    public ICollection<LeagueStaffType> StaffTypes { get; set; } = [];
 }
 
 public class Division

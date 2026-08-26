@@ -99,6 +99,7 @@ builder.Services.AddScoped<LeagueExportService>();
 builder.Services.AddScoped<GameDataExportService>();
 builder.Services.AddScoped<SettingsService>();
 builder.Services.AddScoped<DataEditService>();
+builder.Services.AddScoped<StaffService>();
 builder.Services.AddScoped<BolDeSangManager.Services.IAuthorizationService, BolDeSangManager.Services.AuthorizationService>();
 
 // QuestPDF

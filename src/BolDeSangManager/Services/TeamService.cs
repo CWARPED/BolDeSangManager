@@ -52,6 +52,8 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
                 .ThenInclude(c => c.Skill)
             .Include(t => t.Joueurs)
                 .ThenInclude(j => j.Blessures)
+            // Staff : indispensable au calcul de VEA, qui vaudrait sinon zéro.
+            .Include(t => t.Staff).ThenInclude(s => s.LeagueStaffType)
             .FirstOrDefaultAsync(t => t.Id == teamId);
 
     public async Task<List<Team>> GetEquipesCoachAsync(string coachId) =>
@@ -59,6 +61,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .Include(t => t.TeamType).ThenInclude(tt => tt.Game)
             .Include(t => t.League)
             .Include(t => t.Joueurs.Where(j => !j.EstMort && !j.EstRetraite))
+            .Include(t => t.Staff).ThenInclude(s => s.LeagueStaffType)
             .Where(t => t.CoachId == coachId)
             .OrderByDescending(t => t.CreeLe)
             .ToListAsync();
@@ -68,6 +71,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .Include(t => t.Coach)
             .Include(t => t.TeamType)
             .Include(t => t.Division)
+            .Include(t => t.Staff).ThenInclude(s => s.LeagueStaffType)
             .Where(t => t.LeagueId == ligueId)
             .OrderByDescending(t => t.PointsLigue)
             .ToListAsync();
@@ -328,19 +332,21 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     }
 
     // Valeur d'équipe actuelle (VEA)
+    //
+    // Le staff est désormais une liste ouverte (StaffType configuré dans les
+    // règles) : la somme est une boucle sur TeamStaff, plus une addition de
+    // colonnes en dur. Le prix des relances vient de la race, d'où le passage
+    // du TeamType à CoutUnitaire.
     public int CalculerVEA(Team equipe)
     {
         var totalJoueurs = equipe.Joueurs
             .Where(j => !j.EstMort && !j.EstRetraite)
             .Sum(j => j.ValeurActuelle);
 
-        var coutRelances = equipe.NombreRelances * (equipe.TeamType?.CoutRelance ?? 50_000);
-        var coutFans = equipe.FansDevoues * 10_000;
-        var coutCoachsAssistants = equipe.NombreCoachsAssistants * 10_000;
-        var coutCheerleaders = equipe.NombreCheerleaders * 10_000;
-        var coutApothicaire = equipe.Apothicaire ? 50_000 : 0;
+        var totalStaff = equipe.Staff.Sum(s =>
+            s.Quantite * StaffService.CoutUnitaire(s.LeagueStaffType, equipe.TeamType));
 
-        return totalJoueurs + coutRelances + coutFans + coutCoachsAssistants + coutCheerleaders + coutApothicaire;
+        return totalJoueurs + totalStaff;
     }
 
     /// <param name="rulesVersionId">

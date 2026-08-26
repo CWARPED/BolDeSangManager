@@ -302,6 +302,78 @@ public class MatchServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ModifierFeuille_AvecPlafondDeFans_NeFaitPasDisparaitreDesFans()
+    {
+        // Bug d'asymétrie : la validation écrête au plafond, l'annulation
+        // soustrayait la variation THÉORIQUE.
+        //   plafond 12, équipe à 11, gain +3 → écrêtée à 12
+        //   annulation : 12 − 3 = 9 … alors qu'elle avait 11. Deux fans perdus.
+        // On doit soustraire la variation RÉELLEMENT appliquée (+1).
+        var (dom, ext, _, _, match, saisiPar) = await SetupMatchContextAsync();
+
+        await using (var dbSetup = _factory.CreateContext())
+        {
+            var ligueId = (await dbSetup.Teams.FindAsync(dom.Id))!.LeagueId;
+            var type = new LeagueStaffType
+            {
+                LeagueId = ligueId, Nom = StaffService.NomFans,
+                Cout = 10_000, MinCreation = 1, MaxCreation = 9, MaxLigue = 12
+            };
+            dbSetup.LeagueStaffTypes.Add(type);
+            await dbSetup.SaveChangesAsync();
+
+            dbSetup.TeamStaffs.Add(new TeamStaff { TeamId = dom.Id, LeagueStaffTypeId = type.Id, Quantite = 11 });
+            dbSetup.TeamStaffs.Add(new TeamStaff { TeamId = ext.Id, LeagueStaffTypeId = type.Id, Quantite = 5 });
+            var d = await dbSetup.Teams.FindAsync(dom.Id); d!.FansDevoues = 11;
+            var e = await dbSetup.Teams.FindAsync(ext.Id); e!.FansDevoues = 5;
+            await dbSetup.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = CreateService(db);
+            await svc.SaisirFeuilleMatchAsync(
+                match.Id,
+                new MatchSheet
+                {
+                    TouchdownsDomicile = 1, TouchdownsExterieur = 0,
+                    VariationFansDomicile = 3,      // 11 + 3 = 14 → écrêté à 12
+                    VariationFansExterieur = 2      // 5 + 2 = 7, pas d'écrêtage
+                },
+                [], saisiPar.Id);
+        }
+
+        await using (var db2 = _factory.CreateContext())
+        {
+            var feuille = await db2.MatchSheets.FirstAsync(f => f.MatchId == match.Id);
+            Assert.Equal(1, feuille.VariationFansDomicileAppliquee);   // +1 seulement
+            Assert.Equal(2, feuille.VariationFansExterieurAppliquee);
+            Assert.Equal(12, (await db2.Teams.FindAsync(dom.Id))!.FansDevoues);
+        }
+
+        // Annulation via une modification de feuille (remet les compteurs à plat)
+        await using (var db3 = _factory.CreateContext())
+        {
+            var svc = CreateService(db3);
+            await svc.ModifierFeuilleAsync(
+                match.Id,
+                new MatchSheet
+                {
+                    TouchdownsDomicile = 0, TouchdownsExterieur = 0,
+                    VariationFansDomicile = 0, VariationFansExterieur = 0
+                },
+                []);
+        }
+
+        await using (var db4 = _factory.CreateContext())
+        {
+            // 11 au départ : l'annulation doit restituer 11, pas 9.
+            Assert.Equal(11, (await db4.Teams.FindAsync(dom.Id))!.FansDevoues);
+            Assert.Equal(5, (await db4.Teams.FindAsync(ext.Id))!.FansDevoues);
+        }
+    }
+
+    [Fact]
     public async Task SaisirFeuille_Mort_MarqueJoueurMort()
     {
         var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
