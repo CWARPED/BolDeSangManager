@@ -11,6 +11,7 @@
 @inject ISnackbar Snackbar
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
+@inject IDialogService DialogService
 
 <PageTitle>Administration — BolDeSang Manager</PageTitle>
 
@@ -29,19 +30,35 @@
         }
         else
         {
-            <MudTable Items="@_utilisateurs" Dense="true" Hover="true" Elevation="1">
+            @* Un compte anonymisé n'a plus rien à administrer : on le masque
+               par défaut pour garder la liste lisible. *@
+            <MudSwitch T="bool" @bind-Value="_masquerSupprimes" Color="Color.Primary"
+                       Size="Size.Small" Label="Masquer les comptes supprimés" Class="mb-2" />
+
+            <MudTable Items="@UtilisateursAffiches" Dense="true" Hover="true" Elevation="1">
                 <HeaderContent>
                     <MudTh>Pseudo</MudTh>
                     <MudTh>Email</MudTh>
                     <MudTh>Rôle</MudTh>
+                    <MudTh>Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate Context="u">
                     <MudTd DataLabel="Pseudo">
                         <b>@DisplayHelpers.NomCoach(u)</b>
+                        @if (u.EstSupprime)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Default"
+                                     Variant="Variant.Outlined" Class="ml-2"
+                                     Style="height:18px;font-size:10px">supprimé</MudChip>
+                        }
                     </MudTd>
                     <MudTd DataLabel="Email">@u.Email</MudTd>
                     <MudTd DataLabel="Rôle">
-                        @if (_rolesById.TryGetValue(u.Id, out var roleActuel))
+                        @if (u.EstSupprime)
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Secondary">—</MudText>
+                        }
+                        else if (_rolesById.TryGetValue(u.Id, out var roleActuel))
                         {
                             <MudSelect T="string" Value="@roleActuel"
                                        ValueChanged="@(async (string r) => await ChangerRoleAsync(u, r))"
@@ -56,6 +73,19 @@
                         {
                             <MudText>—</MudText>
                         }
+                    </MudTd>
+                    <MudTd DataLabel="Actions">
+                        @* Se supprimer soi-même depuis l'administration ferait
+                           perdre la main en pleine action : le self-service
+                           existe pour ça, avec déconnexion propre. *@
+                        <MudTooltip Text="@(u.Id == _currentUserId
+                                            ? "Utilisez « Supprimer mon compte » dans votre profil"
+                                            : "Supprimer ce compte")">
+                            <MudIconButton Icon="@Icons.Material.Filled.DeleteForever"
+                                           Color="Color.Error" Size="Size.Small"
+                                           Disabled="@(u.Id == _currentUserId || u.EstSupprime)"
+                                           OnClick="@(() => OuvrirSuppressionAsync(u))" />
+                        </MudTooltip>
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -220,6 +250,11 @@
     List<ApplicationUser>? _utilisateurs;
     Dictionary<string, string> _rolesById = new();
     string _currentUserId = "";
+    bool _masquerSupprimes = true;
+
+    /// <summary>Liste effectivement affichée, filtre « comptes supprimés » appliqué.</summary>
+    IEnumerable<ApplicationUser> UtilisateursAffiches =>
+        (_utilisateurs ?? []).Where(u => !_masquerSupprimes || !u.EstSupprime);
 
     string _urlExterne = "";
     bool _savingUrl;
@@ -246,6 +281,27 @@
         _nomExp    = await SettingsService.GetAsync(SettingsService.CleEmailNomExpediteur) ?? "BolDeSang Manager";
         _mdpApp    = await SettingsService.GetAsync(SettingsService.CleEmailMotDePasse)    ?? "";
         _emailConfigured = !string.IsNullOrWhiteSpace(_emailExp) && !string.IsNullOrWhiteSpace(_mdpApp);
+    }
+
+    async Task OuvrirSuppressionAsync(ApplicationUser u)
+    {
+        var parametres = new DialogParameters
+        {
+            { nameof(SupprimerCompteDialog.Utilisateur), u },
+            { nameof(SupprimerCompteDialog.CurrentUserId), _currentUserId }
+        };
+        var options = new DialogOptions { CloseOnEscapeKey = true, MaxWidth = MaxWidth.Small, FullWidth = true };
+
+        var dialog = await DialogService.ShowAsync<SupprimerCompteDialog>(
+            "Supprimer un compte", parametres, options);
+        var resultat = await dialog.Result;
+
+        if (resultat is not null && !resultat.Canceled)
+        {
+            Snackbar.Add("Compte supprimé.", Severity.Success);
+            _utilisateurs = await UserManager.Users.ToListAsync();
+            await ChargerRolesAsync();
+        }
     }
 
     async Task ChargerRolesAsync()

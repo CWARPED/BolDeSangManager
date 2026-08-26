@@ -1,0 +1,123 @@
+@using BolDeSangManager.Data
+@using BolDeSangManager.Services
+@inject UserAccountService UserAccountService
+
+<MudDialog>
+    <DialogContent>
+        @if (_verdict is null)
+        {
+            <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body1" Class="mb-3">
+                Compte de <b>@DisplayHelpers.NomCoach(Utilisateur)</b>
+                (@Utilisateur.Email)
+            </MudText>
+
+            @if (_verdict.PeutEtreSupprimeDur)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                    Ce compte n'a aucune donnée de jeu : il sera
+                    <b>intégralement supprimé</b>. Cette action est définitive.
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    Ce compte est rattaché à des données de jeu qui appartiennent
+                    aussi aux autres participants. Il sera <b>anonymisé</b> :
+                    e-mail, mot de passe et pseudo effacés, connexion impossible.
+                    Les équipes et résultats resteront, sous le nom
+                    « Coach supprimé ».
+                </MudAlert>
+
+                <MudSimpleTable Dense="true" Striped="true" Class="mb-3">
+                    <tbody>
+                        @if (_verdict.NbEquipes > 0)
+                        {
+                            <tr><td>Équipes</td><td><b>@_verdict.NbEquipes</b></td></tr>
+                        }
+                        @if (_verdict.NbLigues > 0)
+                        {
+                            <tr><td>Ligues gérées</td><td><b>@_verdict.NbLigues</b></td></tr>
+                        }
+                        @if (_verdict.NbFeuilles > 0)
+                        {
+                            <tr><td>Feuilles de match saisies</td><td><b>@_verdict.NbFeuilles</b></td></tr>
+                        }
+                        @if (_verdict.NbCommissariats > 0)
+                        {
+                            <tr><td>Commissariats de ligue</td><td><b>@_verdict.NbCommissariats</b></td></tr>
+                        }
+                    </tbody>
+                </MudSimpleTable>
+            }
+
+            @* Retaper le pseudo : garde-fou contre le clic sur la mauvaise ligne. *@
+            <MudTextField @bind-Value="_confirmation" Immediate="true"
+                          Label="@($"Tapez « {NomAttendu} » pour confirmer")"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+            @if (!string.IsNullOrEmpty(_erreur))
+            {
+                <MudAlert Severity="Severity.Error" Dense="true" Class="mt-3">@_erreur</MudAlert>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler" Disabled="@_enCours">Annuler</MudButton>
+        <MudButton Color="Color.Error" Variant="Variant.Filled"
+                   OnClick="Confirmer"
+                   Disabled="@(_enCours || _verdict is null || !ConfirmationValide)">
+            @(_enCours ? "Suppression..." : "Supprimer le compte")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public ApplicationUser Utilisateur { get; set; } = default!;
+    [Parameter] public string CurrentUserId { get; set; } = "";
+
+    UserAccountService.VerdictSuppression? _verdict;
+    string _confirmation = "";
+    string _erreur = "";
+    bool _enCours;
+
+    string NomAttendu => DisplayHelpers.NomCoach(Utilisateur);
+
+    bool ConfirmationValide =>
+        string.Equals(_confirmation.Trim(), NomAttendu, StringComparison.OrdinalIgnoreCase);
+
+    protected override async Task OnInitializedAsync()
+    {
+        _verdict = await UserAccountService.EvaluerSuppressionAsync(Utilisateur.Id);
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Confirmer()
+    {
+        _enCours = true;
+        _erreur = "";
+        try
+        {
+            var r = await UserAccountService.SupprimerCompteAsync(Utilisateur.Id, CurrentUserId);
+            if (!r.Succeeded)
+            {
+                _erreur = string.Join(" ", r.Errors.Select(e => e.Description));
+                return;
+            }
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            _erreur = ex.Message;
+        }
+        finally
+        {
+            _enCours = false;
+        }
+    }
+}
