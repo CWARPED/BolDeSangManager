@@ -8,7 +8,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
 
-public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportService> logger)
+public class LeagueExportService(
+    ApplicationDbContext db,
+    ILogger<LeagueExportService> logger,
+    StaffService staffService)
 {
     private static readonly JsonSerializerOptions JsonOpts = new()
     {
@@ -38,12 +41,63 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
             .Include(l => l.Equipes).ThenInclude(e => e.Joueurs)
                 .ThenInclude(j => j.Competences.Where(c => !c.EstCompetenceDepart)).ThenInclude(c => c.Skill)
             .Include(l => l.Equipes).ThenInclude(e => e.Joueurs).ThenInclude(j => j.Blessures)
+            .Include(l => l.Equipes).ThenInclude(e => e.Staff).ThenInclude(ts => ts.LeagueStaffType)
+            .Include(l => l.StaffTypes)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs).ThenInclude(m => m.EquipeDomicile)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs).ThenInclude(m => m.EquipeExterieur)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
                 .ThenInclude(m => m.Feuille).ThenInclude(f => f!.RecordsJoueurs)
             .FirstOrDefaultAsync(l => l.Id == ligueId)
         ?? throw new InvalidOperationException($"Ligue {ligueId} introuvable");
+
+    /// <summary>
+    /// Recrée les lignes TeamStaff d'une équipe importée.
+    ///
+    /// Deux cas :
+    ///  • le JSON porte le dictionnaire <c>Staff</c> (export récent) — on le rejoue
+    ///    tel quel, ce qui préserve les staff créés par l'association ;
+    ///  • le JSON est antérieur au staff configurable — on retombe sur les colonnes
+    ///    historiques, qui ne connaissent que les 5 staff standard.
+    ///
+    /// Un staff absent de la ligue d'accueil (nom inconnu dans cette version de
+    /// règles) est ignoré silencieusement : l'import ne doit pas échouer pour ça.
+    /// </summary>
+    private async Task RestaurerStaffEquipeAsync(Team team, EquipeExportDto dto, int ligueId)
+    {
+        var typesLigue = await db.LeagueStaffTypes
+            .Where(l => l.LeagueId == ligueId)
+            .ToListAsync();
+
+        if (typesLigue.Count == 0) return;
+
+        var quantites = dto.Staff is { Count: > 0 }
+            ? new Dictionary<string, int>(dto.Staff)
+            : new Dictionary<string, int>
+            {
+                [StaffService.NomFans]      = dto.FansDevoues,
+                [StaffService.NomRelances]  = dto.NombreRelances,
+                [StaffService.NomCoachs]    = dto.NombreCoachsAssistants,
+                [StaffService.NomCheerleaders] = dto.NombreCheerleaders,
+                [StaffService.NomApothicaire]  = dto.Apothicaire ? 1 : 0,
+            };
+
+        foreach (var (nom, quantite) in quantites)
+        {
+            if (quantite <= 0) continue;
+
+            var type = typesLigue.FirstOrDefault(t => t.Nom == nom);
+            if (type is null) continue;   // staff inconnu de cette version : ignoré
+
+            db.TeamStaffs.Add(new TeamStaff
+            {
+                TeamId = team.Id,
+                LeagueStaffTypeId = type.Id,
+                Quantite = quantite
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
 
     private static LeagueExportDto ToDto(League ligue)
     {
@@ -89,7 +143,14 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
                     .Select(c => c.Skill?.Nom ?? "").Where(n => n != "").ToList(),
                 Blessures: j.Blessures
                     .Select(b => new BlessureExportDto(b.Type, b.StatAffectee, b.Description)).ToList()
-            )).ToList()
+            )).ToList(),
+            // Staff configurable : les colonnes historiques (relances, fans,
+            // coachs, cheerleaders, apothicaire) ne couvrent que les 5 staff
+            // standard. Un staff ajouté par l'association serait perdu à
+            // l'export sans ce dictionnaire nom -> quantité.
+            Staff: e.Staff
+                .Where(ts => ts.LeagueStaffType is not null)
+                .ToDictionary(ts => ts.LeagueStaffType!.Nom, ts => ts.Quantite)
         )).ToList();
 
         var matchs = ligue.Divisions
@@ -259,6 +320,11 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
         db.Leagues.Add(ligue);
         await db.SaveChangesAsync();
 
+        // Staff de la ligue : sans cette copie, une ligue importée n'aurait aucun
+        // staff configuré — les équipes réimportées seraient rattachées à rien et
+        // l'écran « Staff de la ligue » resterait vide.
+        await staffService.CopierVersLigueAsync(ligue.Id, rulesVersion.Id);
+
         var division = new Division { LeagueId = ligue.Id, Nom = "Division Unique", Ordre = 1 };
         db.Divisions.Add(division);
         await db.SaveChangesAsync();
@@ -305,6 +371,8 @@ public class LeagueExportService(ApplicationDbContext db, ILogger<LeagueExportSe
             };
             db.Teams.Add(team);
             await db.SaveChangesAsync();
+
+            await RestaurerStaffEquipeAsync(team, equipeDto, ligue.Id);
 
             foreach (var joueurDto in equipeDto.Joueurs)
             {
@@ -482,7 +550,13 @@ record EquipeExportDto(
     int TouchdownsConcedes,
     int EliminationsInfligees,
     int PointsLigue,
-    List<JoueurExportDto> Joueurs
+    List<JoueurExportDto> Joueurs,
+    /// <summary>
+    /// Quantités de staff par nom. Optionnel : un JSON exporté avant le staff
+    /// configurable n'a pas ce champ, l'import retombe alors sur les colonnes
+    /// historiques ci-dessus (les 5 staff standard).
+    /// </summary>
+    Dictionary<string, int>? Staff = null
 );
 
 record JoueurExportDto(

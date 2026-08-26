@@ -16,7 +16,7 @@ public class LeagueExportServiceTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private LeagueExportService CreateService(ApplicationDbContext db) =>
-        new(db, NullLogger<LeagueExportService>.Instance);
+        new(db, NullLogger<LeagueExportService>.Instance, new StaffService(db, NullLogger<StaffService>.Instance));
 
     // ─── Setup ────────────────────────────────────────────────────────────────
 
@@ -41,6 +41,165 @@ public class LeagueExportServiceTests : IDisposable
         await DataSeeder.SeedPlayerAsync(db, t2.Id, position.Id, "Skulkar", 1);
 
         return (ligue, commissaire);
+    }
+
+    // ─── Staff configurable : aller-retour export → import ────────────────────
+
+    [Fact]
+    public async Task ExportImport_PreserveLeStaffPersonnaliseDeLAssociation()
+    {
+        // Oubli classique du projet : LeagueExportService ne connaissait pas le
+        // staff. Les 5 staff standard survivaient via les colonnes historiques,
+        // mais un staff créé par l'association (« Chef de bande ») était perdu.
+        var (ligue, commissaire) = await SetupLigueAvecEquipesAsync();
+
+        await using (var setup = _factory.CreateContext())
+        {
+            var staff = new StaffService(setup, NullLogger<StaffService>.Instance);
+
+            // Staff maison, ajouté dans les RÈGLES puis recopié dans la ligue.
+            var rvId = (await setup.Leagues.FindAsync(ligue.Id))!.RulesVersionId;
+            await staff.AjouterStaffTypeAsync(new StaffDefinition
+            {
+                RulesVersionId = rvId, Nom = "Chef de bande",
+                Description = "Relance un jet une fois par mi-temps.",
+                Cout = 25_000, MinCreation = 0, MaxCreation = 2, MaxLigue = 3,
+                Ordre = 60, EstActif = true
+            });
+
+            // Le seed de test ne crée pas les staff standard : on ajoute celui
+            // qu'on veut comparer, pour distinguer « staff maison » et « standard ».
+            await staff.AjouterStaffTypeAsync(new StaffDefinition
+            {
+                RulesVersionId = rvId, Nom = StaffService.NomFans,
+                Cout = 10_000, MinCreation = 1, MaxCreation = 9, MaxLigue = null,
+                Ordre = 10, EstActif = true
+            });
+
+            // La ligue de test a été semée avant : on lui recopie le staff.
+            var anciens = await setup.LeagueStaffTypes
+                .Where(l => l.LeagueId == ligue.Id).ToListAsync();
+            setup.LeagueStaffTypes.RemoveRange(anciens);
+            await setup.SaveChangesAsync();
+            await staff.CopierVersLigueAsync(ligue.Id, rvId);
+
+            // On en achète pour l'équipe Alpha.
+            var alpha = await setup.Teams.FirstAsync(t => t.Nom == "Équipe Alpha");
+            var chef = await setup.LeagueStaffTypes
+                .FirstAsync(l => l.LeagueId == ligue.Id && l.Nom == "Chef de bande");
+            var fans = await setup.LeagueStaffTypes
+                .FirstAsync(l => l.LeagueId == ligue.Id && l.Nom == StaffService.NomFans);
+
+            setup.TeamStaffs.Add(new TeamStaff { TeamId = alpha.Id, LeagueStaffTypeId = chef.Id, Quantite = 2 });
+            setup.TeamStaffs.Add(new TeamStaff { TeamId = alpha.Id, LeagueStaffTypeId = fans.Id, Quantite = 4 });
+            await setup.SaveChangesAsync();
+        }
+
+        byte[] bytes;
+        await using (var dbExport = _factory.CreateContext())
+            bytes = await CreateService(dbExport).ExportAsync(ligue.Id);
+
+        var json = Encoding.UTF8.GetString(bytes);
+        Assert.Contains("Chef de bande", json);
+
+        League importee;
+        await using (var dbImport = _factory.CreateContext())
+        {
+            using var flux = new MemoryStream(bytes);
+            importee = await CreateService(dbImport).ImportAsync(flux, commissaire.Id);
+        }
+
+        await using var verif = _factory.CreateContext();
+
+        // La ligue importée a bien son staff configuré…
+        var staffLigue = await verif.LeagueStaffTypes
+            .Where(l => l.LeagueId == importee.Id).ToListAsync();
+        Assert.Contains(staffLigue, s => s.Nom == "Chef de bande");
+
+        // …et l'équipe a retrouvé ses quantités, staff maison compris.
+        var alphaImportee = await verif.Teams
+            .FirstAsync(t => t.LeagueId == importee.Id && t.Nom == "Équipe Alpha");
+        var quantites = await verif.TeamStaffs
+            .Where(ts => ts.TeamId == alphaImportee.Id)
+            .Join(verif.LeagueStaffTypes, ts => ts.LeagueStaffTypeId, l => l.Id,
+                  (ts, l) => new { l.Nom, ts.Quantite })
+            .ToListAsync();
+
+        Assert.Equal(2, Assert.Single(quantites.Where(q => q.Nom == "Chef de bande")).Quantite);
+        Assert.Equal(4, Assert.Single(quantites.Where(q => q.Nom == StaffService.NomFans)).Quantite);
+    }
+
+    [Fact]
+    public async Task Import_JsonSansStaff_RetombeSurLesColonnesHistoriques()
+    {
+        // Rétrocompatibilité : un JSON exporté avant le staff configurable doit
+        // rester importable, en reconstruisant le staff standard.
+        var (ligue, commissaire) = await SetupLigueAvecEquipesAsync();
+
+        await using (var setup = _factory.CreateContext())
+        {
+            // Le seed de test ne crée pas les staff standard : on les ajoute pour
+            // que la ligue importée ait de quoi rattacher les colonnes historiques.
+            var staff = new StaffService(setup, NullLogger<StaffService>.Instance);
+            var rvId = (await setup.Leagues.FindAsync(ligue.Id))!.RulesVersionId;
+            foreach (var (nom, ordre) in new[]
+                     {
+                         (StaffService.NomFans, 10), (StaffService.NomRelances, 20),
+                         (StaffService.NomApothicaire, 50)
+                     })
+            {
+                await staff.AjouterStaffTypeAsync(new StaffDefinition
+                {
+                    RulesVersionId = rvId, Nom = nom, Cout = 10_000,
+                    MinCreation = 0, MaxCreation = 9, MaxLigue = null,
+                    Ordre = ordre, EstActif = true
+                });
+            }
+
+            var anciens = await setup.LeagueStaffTypes
+                .Where(l => l.LeagueId == ligue.Id).ToListAsync();
+            setup.LeagueStaffTypes.RemoveRange(anciens);
+            await setup.SaveChangesAsync();
+            await staff.CopierVersLigueAsync(ligue.Id, rvId);
+
+            var alpha = await setup.Teams.FirstAsync(t => t.Nom == "Équipe Alpha");
+            alpha.FansDevoues = 5;
+            alpha.NombreRelances = 3;
+            alpha.Apothicaire = true;
+            await setup.SaveChangesAsync();
+        }
+
+        byte[] bytes;
+        await using (var dbExport = _factory.CreateContext())
+            bytes = await CreateService(dbExport).ExportAsync(ligue.Id);
+
+        // On retire le bloc Staff du JSON pour simuler un ancien export.
+        // La virgule qui précède part avec, sinon le JSON devient invalide.
+        var json = Encoding.UTF8.GetString(bytes);
+        var sansStaff = System.Text.RegularExpressions.Regex.Replace(
+            json, ",\\s*\"staff\"\\s*:\\s*\\{[^{}]*\\}", "",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        Assert.DoesNotContain("\"staff\"", sansStaff, StringComparison.OrdinalIgnoreCase);
+
+        League importee;
+        await using (var dbImport = _factory.CreateContext())
+        {
+            using var flux = new MemoryStream(Encoding.UTF8.GetBytes(sansStaff));
+            importee = await CreateService(dbImport).ImportAsync(flux, commissaire.Id);
+        }
+
+        await using var verif = _factory.CreateContext();
+        var alphaImportee = await verif.Teams
+            .FirstAsync(t => t.LeagueId == importee.Id && t.Nom == "Équipe Alpha");
+        var quantites = await verif.TeamStaffs
+            .Where(ts => ts.TeamId == alphaImportee.Id)
+            .Join(verif.LeagueStaffTypes, ts => ts.LeagueStaffTypeId, l => l.Id,
+                  (ts, l) => new { l.Nom, ts.Quantite })
+            .ToListAsync();
+
+        Assert.Equal(5, Assert.Single(quantites.Where(q => q.Nom == StaffService.NomFans)).Quantite);
+        Assert.Equal(3, Assert.Single(quantites.Where(q => q.Nom == StaffService.NomRelances)).Quantite);
+        Assert.Equal(1, Assert.Single(quantites.Where(q => q.Nom == StaffService.NomApothicaire)).Quantite);
     }
 
     // ─── ExportAsync ──────────────────────────────────────────────────────────

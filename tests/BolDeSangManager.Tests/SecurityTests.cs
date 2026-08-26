@@ -20,7 +20,7 @@ public class SecurityTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private LeagueExportService CreateSvc(ApplicationDbContext db) =>
-        new(db, NullLogger<LeagueExportService>.Instance);
+        new(db, NullLogger<LeagueExportService>.Instance, new StaffService(db, NullLogger<StaffService>.Instance));
 
     private static Stream Json(string json) =>
         new MemoryStream(Encoding.UTF8.GetBytes(json));
