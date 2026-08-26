@@ -1,14 +1,12 @@
 using System.Security.Claims;
-using System.Text.Json;
-using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using BolDeSangManager.Components.Account.Pages;
-using BolDeSangManager.Components.Account.Pages.Manage;
 using BolDeSangManager.Data;
+using BolDeSangManager.Services;
 
 namespace Microsoft.AspNetCore.Routing;
 
@@ -50,63 +48,36 @@ internal static class IdentityComponentsEndpointRouteBuilderExtensions
             return TypedResults.LocalRedirect($"~/{returnUrl.TrimStart('/')}");
         });
 
-        var manageGroup = accountGroup.MapGroup("/Manage").RequireAuthorization();
-
-        manageGroup.MapPost("/LinkExternalLogin", async (
-            HttpContext context,
-            [FromServices] SignInManager<ApplicationUser> signInManager,
-            [FromForm] string provider) =>
-        {
-            // Clear the existing external cookie to ensure a clean login process
-            await context.SignOutAsync(IdentityConstants.ExternalScheme);
-
-            var redirectUrl = UriHelper.BuildRelative(
-                context.Request.PathBase,
-                "/Account/Manage/ExternalLogins",
-                QueryString.Create("Action", ExternalLogins.LinkLoginCallbackAction));
-
-            var properties = signInManager.ConfigureExternalAuthenticationProperties(provider, redirectUrl, signInManager.UserManager.GetUserId(context.User));
-            return TypedResults.Challenge(properties, [provider]);
-        });
-
         var loggerFactory = endpoints.ServiceProvider.GetRequiredService<ILoggerFactory>();
-        var downloadLogger = loggerFactory.CreateLogger("DownloadPersonalData");
+        var downloadLogger = loggerFactory.CreateLogger("ExportDonneesPersonnelles");
 
-        manageGroup.MapPost("/DownloadPersonalData", async (
+        // Export RGPD (droit d'accès). Servi par un endpoint plutôt que par un
+        // composant : la réponse est un fichier, pas une page. Accessible depuis
+        // « Mon profil » ; l'ancienne page /Account/Manage/PersonalData a été
+        // retirée, elle faisait doublon avec /profil.
+        accountGroup.MapPost("/ExporterMesDonnees", async (
             HttpContext context,
             [FromServices] UserManager<ApplicationUser> userManager,
-            [FromServices] AuthenticationStateProvider authenticationStateProvider) =>
+            [FromServices] PersonalDataExportService exportService) =>
         {
             var user = await userManager.GetUserAsync(context.User);
             if (user is null)
             {
-                return Results.NotFound($"Unable to load user with ID '{userManager.GetUserId(context.User)}'.");
+                return Results.Unauthorized();
             }
 
-            var userId = await userManager.GetUserIdAsync(user);
-            downloadLogger.LogInformation("User with ID '{UserId}' asked for their personal data.", userId);
-
-            // Only include personal data for download
-            var personalData = new Dictionary<string, string>();
-            var personalDataProps = typeof(ApplicationUser).GetProperties().Where(
-                prop => Attribute.IsDefined(prop, typeof(PersonalDataAttribute)));
-            foreach (var p in personalDataProps)
+            var fichier = await exportService.ExporterJsonAsync(user.Id);
+            if (fichier is null)
             {
-                personalData.Add(p.Name, p.GetValue(user)?.ToString() ?? "null");
+                return Results.NotFound();
             }
 
-            var logins = await userManager.GetLoginsAsync(user);
-            foreach (var l in logins)
-            {
-                personalData.Add($"{l.LoginProvider} external login provider key", l.ProviderKey);
-            }
+            downloadLogger.LogInformation(
+                "Le compte {UserId} a exporté ses données personnelles.", user.Id);
 
-            personalData.Add("Authenticator Key", (await userManager.GetAuthenticatorKeyAsync(user))!);
-            var fileBytes = JsonSerializer.SerializeToUtf8Bytes(personalData);
-
-            context.Response.Headers.TryAdd("Content-Disposition", "attachment; filename=PersonalData.json");
-            return TypedResults.File(fileBytes, contentType: "application/json", fileDownloadName: "PersonalData.json");
-        });
+            var nom = PersonalDataExportService.NomFichier(user.PseudoCoach);
+            return TypedResults.File(fichier, contentType: "application/json", fileDownloadName: nom);
+        }).RequireAuthorization();
 
         return accountGroup;
     }

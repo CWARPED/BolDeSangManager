@@ -290,6 +290,37 @@ else
             }
         </MudItem>
 
+        <!-- Export RGPD : mes données personnelles -->
+        <MudItem xs="12">
+            <MudCard Elevation="2" Class="mt-3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.FolderShared" Class="mr-1" Size="Size.Small" />
+                        <b>Mes données personnelles</b>
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        Vous pouvez récupérer à tout moment l'ensemble des informations
+                        que l'application conserve à votre sujet : compte, équipes et leurs
+                        joueurs, matchs, ligues gérées et feuilles de match saisies. Le
+                        fichier est au format JSON, lisible dans n'importe quel éditeur
+                        de texte.
+                    </MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    @* Endpoint SSR et non bouton interactif : la réponse est un
+                       fichier à télécharger, pas un rendu de page. *@
+                    <form action="/Account/ExporterMesDonnees" method="post">
+                        <AntiforgeryToken />
+                        <MudButton ButtonType="ButtonType.Submit"
+                                   Variant="Variant.Outlined" Color="Color.Default"
+                                   StartIcon="@Icons.Material.Filled.Download">
+                            Télécharger mes données
+                        </MudButton>
+                    </form>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
         <!-- Zone de danger : suppression du compte -->
         <MudItem xs="12">
             <MudCard Elevation="2" Class="mt-3" Style="border:1px solid var(--mud-palette-error)">
@@ -326,7 +357,7 @@ else
                 <MudCardActions>
                     <MudButton Variant="Variant.Outlined" Color="Color.Error"
                                StartIcon="@Icons.Material.Filled.DeleteForever"
-                               Href="/Account/Manage/DeletePersonalData">
+                               Href="/compte/supprimer">
                         Supprimer mon compte…
                     </MudButton>
                 </MudCardActions>
