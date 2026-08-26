@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.ResponseCompression;
 using Microsoft.EntityFrameworkCore;
 using MudBlazor.Services;
 using QuestPDF.Infrastructure;
@@ -67,6 +68,29 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString,
         sqlite => sqlite.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery)));
 
+// Compression des réponses HTML. Mesuré : « Mes matchs » fait 96 Ko de HTML
+// brut, 12 Ko compressé (-88 %). Traefik compresse déjà les CSS/JS mais PAS
+// le text/html : la page elle-même partait en clair à chaque navigation.
+// Le gain se voit surtout en 4G et sur les écrans à grosse ligue.
+//
+// Activé ici plutôt que dans Traefik pour que le comportement suive
+// l'application, quel que soit l'hébergement.
+builder.Services.AddResponseCompression(options =>
+{
+    // Blazor Server sert aussi le HTML en HTTPS : sans ce drapeau la
+    // compression serait ignorée sur exactement les pages qui comptent.
+    options.EnableForHttps = true;
+    options.MimeTypes = ResponseCompressionDefaults.MimeTypes.Concat(
+    [
+        "text/html",
+        "application/octet-stream"   // flux du circuit Blazor
+    ]);
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(o =>
+    o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(o =>
+    o.Level = System.IO.Compression.CompressionLevel.Fastest);
+
 // Permet la lecture des headers X-Forwarded-For / X-Forwarded-Proto envoyés par un reverse proxy
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -126,6 +150,11 @@ var app = builder.Build();
 // Tout middleware placé avant lui (HSTS, gestion d'erreurs, redirections) verrait
 // encore http:// et générerait des URLs absolues en clair.
 app.UseForwardedHeaders();
+
+// Compression : juste après UseForwardedHeaders, donc avant tout middleware qui
+// écrit dans la réponse. Placée plus bas, une partie des réponses partirait déjà
+// en clair.
+app.UseResponseCompression();
 
 // Auth déclarée EXPLICITEMENT ici : sans ces deux appels, WebApplication insère
 // automatiquement UseAuthentication/UseAuthorization en TÊTE de pipeline, donc AVANT
