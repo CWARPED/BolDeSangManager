@@ -9,65 +9,88 @@
 @inject IdentityUserAccessor UserAccessor
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Two-factor authentication (2FA)</PageTitle>
+<PageTitle>Double authentification — BolDeSang Manager</PageTitle>
 
+<MudText Typo="Typo.h6" Class="mb-3"><b>Double authentification (2FA)</b></MudText>
 <StatusMessage />
-<h3>Two-factor authentication (2FA)</h3>
+
 @if (canTrack)
 {
     if (is2faEnabled)
     {
-        if (recoveryCodesLeft == 0)
+        @if (recoveryCodesLeft == 0)
         {
-            <div class="alert alert-danger">
-                <strong>You have no recovery codes left.</strong>
-                <p>You must <a href="Account/Manage/GenerateRecoveryCodes">generate a new set of recovery codes</a> before you can log in with a recovery code.</p>
-            </div>
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
+                <b>Il ne vous reste aucun code de secours.</b><br />
+                Vous devez
+                <a href="Account/Manage/GenerateRecoveryCodes" class="account-link">en générer de nouveaux</a>
+                avant de pouvoir vous connecter avec un code de secours.
+            </MudAlert>
         }
         else if (recoveryCodesLeft == 1)
         {
-            <div class="alert alert-danger">
-                <strong>You have 1 recovery code left.</strong>
-                <p>You can <a href="Account/Manage/GenerateRecoveryCodes">generate a new set of recovery codes</a>.</p>
-            </div>
+            <MudAlert Severity="Severity.Error" Dense="true" Class="mb-4">
+                <b>Il ne vous reste qu'un code de secours.</b><br />
+                Vous pouvez
+                <a href="Account/Manage/GenerateRecoveryCodes" class="account-link">en générer de nouveaux</a>.
+            </MudAlert>
         }
         else if (recoveryCodesLeft <= 3)
         {
-            <div class="alert alert-warning">
-                <strong>You have @recoveryCodesLeft recovery codes left.</strong>
-                <p>You should <a href="Account/Manage/GenerateRecoveryCodes">generate a new set of recovery codes</a>.</p>
-            </div>
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-4">
+                <b>Il vous reste @recoveryCodesLeft codes de secours.</b><br />
+                Pensez à
+                <a href="Account/Manage/GenerateRecoveryCodes" class="account-link">en générer de nouveaux</a>.
+            </MudAlert>
         }
 
-        if (isMachineRemembered)
+        @if (isMachineRemembered)
         {
-            <form style="display: inline-block" @formname="forget-browser" @onsubmit="OnSubmitForgetBrowserAsync" method="post">
+            <form @formname="forget-browser" @onsubmit="OnSubmitForgetBrowserAsync" method="post" class="mb-3">
                 <AntiforgeryToken />
-                <button type="submit" class="btn btn-primary">Forget this browser</button>
+                <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Outlined" Color="Color.Primary">
+                    Oublier ce navigateur
+                </MudButton>
             </form>
         }
 
-        <a href="Account/Manage/Disable2fa" class="btn btn-primary">Disable 2FA</a>
-        <a href="Account/Manage/GenerateRecoveryCodes" class="btn btn-primary">Reset recovery codes</a>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2" Class="mb-4">
+            <MudButton Href="Account/Manage/Disable2fa" Variant="Variant.Outlined" Color="Color.Error">
+                Désactiver la 2FA
+            </MudButton>
+            <MudButton Href="Account/Manage/GenerateRecoveryCodes" Variant="Variant.Outlined" Color="Color.Primary">
+                Régénérer les codes de secours
+            </MudButton>
+        </MudStack>
     }
 
-    <h4>Authenticator app</h4>
+    <MudDivider Class="my-4" />
+
+    <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Application d'authentification</b></MudText>
     @if (!hasAuthenticator)
     {
-        <a href="Account/Manage/EnableAuthenticator" class="btn btn-primary">Add authenticator app</a>
+        <MudButton Href="Account/Manage/EnableAuthenticator" Variant="Variant.Filled" Color="Color.Primary">
+            Ajouter une application
+        </MudButton>
     }
     else
     {
-        <a href="Account/Manage/EnableAuthenticator" class="btn btn-primary">Set up authenticator app</a>
-        <a href="Account/Manage/ResetAuthenticator" class="btn btn-primary">Reset authenticator app</a>
+        <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="2">
+            <MudButton Href="Account/Manage/EnableAuthenticator" Variant="Variant.Filled" Color="Color.Primary">
+                Configurer l'application
+            </MudButton>
+            <MudButton Href="Account/Manage/ResetAuthenticator" Variant="Variant.Outlined" Color="Color.Primary">
+                Réinitialiser l'application
+            </MudButton>
+        </MudStack>
     }
 }
 else
 {
-    <div class="alert alert-danger">
-        <strong>Privacy and cookie policy have not been accepted.</strong>
-        <p>You must accept the policy before you can enable two factor authentication.</p>
-    </div>
+    <MudAlert Severity="Severity.Error" Dense="true">
+        <b>La politique de confidentialité et de cookies n'a pas été acceptée.</b><br />
+        Vous devez l'accepter avant d'activer la double authentification.
+    </MudAlert>
 }
 
 @code {
@@ -95,7 +118,7 @@ else
         await SignInManager.ForgetTwoFactorClientAsync();
 
         RedirectManager.RedirectToCurrentPageWithStatus(
-            "The current browser has been forgotten. When you login again from this browser you will be prompted for your 2fa code.",
+            "Ce navigateur a été oublié. Votre code 2FA vous sera redemandé à la prochaine connexion.",
             HttpContext);
     }
 }

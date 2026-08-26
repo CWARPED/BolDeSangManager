@@ -13,7 +13,7 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<EnableAuthenticator> Logger
 
-<PageTitle>Configure authenticator app</PageTitle>
+<PageTitle>Configurer l'application — BolDeSang Manager</PageTitle>
 
 @if (recoveryCodes is not null)
 {
@@ -22,48 +22,50 @@
 else
 {
     <StatusMessage Message="@message" />
-    <h3>Configure authenticator app</h3>
-    <div>
-        <p>To use an authenticator app go through the following steps:</p>
-        <ol class="list">
-            <li>
-                <p>
-                    Download a two-factor authenticator app like Microsoft Authenticator for
-                    <a href="https://go.microsoft.com/fwlink/?Linkid=825072">Android</a> and
-                    <a href="https://go.microsoft.com/fwlink/?Linkid=825073">iOS</a> or
-                    Google Authenticator for
-                    <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&amp;hl=en">Android</a> and
-                    <a href="https://itunes.apple.com/us/app/google-authenticator/id388497605?mt=8">iOS</a>.
-                </p>
-            </li>
-            <li>
-                <p>Scan the QR Code or enter this key <kbd>@sharedKey</kbd> into your two factor authenticator app. Spaces and casing do not matter.</p>
-                <div class="alert alert-info">Learn how to <a href="https://go.microsoft.com/fwlink/?Linkid=852423">enable QR code generation</a>.</div>
-                <div></div>
-                <div data-url="@authenticatorUri"></div>
-            </li>
-            <li>
-                <p>
-                    Once you have scanned the QR code or input the key above, your two factor authentication app will provide you
-                    with a unique code. Enter the code in the confirmation box below.
-                </p>
-                <div class="row">
-                    <div class="col-xl-6">
-                        <EditForm Model="Input" FormName="send-code" OnValidSubmit="OnValidSubmitAsync" method="post">
-                            <DataAnnotationsValidator />
-                            <div class="form-floating mb-3">
-                                <InputText @bind-Value="Input.Code" id="Input.Code" class="form-control" autocomplete="off" placeholder="Enter the code" />
-                                <label for="Input.Code" class="control-label form-label">Verification Code</label>
-                                <ValidationMessage For="() => Input.Code" class="text-danger" />
-                            </div>
-                            <button type="submit" class="w-100 btn btn-lg btn-primary">Verify</button>
-                            <ValidationSummary class="text-danger" role="alert" />
-                        </EditForm>
-                    </div>
-                </div>
-            </li>
-        </ol>
-    </div>
+    <MudText Typo="Typo.h6" Class="mb-3"><b>Configurer l'application d'authentification</b></MudText>
+
+    <MudText Typo="Typo.body2" Class="mb-3">
+        Suivez ces trois étapes :
+    </MudText>
+
+    <MudList T="string" Dense="true" Class="mb-4">
+        <MudListItem T="string" Icon="@Icons.Material.Filled.PhoneAndroid">
+            <MudText Typo="Typo.body2">
+                Installez une application d'authentification (Google Authenticator,
+                Microsoft Authenticator, Aegis, 2FAS…) sur votre téléphone.
+            </MudText>
+        </MudListItem>
+        <MudListItem T="string" Icon="@Icons.Material.Filled.Key">
+            <MudText Typo="Typo.body2">
+                Saisissez-y cette clé (espaces et majuscules sans importance) :
+            </MudText>
+            <MudPaper Elevation="0" Class="pa-2 mt-1"
+                      Style="background:rgba(255,255,255,0.06);border-radius:6px;word-break:break-all">
+                <code class="recovery-code">@sharedKey</code>
+            </MudPaper>
+        </MudListItem>
+        <MudListItem T="string" Icon="@Icons.Material.Filled.Pin">
+            <MudText Typo="Typo.body2">
+                Reportez ci-dessous le code à 6 chiffres affiché par l'application.
+            </MudText>
+        </MudListItem>
+    </MudList>
+
+    <EditForm Model="Input" FormName="send-code" OnValidSubmit="OnValidSubmitAsync" method="post">
+        <DataAnnotationsValidator />
+
+        <div class="account-field">
+            <label class="account-label" for="Input.Code">Code de vérification</label>
+            <InputText @bind-Value="Input.Code" id="Input.Code" class="account-input"
+                       autocomplete="one-time-code" inputmode="numeric" placeholder="123456" />
+            <ValidationMessage For="() => Input.Code" class="account-validation-msg" />
+        </div>
+
+        <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled"
+                   Color="Color.Primary" Class="mt-2">
+            Vérifier
+        </MudButton>
+    </EditForm>
 }
 
 @code {
@@ -98,7 +100,7 @@ else
 
         if (!is2faTokenValid)
         {
-            message = "Error: Verification code is invalid.";
+            message = "Error: le code de vérification est invalide.";
             return;
         }
 
@@ -106,7 +108,7 @@ else
         var userId = await UserManager.GetUserIdAsync(user);
         Logger.LogInformation("User with ID '{UserId}' has enabled 2FA with an authenticator app.", userId);
 
-        message = "Your authenticator app has been verified.";
+        message = "Votre application d'authentification a été vérifiée.";
 
         if (await UserManager.CountRecoveryCodesAsync(user) == 0)
         {
@@ -156,17 +158,17 @@ else
         return string.Format(
             CultureInfo.InvariantCulture,
             AuthenticatorUriFormat,
-            UrlEncoder.Encode("Microsoft.AspNetCore.Identity.UI"),
+            UrlEncoder.Encode("BolDeSang Manager"),
             UrlEncoder.Encode(email),
             unformattedKey);
     }
 
     private sealed class InputModel
     {
-        [Required]
-        [StringLength(7, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [Required(ErrorMessage = "Le code de vérification est requis.")]
+        [StringLength(7, ErrorMessage = "Le code doit faire entre {2} et {1} caractères.", MinimumLength = 6)]
         [DataType(DataType.Text)]
-        [Display(Name = "Verification Code")]
+        [Display(Name = "Code de vérification")]
         public string Code { get; set; } = "";
     }
 }

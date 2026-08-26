@@ -1,9 +1,17 @@
-﻿@if (!string.IsNullOrEmpty(DisplayMessage))
+﻿@* Les messages de statut posés par IdentityRedirectManager sont préfixés
+   « Error: » côté framework ; on traduit et on rend en MudAlert. *@
+@if (!string.IsNullOrEmpty(DisplayMessage))
 {
-    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
-    <div class="alert alert-@statusMessageClass" role="alert">
-        @DisplayMessage
-    </div>
+    var estErreur = DisplayMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase)
+                    || DisplayMessage.StartsWith("Erreur", StringComparison.OrdinalIgnoreCase);
+    var texte = estErreur
+        ? System.Text.RegularExpressions.Regex.Replace(DisplayMessage, @"^Error\s*:\s*", "", System.Text.RegularExpressions.RegexOptions.IgnoreCase)
+        : DisplayMessage;
+
+    <MudAlert Severity="@(estErreur ? Severity.Error : Severity.Success)"
+              Dense="true" Class="mb-4">
+        @texte
+    </MudAlert>
 }
 
 @code {

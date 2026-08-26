@@ -1018,3 +1018,22 @@ h1:focus {
 .account-danger-btn:active {
     filter: brightness(0.92);
 }
+
+/* Codes de secours 2FA : grille lisible, une colonne sur téléphone. */
+.recovery-codes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+}
+
+.recovery-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    letter-spacing: 0.06em;
+    color: var(--mud-palette-text-primary);
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 6px 10px;
+    display: block;
+    text-align: center;
+}

@@ -9,29 +9,31 @@
 @inject IdentityUserAccessor UserAccessor
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Profile</PageTitle>
+<PageTitle>Profil — BolDeSang Manager</PageTitle>
 
-<h3>Profile</h3>
+<MudText Typo="Typo.h6" Class="mb-3"><b>Profil</b></MudText>
 <StatusMessage />
 
-<div class="row">
-    <div class="col-xl-6">
-        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
-            <DataAnnotationsValidator />
-            <ValidationSummary class="text-danger" role="alert" />
-            <div class="form-floating mb-3">
-                <input type="text" value="@username" id="username" class="form-control" placeholder="Choose your username." disabled />
-                <label for="username" class="form-label">Username</label>
-            </div>
-            <div class="form-floating mb-3">
-                <InputText @bind-Value="Input.PhoneNumber" id="Input.PhoneNumber" class="form-control" placeholder="Enter your phone number" />
-                <label for="Input.PhoneNumber" class="form-label">Phone number</label>
-                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
-            </div>
-            <button type="submit" class="w-100 btn btn-lg btn-primary">Save</button>
-        </EditForm>
+<EditForm Model="Input" FormName="profile" OnValidSubmit="OnValidSubmitAsync" method="post">
+    <DataAnnotationsValidator />
+
+    <div class="account-field">
+        <label class="account-label" for="username">Identifiant</label>
+        <input type="text" value="@username" id="username" class="account-input" disabled />
     </div>
-</div>
+
+    <div class="account-field">
+        <label class="account-label" for="Input.PhoneNumber">Numéro de téléphone</label>
+        <InputText @bind-Value="Input.PhoneNumber" id="Input.PhoneNumber"
+                   class="account-input" placeholder="Facultatif" />
+        <ValidationMessage For="() => Input.PhoneNumber" class="account-validation-msg" />
+    </div>
+
+    <MudButton ButtonType="ButtonType.Submit" Variant="Variant.Filled"
+               Color="Color.Primary" Class="mt-2">
+        Enregistrer
+    </MudButton>
+</EditForm>
 
 @code {
     private ApplicationUser user = default!;
@@ -60,18 +62,19 @@
             var setPhoneResult = await UserManager.SetPhoneNumberAsync(user, Input.PhoneNumber);
             if (!setPhoneResult.Succeeded)
             {
-                RedirectManager.RedirectToCurrentPageWithStatus("Error: Failed to set phone number.", HttpContext);
+                RedirectManager.RedirectToCurrentPageWithStatus(
+                    "Error: impossible d'enregistrer le numéro de téléphone.", HttpContext);
             }
         }
 
         await SignInManager.RefreshSignInAsync(user);
-        RedirectManager.RedirectToCurrentPageWithStatus("Your profile has been updated", HttpContext);
+        RedirectManager.RedirectToCurrentPageWithStatus("Votre profil a été mis à jour.", HttpContext);
     }
 
     private sealed class InputModel
     {
-        [Phone]
-        [Display(Name = "Phone number")]
+        [Phone(ErrorMessage = "Numéro de téléphone invalide.")]
+        [Display(Name = "Numéro de téléphone")]
         public string? PhoneNumber { get; set; }
     }
 }

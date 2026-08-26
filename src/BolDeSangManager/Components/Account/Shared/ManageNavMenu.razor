@@ -3,34 +3,34 @@
 
 @inject SignInManager<ApplicationUser> SignInManager
 
-<ul class="nav nav-pills flex-column">
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage" Match="NavLinkMatch.All">Profil</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/Email">Adresse e-mail</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/ChangePassword">Mot de passe</NavLink>
-    </li>
-    @if (hasExternalLogins)
-    {
-        <li class="nav-item">
-            <NavLink class="nav-link" href="Account/Manage/ExternalLogins">Connexions externes</NavLink>
-        </li>
-    }
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/TwoFactorAuthentication">Double authentification</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link" href="Account/Manage/PersonalData">Données personnelles</NavLink>
-    </li>
-    <li class="nav-item">
-        <NavLink class="nav-link text-danger" href="Account/Manage/DeletePersonalData">
-            Supprimer mon compte
-        </NavLink>
-    </li>
-</ul>
+@* Rendu en SSR : uniquement des MudNavLink (pas de MudNavGroup, qui exige
+   de l'interactivité). *@
+
+<MudPaper Elevation="2" Class="py-2">
+    <MudNavMenu>
+        <MudNavLink Href="Account/Manage" Match="NavLinkMatch.All"
+                    Icon="@Icons.Material.Filled.Person">Profil</MudNavLink>
+        <MudNavLink Href="Account/Manage/Email"
+                    Icon="@Icons.Material.Filled.Email">Adresse e-mail</MudNavLink>
+        <MudNavLink Href="Account/Manage/ChangePassword"
+                    Icon="@Icons.Material.Filled.Password">Mot de passe</MudNavLink>
+        @if (hasExternalLogins)
+        {
+            <MudNavLink Href="Account/Manage/ExternalLogins"
+                        Icon="@Icons.Material.Filled.Link">Connexions externes</MudNavLink>
+        }
+        <MudNavLink Href="Account/Manage/TwoFactorAuthentication"
+                    Icon="@Icons.Material.Filled.Security">Double authentification</MudNavLink>
+        <MudNavLink Href="Account/Manage/PersonalData"
+                    Icon="@Icons.Material.Filled.FolderShared">Mes données</MudNavLink>
+        <MudDivider Class="my-2" />
+        <MudNavLink Href="Account/Manage/DeletePersonalData"
+                    Icon="@Icons.Material.Filled.DeleteForever"
+                    IconColor="Color.Error">
+            <span style="color:var(--mud-palette-error)">Supprimer mon compte</span>
+        </MudNavLink>
+    </MudNavMenu>
+</MudPaper>
 
 @code {
     private bool hasExternalLogins;
