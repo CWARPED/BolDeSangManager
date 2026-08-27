@@ -805,6 +805,45 @@ h1:focus {
     .mud-picker-paper {
         max-width: calc(100vw - 24px) !important;
     }
+
+    /* ⚠️ Les DERNIERS JOURS DU MOIS étaient invisibles (mois s'arrêtant au 25).
+       MudBlazor fixe une hauteur en dur à plusieurs niveaux : 312px sur la
+       grille et surtout `height/min-height: 216px` sur
+       `.mud-picker-calendar-transition`, alors qu'un mois étalé sur 6 semaines
+       demande ~308px. Les deux dernières lignes étaient donc coupées, sans
+       barre de défilement (overflow visible). Ce n'est PAS un problème de
+       position du popup mais de HAUTEUR.
+
+       ⚠️ Piège : `.mud-picker-calendar` (les semaines) est en
+       `position: absolute`. Mettre `height: auto` sur son parent le fait donc
+       s'effondrer à 0 et n'affiche plus que 2 semaines — pire que le bug
+       d'origine. Il FAUT une hauteur explicite, calée sur 6 semaines. */
+    .mud-picker-calendar-content,
+    .mud-picker-calendar-container {
+        height: auto !important;
+        min-height: 0 !important;
+        overflow: visible !important;
+    }
+
+    .mud-picker-calendar-transition {
+        height: 312px !important;      /* 6 semaines : jamais de mois tronqué */
+        min-height: 312px !important;
+        overflow: visible !important;
+    }
+
+    /* Le bandeau rouge du picker ne porte que l'année : 100px pris sur un écran
+       de téléphone pour une information déjà lisible dans l'en-tête du mois.
+       Masqué en mobile uniquement, ce qui laisse la place aux 6 semaines. */
+    .mud-picker-toolbar {
+        display: none !important;
+    }
+
+    /* Filet de sécurité : si un mois demandait malgré tout plus de place que
+       l'écran, on défile dans le calendrier plutôt que de perdre des jours. */
+    .mud-picker-paper {
+        max-height: calc(100vh - 32px) !important;
+        overflow-y: auto !important;
+    }
 }
 
 /* Libellé « JPV » accolé à l'étoile de la feuille de match : l'icône seule
