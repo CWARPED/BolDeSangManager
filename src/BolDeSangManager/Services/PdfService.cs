@@ -237,87 +237,61 @@ public class PdfService
                                 .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
                             bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
 
-                            // En paysage la largeur utile passe à ~267 mm, mais une
-                            // description de compétence tient en une ligne : le rappel
-                            // s'étalait donc sur une colonne unique, moitié droite vide,
-                            // et débordait sur une 2e page. On répartit en deux colonnes
-                            // côte à côte pour occuper la largeur réellement disponible.
+                            // Une colonne UNIQUE occupant toute la largeur, et le nom de
+                            // la compétence en tête de son propre paragraphe.
                             //
-                            // Découpe par CATÉGORIE et non par nombre de lignes : couper
-                            // une catégorie en deux placerait son titre dans une colonne
-                            // et une partie de ses compétences dans l'autre.
+                            // ⚠️ Le réglage précédent découpait ce bloc en DEUX colonnes en
+                            // paysage, sur l'idée qu'« une description tient en une ligne ».
+                            // C'était faux : cette impression venait des données de dev
+                            // (descriptions de 40 à 120 caractères) alors que les vraies
+                            // font 300 à 1000 caractères. Sur un vrai roster, deux colonnes
+                            // divisent la largeur par deux et DOUBLENT donc la hauteur —
+                            // l'inverse du but recherché, avec en prime une moitié droite
+                            // vide dès qu'une catégorie pèse plus que toutes les autres.
+                            //
+                            // Le nom n'est plus dans une colonne fixe à gauche : cette
+                            // colonne réservait ~110 pt à un mot de 8 caractères et retirait
+                            // autant de largeur à la description sur CHAQUE ligne. En tête
+                            // de paragraphe, la description récupère toute la page.
                             var parCategorie = toutesCompetences
-                                .GroupBy(s => s.Categorie.ToString())
+                                .GroupBy(s => s.SkillCategoryDef?.Nom
+                                              ?? s.Categorie.ToString())
+                                .OrderBy(g => g.Key)
                                 .Select(g => (Titre: g.Key, Skills: g.ToList()))
                                 .ToList();
 
                             void RendreGroupes(
                                 QuestPDF.Infrastructure.IContainer cible,
-                                List<(string Titre, List<Skill> Skills)> groupes,
-                                int largeurNom)
+                                List<(string Titre, List<Skill> Skills)> groupes)
                             {
                                 cible.Column(comp =>
                                 {
                                     var premier = true;
                                     foreach (var (titre, skills) in groupes)
                                     {
-                                        comp.Item().PaddingTop(premier ? 0 : 6)
+                                        comp.Item().PaddingTop(premier ? 0 : 5)
                                             .Text(titre).Bold().FontSize(8)
                                             .FontColor(Colors.Red.Darken2);
                                         premier = false;
 
                                         foreach (var skill in skills)
                                         {
-                                            comp.Item().PaddingVertical(2).PaddingLeft(8).Row(row =>
-                                            {
-                                                row.ConstantItem(largeurNom)
-                                                    .Text(skill.Nom).Bold().FontSize(8);
-                                                row.RelativeItem().Text(skill.Description).FontSize(8)
-                                                    .FontColor(Colors.Grey.Darken2);
-                                            });
+                                            // Nom et description dans un SEUL paragraphe :
+                                            // le texte reflue sous le nom au lieu de rester
+                                            // dans une colonne étroite à sa droite.
+                                            comp.Item().PaddingTop(2).PaddingLeft(8)
+                                                .Text(t =>
+                                                {
+                                                    t.Span($"{skill.Nom} — ").Bold().FontSize(8);
+                                                    t.Span(skill.Description).FontSize(8)
+                                                        .FontColor(Colors.Grey.Darken2);
+                                                });
                                         }
                                     }
                                 });
                             }
 
-                            if (paysage && parCategorie.Count > 1)
-                            {
-                                // Équilibrage sur le nombre de compétences, titre compris,
-                                // pour que les deux colonnes finissent à peu près à la
-                                // même hauteur.
-                                var total = parCategorie.Sum(g => g.Skills.Count + 1);
-                                var gauche = new List<(string, List<Skill>)>();
-                                var droite = new List<(string, List<Skill>)>();
-                                var cumul = 0;
-
-                                foreach (var groupe in parCategorie)
-                                {
-                                    var poids = groupe.Skills.Count + 1;
-                                    // Tant qu'on n'a pas dépassé la moitié, on remplit la
-                                    // colonne de gauche ; le groupe qui fait basculer y
-                                    // reste s'il déborde moins qu'il ne manquerait à droite.
-                                    if (cumul + poids <= (total + 1) / 2 || gauche.Count == 0)
-                                    {
-                                        gauche.Add(groupe);
-                                        cumul += poids;
-                                    }
-                                    else
-                                    {
-                                        droite.Add(groupe);
-                                    }
-                                }
-
-                                bloc.Item().PaddingTop(6).Row(row =>
-                                {
-                                    RendreGroupes(row.RelativeItem(), gauche, 95);
-                                    row.ConstantItem(16);   // gouttière entre les colonnes
-                                    RendreGroupes(row.RelativeItem(), droite, 95);
-                                });
-                            }
-                            else
-                            {
-                                RendreGroupes(bloc.Item().PaddingTop(6), parCategorie, 110);
-                            }
+                            RendreGroupes(bloc.Item().PaddingTop(6), parCategorie);
                             });
                         }
                         else

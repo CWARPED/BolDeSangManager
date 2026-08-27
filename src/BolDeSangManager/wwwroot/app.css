@@ -489,8 +489,11 @@ h1:focus {
 
     /* boutons icône hors AppBar (agenda, supprimer une ligne, +/- de stats).
        Les flèches de spinner sont EXCLUES : elles sont contraintes par la
-       hauteur de leur champ (voir ci-dessus). */
-    .mud-main-content .mud-icon-button:not(.mud-input-adornment .mud-icon-button):not(.mud-input-numeric-spin .mud-button-root) {
+       hauteur de leur champ (voir ci-dessus).
+       Le socle d'un interrupteur est EXCLU aussi : il porte la classe
+       mud-icon-button, mais l'agrandir déplace le curseur hors de sa
+       glissière (voir la règle dédiée plus bas). */
+    .mud-main-content .mud-icon-button:not(.mud-input-adornment .mud-icon-button):not(.mud-input-numeric-spin .mud-button-root):not(.mud-switch-base) {
         min-height: 44px !important;
         min-width: 44px !important;
     }
@@ -515,12 +518,24 @@ h1:focus {
         line-height: 1.3;
     }
 
-    /* interrupteurs et cases à cocher (24x24) : on élargit la zone
-       cliquable sans grossir le visuel */
-    .mud-main-content .mud-switch-base,
+    /* Cases à cocher : le socle est un simple bouton rond, l'agrandir
+       recentre l'icône sans rien casser. */
     .mud-main-content .mud-checkbox > .mud-button-root {
         min-height: 44px !important;
         min-width: 44px !important;
+    }
+
+    /* ⚠️ Interrupteurs : NE PAS agrandir `.mud-switch-base`.
+       MudBlazor le positionne en absolute et déduit la place du curseur de
+       sa largeur : le porter de 24 à 44px poussait le curseur hors de sa
+       glissière — un petit carré décalé sous la barre (signalé par David
+       sur Admin → Utilisateurs).
+       La zone tactile passe par le <label> parent, qui englobe déjà
+       l'interrupteur ET son texte : toute la ligne est cliquable. */
+    .mud-main-content label.mud-switch {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
     }
 
     /* ------------------------------------------------------------
