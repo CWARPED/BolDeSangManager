@@ -17,10 +17,27 @@
             Mettez-vous d'accord entre vous avant de les saisir.
         </MudAlert>
 
+        @* PickerVariant.Dialog : en inline, le calendrier est rogné par le
+           conteneur sur les écrans étroits (même correctif que CalendrierLibre).
+           PickerMonth démarre le calendrier sur le mois de la ronde précédente
+           plutôt que sur le mois courant : plus besoin de remonter les mois à la
+           main sur téléphone. *@
         <MudDatePicker @bind-Date="_date" Label="Date du match"
                        Variant="Variant.Outlined" Class="mb-3"
+                       PickerVariant="PickerVariant.Dialog"
+                       @bind-PickerMonth="_moisAffiche"
+                       IsDateDisabledFunc="@EstDateInterdite"
                        Clearable="true" Editable="true"
                        DateFormat="dd/MM/yyyy" />
+
+        @if (_plancher is DateTime p)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+                Ronde précédente jouée le @p.ToLocalTime().ToString("dd/MM/yyyy") :
+                les dates antérieures sont désactivées.
+            </MudText>
+        }
+
 
         <MudTimePicker @bind-Time="_heure" Label="Heure"
                        Variant="Variant.Outlined" Class="mb-3"
@@ -62,7 +79,23 @@
     string _lieu = "";
     bool _enCours;
 
-    protected override void OnInitialized()
+    /// <summary>
+    /// Date du dernier match programmé dans une ronde antérieure. Sert de
+    /// plancher : on ne peut pas poser la ronde 5 avant la ronde 4.
+    /// </summary>
+    DateTime? _plancher;
+
+    /// <summary>Mois sur lequel s'ouvre le calendrier (évite de remonter à la main).</summary>
+    DateTime? _moisAffiche;
+
+    /// <summary>
+    /// Grise les jours antérieurs au plancher. C'est un garde-fou d'ergonomie :
+    /// la règle est aussi appliquée côté serveur avant enregistrement.
+    /// </summary>
+    bool EstDateInterdite(DateTime jour) =>
+        _plancher is DateTime p && jour.Date < p.ToLocalTime().Date;
+
+    protected override async Task OnInitializedAsync()
     {
         // stocké en UTC, présenté en heure locale
         if (Match.DateProgrammee is DateTime utc)
@@ -76,6 +109,13 @@
             _heure = new TimeSpan(20, 0, 0);   // 20 h : créneau le plus courant
         }
         _lieu = Match.Lieu ?? "";
+
+        _plancher = await MatchService.GetDatePlancherAsync(Match.Id);
+
+        // Le calendrier s'ouvre sur la date déjà choisie, sinon sur le mois de la
+        // ronde précédente, sinon seulement sur le mois courant.
+        _moisAffiche = (_date ?? _plancher?.ToLocalTime() ?? DateTime.Today);
+        _moisAffiche = new DateTime(_moisAffiche.Value.Year, _moisAffiche.Value.Month, 1);
     }
 
     async Task Enregistrer()
@@ -83,6 +123,14 @@
         if (_date is null)
         {
             Snackbar.Add("Choisissez une date, ou utilisez « Effacer la date ».", Severity.Warning);
+            return;
+        }
+
+        if (_plancher is DateTime p && _date.Value.Date < p.ToLocalTime().Date)
+        {
+            Snackbar.Add(
+                $"La ronde précédente se joue le {p.ToLocalTime():dd/MM/yyyy} : "
+                + "choisissez une date au moins égale.", Severity.Warning);
             return;
         }
 

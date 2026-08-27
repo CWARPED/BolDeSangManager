@@ -71,6 +71,31 @@ public class MatchService(
             .ToListAsync();
 
     /// <summary>
+    /// Date plancher pour programmer un match : la date du dernier match déjà
+    /// programmé dans une ronde ANTÉRIEURE de la même ligue.
+    ///
+    /// Sert à éviter le cas signalé — poser la ronde 5 avant la ronde 4 — en
+    /// faisant démarrer le calendrier au bon endroit plutôt qu'au mois courant.
+    /// Renvoie null quand aucune ronde précédente n'est datée (rien à borner),
+    /// et ignore les playoffs, qui suivent leur propre logique.
+    /// </summary>
+    public async Task<DateTime?> GetDatePlancherAsync(int matchId)
+    {
+        var match = await db.Matches
+            .Include(m => m.Division)
+            .FirstOrDefaultAsync(m => m.Id == matchId);
+
+        if (match?.Division is null || match.EstPlayoff) return null;
+
+        return await db.Matches
+            .Where(m => m.Division!.LeagueId == match.Division.LeagueId
+                        && !m.EstPlayoff
+                        && m.Ronde < match.Ronde
+                        && m.DateProgrammee != null)
+            .MaxAsync(m => (DateTime?)m.DateProgrammee);
+    }
+
+    /// <summary>
     /// Fixe (ou efface) la date et le lieu d'un match (#1).
     ///
     /// Saisie libre : les deux coaches concernés et les commissaires peuvent la
@@ -96,6 +121,18 @@ public class MatchService(
 
         if (match.Statut is MatchStatus.Termine or MatchStatus.Concede)
             throw new InvalidOperationException("Ce match est déjà joué : sa date ne peut plus être modifiée.");
+
+        // Ordre des rondes : une ronde ne peut pas être posée avant une ronde
+        // antérieure déjà datée. Vérifié ICI et pas seulement grisé dans le
+        // calendrier, la saisie de date étant éditable au clavier.
+        if (date is DateTime voulue)
+        {
+            var plancher = await GetDatePlancherAsync(matchId);
+            if (plancher is DateTime p && voulue.Date < p.Date)
+                throw new InvalidOperationException(
+                    $"La ronde précédente se joue le {p.ToLocalTime():dd/MM/yyyy} : "
+                    + "ce match ne peut pas être programmé avant.");
+        }
 
         match.DateProgrammee = date;
         match.Lieu = (lieu ?? string.Empty).Trim();

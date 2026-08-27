@@ -152,4 +152,108 @@ public class ProgrammationMatchTests : IDisposable
         Assert.NotNull(relu!.DateProgrammee);
         Assert.Equal("", relu.Lieu);
     }
+
+    // ─── Ordre des rondes : pas de ronde N avant une ronde antérieure ─────────
+
+    /// <summary>
+    /// Ajoute un match de ronde 2 dans la même division que le match de ronde 1
+    /// préparé par <c>PreparerAsync</c>, et renvoie son id.
+    /// </summary>
+    private static async Task<int> AjouterMatchRonde2Async(ApplicationDbContext db, int matchRonde1Id)
+    {
+        var r1 = await db.Matches.FirstAsync(m => m.Id == matchRonde1Id);
+        var m2 = new Match
+        {
+            DivisionId = r1.DivisionId,
+            Ronde = 2,
+            EquipeDomicileId = r1.EquipeExterieurId,
+            EquipeExterieurId = r1.EquipeDomicileId,
+            Statut = MatchStatus.Programme
+        };
+        db.Matches.Add(m2);
+        await db.SaveChangesAsync();
+        return m2.Id;
+    }
+
+    [Fact]
+    public async Task DatePlancher_EstLaDateDeLaRondePrecedente()
+    {
+        var (svc, db, matchId, coachDom, _, _) = await PreparerAsync();
+        var ronde1 = new DateTime(2026, 9, 12, 18, 30, 0, DateTimeKind.Utc);
+        await svc.ProgrammerMatchAsync(matchId, ronde1, "", coachDom);
+        var m2 = await AjouterMatchRonde2Async(db, matchId);
+
+        Assert.Equal(ronde1, await svc.GetDatePlancherAsync(m2));
+    }
+
+    [Fact]
+    public async Task DatePlancher_EstNulle_QuandAucuneRondePrecedenteNEstDatee()
+    {
+        var (svc, db, matchId, _, _, _) = await PreparerAsync();
+        var m2 = await AjouterMatchRonde2Async(db, matchId);
+
+        Assert.Null(await svc.GetDatePlancherAsync(m2));
+    }
+
+    /// <summary>
+    /// Le cas signalé : programmer la ronde 2 AVANT la ronde 1 doit être refusé
+    /// par le serveur, pas seulement grisé dans le calendrier.
+    /// </summary>
+    [Fact]
+    public async Task Programmer_AvantLaRondePrecedente_EstRefuse()
+    {
+        var (svc, db, matchId, coachDom, _, _) = await PreparerAsync();
+        await svc.ProgrammerMatchAsync(matchId, new DateTime(2026, 9, 12, 18, 30, 0, DateTimeKind.Utc), "", coachDom);
+        var m2 = await AjouterMatchRonde2Async(db, matchId);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.ProgrammerMatchAsync(m2, new DateTime(2026, 9, 5, 18, 30, 0, DateTimeKind.Utc), "", coachDom));
+
+        var relu = await db.Matches.FindAsync(m2);
+        Assert.Null(relu!.DateProgrammee);
+    }
+
+    [Fact]
+    public async Task Programmer_ApresLaRondePrecedente_EstAccepte()
+    {
+        var (svc, db, matchId, coachDom, _, _) = await PreparerAsync();
+        await svc.ProgrammerMatchAsync(matchId, new DateTime(2026, 9, 12, 18, 30, 0, DateTimeKind.Utc), "", coachDom);
+        var m2 = await AjouterMatchRonde2Async(db, matchId);
+
+        var quand = new DateTime(2026, 9, 19, 18, 30, 0, DateTimeKind.Utc);
+        await svc.ProgrammerMatchAsync(m2, quand, "", coachDom);
+
+        var relu = await db.Matches.FindAsync(m2);
+        Assert.Equal(quand, relu!.DateProgrammee);
+    }
+
+    /// <summary>Le MÊME jour que la ronde précédente reste permis (tournoi sur un week-end).</summary>
+    [Fact]
+    public async Task Programmer_LeMemeJourQueLaRondePrecedente_EstAccepte()
+    {
+        var (svc, db, matchId, coachDom, _, _) = await PreparerAsync();
+        await svc.ProgrammerMatchAsync(matchId, new DateTime(2026, 9, 12, 10, 0, 0, DateTimeKind.Utc), "", coachDom);
+        var m2 = await AjouterMatchRonde2Async(db, matchId);
+
+        var quand = new DateTime(2026, 9, 12, 16, 0, 0, DateTimeKind.Utc);
+        await svc.ProgrammerMatchAsync(m2, quand, "", coachDom);
+
+        var relu = await db.Matches.FindAsync(m2);
+        Assert.Equal(quand, relu!.DateProgrammee);
+    }
+
+    /// <summary>Effacer une date ne doit jamais buter sur le plancher.</summary>
+    [Fact]
+    public async Task EffacerLaDate_ResteToujoursPossible()
+    {
+        var (svc, db, matchId, coachDom, _, _) = await PreparerAsync();
+        await svc.ProgrammerMatchAsync(matchId, new DateTime(2026, 9, 12, 18, 30, 0, DateTimeKind.Utc), "", coachDom);
+        var m2 = await AjouterMatchRonde2Async(db, matchId);
+        await svc.ProgrammerMatchAsync(m2, new DateTime(2026, 9, 19, 18, 30, 0, DateTimeKind.Utc), "", coachDom);
+
+        await svc.ProgrammerMatchAsync(m2, null, "", coachDom);
+
+        var relu = await db.Matches.FindAsync(m2);
+        Assert.Null(relu!.DateProgrammee);
+    }
 }
