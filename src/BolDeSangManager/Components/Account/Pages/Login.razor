@@ -89,6 +89,12 @@
                          Color="Color.Error" Typo="Typo.body2">
                     Créer un compte coach
                 </MudLink>
+                @* /a-propos est déjà ouverte aux visiteurs : sans ce lien elle
+                   n'était atteignable que par la barre d'adresse, donc en
+                   pratique invisible pour qui n'a pas encore de compte. *@
+                <MudLink Href="/a-propos" Color="Color.Secondary" Typo="Typo.body2">
+                    À propos
+                </MudLink>
             </div>
 
         </MudCardContent>
