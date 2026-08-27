@@ -150,18 +150,29 @@ else
                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2"
                           Wrap="Wrap.Wrap" Class="mb-3">
                     @* PickerVariant.Dialog : en inline, le calendrier est rogné par
-                       le conteneur de la ronde sur les écrans étroits. *@
+                       le conteneur de la ronde sur les écrans étroits.
+                       La date est enregistrée DÈS LA SÉLECTION (pas de bouton) et
+                       le calendrier s'ouvre sur la date de la ronde précédente. *@
                     <MudDatePicker Date="ronde.DateLimite"
-                                   DateChanged="@(d => { ronde.DateLimite = d; ronde.Modifiee = true; })"
+                                   DateChanged="@(d => ChangerEcheanceAsync(ronde, d))"
                                    Label="À jouer avant le (facultatif)"
                                    Variant="Variant.Outlined" Margin="Margin.Dense"
                                    PickerVariant="PickerVariant.Dialog"
+                                   PickerMonth="@MoisInitial(ronde)"
+                                   IsDateDisabledFunc="@(j => EstAvantRondePrecedente(ronde, j))"
                                    Clearable="true" Editable="true"
                                    DateFormat="dd/MM/yyyy"
                                    Disabled="@ronde.Verrouillee"
                                    Class="calendrier-date" />
                     <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Date indicative : rien n'est bloqué à l'échéance.
+                        @if (RondePrecedenteDatee(ronde) is RondeVm prec)
+                        {
+                            @($"Après la ronde {prec.Numero} ({prec.DateLimite:dd/MM/yyyy}). Date indicative : rien n'est bloqué à l'échéance.")
+                        }
+                        else
+                        {
+                            @("Date indicative : rien n'est bloqué à l'échéance.")
+                        }
                     </MudText>
                 </MudStack>
 
@@ -207,11 +218,12 @@ else
                 }
 
                 @* ── Actions de ronde ──────────────────────────────────── *@
-                @if (!ronde.Verrouillee)
+                @* Le bouton n'existe que pour les RENCONTRES. Avant le lancement
+                   la ronde n'a qu'une date, désormais enregistrée dès la
+                   sélection : un bouton pour un seul champ n'avait plus d'objet. *@
+                @if (!ronde.Verrouillee && _appariements)
                 {
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Class="mt-3">
-                        @if (_appariements)
-                        {
                         <MudButton Variant="Variant.Outlined" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.Add"
                                    Disabled="@(!PeutAjouterRencontre(ronde))"
@@ -229,7 +241,6 @@ else
                                    OnClick="@(() => CompleterRonde(ronde))">
                             Compléter
                         </MudButton>
-                        }
                         <MudSpacer />
 
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
@@ -469,6 +480,73 @@ else
     }
 
     // ─── Persistance ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Dernière ronde ANTÉRIEURE portant une date : sert de plancher et de point
+    /// de départ au calendrier, pour ne pas dater la ronde 5 avant la ronde 4.
+    ///
+    /// On renvoie la ronde entière (pas seulement sa date) car son NUMÉRO doit
+    /// être affiché : les numéros peuvent avoir des trous (ronde 3 supprimée),
+    /// donc « Numero - 1 » désignerait une ronde inexistante.
+    /// </summary>
+    RondeVm? RondePrecedenteDatee(RondeVm ronde) =>
+        _rondes.Where(r => r.Numero < ronde.Numero && r.DateLimite.HasValue)
+               .OrderByDescending(r => r.Numero)
+               .FirstOrDefault();
+
+    DateTime? EcheanceRondePrecedente(RondeVm ronde) =>
+        RondePrecedenteDatee(ronde)?.DateLimite;
+
+    /// <summary>Grise les jours antérieurs à l'échéance de la ronde précédente.</summary>
+    bool EstAvantRondePrecedente(RondeVm ronde, DateTime jour) =>
+        EcheanceRondePrecedente(ronde) is DateTime prec && jour.Date < prec.Date;
+
+    /// <summary>
+    /// Mois sur lequel s'ouvre le calendrier : la date déjà saisie, sinon celle
+    /// de la ronde précédente — pour ne pas repartir du mois courant à chaque
+    /// ronde et devoir refaire défiler les mois à la main.
+    /// </summary>
+    DateTime? MoisInitial(RondeVm ronde)
+    {
+        var repere = ronde.DateLimite ?? EcheanceRondePrecedente(ronde);
+        return repere is DateTime d ? new DateTime(d.Year, d.Month, 1) : null;
+    }
+
+    /// <summary>
+    /// La date d'échéance est enregistrée DÈS LA SÉLECTION : un bouton
+    /// « Enregistrer » pour un seul champ obligeait à un aller-retour inutile,
+    /// et une date choisie puis non validée était silencieusement perdue.
+    ///
+    /// Volontairement SANS rechargement de la page : les autres rondes peuvent
+    /// être en cours d'édition (rencontres non enregistrées), un RechargerAsync
+    /// ici les effacerait.
+    /// </summary>
+    async Task ChangerEcheanceAsync(RondeVm ronde, DateTime? date)
+    {
+        var precedente = ronde.DateLimite;
+        ronde.DateLimite = date;
+
+        try
+        {
+            await LeagueService.DefinirEcheanceRondeAsync(Id, ronde.Numero, date?.Date);
+
+            // La ronde existe désormais en base (au moins par sa date).
+            ronde.Enregistree = true;
+            if (date is DateTime d) _echeances[ronde.Numero] = d.Date;
+            else _echeances.Remove(ronde.Numero);
+
+            Snackbar.Add(
+                date.HasValue
+                    ? $"Ronde {ronde.Numero} : à jouer avant le {date.Value:dd/MM/yyyy}."
+                    : $"Ronde {ronde.Numero} : date retirée.",
+                Severity.Success);
+        }
+        catch (Exception)
+        {
+            ronde.DateLimite = precedente;   // l'écran ne doit pas afficher une date non enregistrée
+            Snackbar.Add("Impossible d'enregistrer cette date.", Severity.Error);
+        }
+    }
 
     async Task EnregistrerRonde(RondeVm ronde)
     {
