@@ -457,6 +457,12 @@ public class LeagueService(
     /// suppression. Une ronde déjà commencée ne peut pas changer de numéro
     /// (des matchs joués y font référence) : dans ce cas on ne touche à rien
     /// et on renvoie false, à charge de l'appelant de laisser la numérotation.
+    ///
+    /// ⚠️ Les rondes existent sous DEUX formes : des matchs (après lancement) et
+    /// des échéances de date (avant lancement, quand on prépare le calendrier).
+    /// Ne regarder que les matchs faisait sortir la méthode immédiatement avant
+    /// le lancement, et la numérotation gardait son trou (« Ronde 1, 2, 4 »).
+    /// On renumérote donc sur l'UNION des deux.
     /// </summary>
     public async Task<bool> RenumeroterRondesAsync(int ligueId)
     {
@@ -464,9 +470,14 @@ public class LeagueService(
             .Where(m => m.Division!.LeagueId == ligueId && !m.EstPlayoff)
             .ToListAsync();
 
-        if (matchs.Count == 0) return true;
+        var echeances = await db.EcheancesRondes.Where(e => e.LeagueId == ligueId).ToListAsync();
 
-        var ordre = matchs.Select(m => m.Ronde).Distinct().OrderBy(r => r).ToList();
+        if (matchs.Count == 0 && echeances.Count == 0) return true;
+
+        var ordre = matchs.Select(m => m.Ronde)
+                          .Concat(echeances.Select(e => e.Ronde))
+                          .Distinct().OrderBy(r => r).ToList();
+
         var cible = ordre.Select((ancien, i) => (ancien, nouveau: i + 1))
                          .Where(x => x.ancien != x.nouveau)
                          .ToList();
@@ -486,7 +497,6 @@ public class LeagueService(
         foreach (var m in matchs.Where(m => map.ContainsKey(m.Ronde)))
             m.Ronde = map[m.Ronde];
 
-        var echeances = await db.EcheancesRondes.Where(e => e.LeagueId == ligueId).ToListAsync();
         foreach (var e in echeances.Where(e => map.ContainsKey(e.Ronde)))
             e.Ronde = map[e.Ronde];
 

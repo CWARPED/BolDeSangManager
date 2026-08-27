@@ -1091,6 +1091,36 @@ public class LeagueServiceTests : IDisposable
         Assert.True(echeances.ContainsKey(2));
     }
 
+    /// <summary>
+    /// Bug signalé : avant le lancement, une ligue n'a AUCUN match — les rondes
+    /// n'existent que par leurs échéances de date. La renumérotation sortait
+    /// alors immédiatement (« pas de match, rien à faire ») et l'écran gardait
+    /// son trou : « Ronde 1, Ronde 2, Ronde 4 » après suppression de la 3.
+    /// </summary>
+    [Fact]
+    public async Task RenumeroterRondes_CombleLesTrous_AvantLancement_SansAucunMatch()
+    {
+        var (ligueId, _) = await SetupLigueLibreAsync(4);
+
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+        await svc.DefinirEcheanceRondeAsync(ligueId, 1, new DateTime(2026, 9, 2, 0, 0, 0, DateTimeKind.Utc));
+        await svc.DefinirEcheanceRondeAsync(ligueId, 2, new DateTime(2026, 9, 30, 0, 0, 0, DateTimeKind.Utc));
+        await svc.DefinirEcheanceRondeAsync(ligueId, 4, new DateTime(2027, 2, 16, 0, 0, 0, DateTimeKind.Utc));
+
+        // Aucun match : c'est précisément le cas qui sortait trop tôt.
+        Assert.Empty(await db.Matches.Where(m => m.Division!.LeagueId == ligueId).ToListAsync());
+
+        Assert.True(await svc.RenumeroterRondesAsync(ligueId));
+
+        await using var db2 = _factory.CreateContext();
+        var echeances = await CreateService(db2).GetEcheancesRondesAsync(ligueId);
+
+        Assert.Equal([1, 2, 3], echeances.Keys.OrderBy(k => k));
+        // La date de l'ex-ronde 4 suit son nouveau numéro, elle n'est pas perdue.
+        Assert.Equal(new DateTime(2027, 2, 16), echeances[3].Date);
+    }
+
     [Fact]
     public async Task RenumeroterRondes_NeToucheRienSiDejaCompact()
     {

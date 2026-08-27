@@ -605,12 +605,14 @@ else
             {
                 await LeagueService.DefinirEcheanceRondeAsync(Id, ronde.Numero, null);
                 _rondes.Remove(ronde);
-                Snackbar.Add($"Date de la ronde {ronde.Numero} retirée.", Severity.Success);
+                // Sans ça la numérotation garde un trou : « Ronde 1, 2, 4 ».
+                await LeagueService.RenumeroterRondesAsync(Id);
+                Snackbar.Add($"Ronde {ronde.Numero} retirée.", Severity.Success);
                 await RechargerAsync();
             }
             catch (Exception)
             {
-                Snackbar.Add("Impossible de retirer cette date.", Severity.Error);
+                Snackbar.Add("Impossible de retirer cette ronde.", Severity.Error);
             }
             return;
         }
