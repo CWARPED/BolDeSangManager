@@ -11,6 +11,8 @@
 @inject PdfService PdfService
 @inject IJSRuntime JS
 @inject CalendrierService CalendrierService
+@inject LeagueNotificationService Notifications
+@implements IDisposable
 
 <PageTitle>@(_ligue?.Nom ?? "Ligue") — BolDeSang Manager</PageTitle>
 
@@ -662,7 +664,48 @@ else
                 .ToDictionary(e => e.Key, e => e.Value.Date);
 
         await ChargerCommissairesAsync();
+
+        // Temps réel : la page ne lisait la base qu'ICI, une seule fois. Un coach
+        // qui laissait l'écran ouvert pendant que le commissaire lançait la
+        // saison continuait de voir « Inscriptions », sans le bloc « Proposer
+        // une rencontre » — et sans comprendre pourquoi.
+        Notifications.LigueModifiee += SurLigueModifieeAsync;
     }
+
+    /// <summary>
+    /// Rafraîchit l'écran quand CETTE ligue change, quel que soit l'utilisateur
+    /// à l'origine du changement.
+    ///
+    /// Les données sont relues avec les droits de l'utilisateur COURANT (rôle,
+    /// mode brouillard) : on ne recopie jamais un état préparé pour quelqu'un
+    /// d'autre. InvokeAsync est obligatoire — l'événement arrive depuis le
+    /// circuit d'un AUTRE utilisateur, il faut repasser sur celui de ce
+    /// composant avant de toucher à son rendu.
+    /// </summary>
+    private async Task SurLigueModifieeAsync(int ligueId)
+    {
+        if (ligueId != Id) return;
+
+        await InvokeAsync(async () =>
+        {
+            // ignorerCache : le DbContext vit aussi longtemps que le circuit,
+            // donc que l'onglet. Sans vidage, EF rend l'entité chargée à
+            // l'ouverture et l'écran se « rafraîchit » sur l'ancien statut.
+            _ligue = await LeagueService.GetLigueAsync(Id, ignorerCache: true);
+            if (_ligue is not null)
+                _echeances = (await LeagueService.GetEcheancesRondesAsync(_ligue.Id))
+                    .ToDictionary(e => e.Key, e => e.Value.Date);
+            await ChargerCommissairesAsync();
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>
+    /// Désabonnement OBLIGATOIRE : le service est un singleton, il survivrait à
+    /// la page et garderait en vie un composant détruit (fuite mémoire, rendu
+    /// sur un circuit fermé).
+    /// </summary>
+    public void Dispose() => Notifications.LigueModifiee -= SurLigueModifieeAsync;
 
     async Task ChargerCommissairesAsync()
     {

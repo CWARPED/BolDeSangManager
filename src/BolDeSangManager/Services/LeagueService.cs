@@ -6,12 +6,25 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
 
+/// <param name="notifications">
+/// Diffusion temps réel des changements de ligue aux écrans ouverts.
+/// Optionnel : les tests unitaires instancient le service sans lui, et une
+/// notification manquante ne doit jamais faire échouer une opération métier.
+/// </param>
 public class LeagueService(
     ApplicationDbContext db,
     ILogger<LeagueService> logger,
     IAuthorizationService authService,
-    StaffService staffService)
+    StaffService staffService,
+    LeagueNotificationService? notifications = null)
 {
+    /// <summary>
+    /// Prévient les écrans ouverts qu'une ligue vient de changer. Appelé APRÈS
+    /// le SaveChanges : on ne diffuse que des faits déjà en base.
+    /// </summary>
+    private Task NotifierChangementAsync(int ligueId) =>
+        notifications?.NotifierAsync(ligueId) ?? Task.CompletedTask;
+
     public async Task<List<League>> GetAllLiguesAsync() =>
         await db.Leagues
             .Include(l => l.Game)
@@ -21,8 +34,19 @@ public class LeagueService(
             .OrderByDescending(l => l.CreeLe)
             .ToListAsync();
 
-    public async Task<League?> GetLigueAsync(int id) =>
-        await db.Leagues
+    /// <param name="ignorerCache">
+    /// Vide d'abord le cache de suivi du DbContext. Indispensable au
+    /// rafraîchissement TEMPS RÉEL : le contexte est lié au circuit Blazor, donc
+    /// à l'onglet, et il vit aussi longtemps que la page. Sans ce vidage, EF
+    /// renvoie l'instance chargée à l'ouverture — un coach prévenu du lancement
+    /// de la saison relisait « Inscription » et l'écran ne changeait pas, alors
+    /// que la base était bien à jour.
+    /// </param>
+    public async Task<League?> GetLigueAsync(int id, bool ignorerCache = false)
+    {
+        if (ignorerCache) db.ChangeTracker.Clear();
+
+        return await db.Leagues
             .Include(l => l.Game)
             .Include(l => l.RulesVersion)
             .Include(l => l.Commissaire)
@@ -38,6 +62,7 @@ public class LeagueService(
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
                 .ThenInclude(m => m.EquipeExterieur)
             .FirstOrDefaultAsync(l => l.Id == id);
+    }
 
     /// <param name="staffPersonnalise">
     /// Staff ajusté par le commissaire à la création. Quand il est fourni, il
@@ -96,6 +121,7 @@ public class LeagueService(
             ?? throw new InvalidOperationException("Ligue introuvable");
         ligue.Statut = LeagueStatus.Inscription;
         await db.SaveChangesAsync();
+        await NotifierChangementAsync(ligueId);
     }
 
     /// <summary>
@@ -154,6 +180,7 @@ public class LeagueService(
             : [];
 
         logger.LogInformation("Saison lancée pour la ligue {NomLigue} (id={Id}) avec {NbEquipes} équipes (format={Format})", ligue.Nom, ligue.Id, ligue.Equipes.Count, ligue.Format);
+        await NotifierChangementAsync(ligueId);
         return orphelines;
     }
 
@@ -323,6 +350,7 @@ public class LeagueService(
         logger.LogInformation(
             "Rencontre Open créée dans la ligue {Id} : équipe {Dom} contre équipe {Ext} (match {MatchId})",
             ligueId, domicileId, exterieurId, match.Id);
+        await NotifierChangementAsync(ligueId);
         return match.Id;
     }
 
@@ -615,6 +643,8 @@ public class LeagueService(
         logger.LogInformation(
             "Phase de repos lancée pour la ligue {NomLigue} (id={Id}) : {NbResetRPM} RPM reset sur {NbEquipes} équipes",
             ligue.Nom, ligue.Id, joueurs.Count, teamIds.Count);
+
+        await NotifierChangementAsync(ligueId);
     }
 
     public async Task GenererPlayoffsAsync(int ligueId)
@@ -659,6 +689,7 @@ public class LeagueService(
         ligue.Statut = LeagueStatus.PlayOffs;
         await db.SaveChangesAsync();
         logger.LogInformation("Playoffs générés pour la ligue {NomLigue} (id={Id}) : {NbMatchs} matchs, {NbEquipes} équipes qualifiées", ligue.Nom, ligue.Id, matchsPlayoff.Count, equipesQualifiees.Count);
+        await NotifierChangementAsync(ligueId);
     }
 
     /// <summary>
@@ -733,6 +764,7 @@ public class LeagueService(
             ?? throw new InvalidOperationException("Ligue introuvable");
         ligue.Statut = LeagueStatus.Termine;
         await db.SaveChangesAsync();
+        await NotifierChangementAsync(ligueId);
     }
 
     public async Task<List<Match>> GetMatchsDivisionAsync(int divisionId) =>

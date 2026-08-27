@@ -125,6 +125,9 @@ builder.Services.AddIdentityCore<ApplicationUser>(options =>
 builder.Services.AddScoped<GmailEmailSender>();
 builder.Services.AddScoped<IEmailSender<ApplicationUser>>(sp => sp.GetRequiredService<GmailEmailSender>());
 builder.Services.AddSingleton<EmailResendCooldownService>();
+// Singleton : le point de rendez-vous doit être partagé par TOUS les circuits
+// (un par onglet ouvert), sinon chaque page ne se notifierait qu'elle-même.
+builder.Services.AddSingleton<LeagueNotificationService>();
 
 // Services métier
 builder.Services.AddScoped<LeagueService>();
