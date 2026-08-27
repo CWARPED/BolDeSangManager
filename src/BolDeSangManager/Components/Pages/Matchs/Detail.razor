@@ -7,6 +7,8 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject LeagueNotificationService Notifications
+@implements IDisposable
 
 <PageTitle>Résultat du match — BolDeSang Manager</PageTitle>
 
@@ -391,7 +393,29 @@ else
                 }
             }
         }
+
+        // Temps réel : écran de consultation pure, aucune saisie à préserver.
+        Notifications.MatchModifie += SurMatchModifieAsync;
     }
+
+    /// <summary>
+    /// Recharge le match quand l'autre coach ou le commissaire agit dessus
+    /// (confirmation de feuille, après-match, validation, correction).
+    /// </summary>
+    private async Task SurMatchModifieAsync(int matchId)
+    {
+        if (matchId != Id) return;
+
+        await InvokeAsync(async () =>
+        {
+            // ignorerCache via GetMatchFraisAsync : le DbContext vit aussi
+            // longtemps que l'onglet, EF rendrait sinon l'instance périmée.
+            _match = await MatchService.GetMatchFraisAsync(Id);
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose() => Notifications.MatchModifie -= SurMatchModifieAsync;
 
     void ToggleEdition()
     {

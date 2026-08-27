@@ -7,6 +7,8 @@
 @inject AuthenticationStateProvider AuthProvider
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
+@inject LeagueNotificationService Notifications
+@implements IDisposable
 
 <PageTitle>Après-match — BolDeSang Manager</PageTitle>
 
@@ -254,7 +256,14 @@ else
         _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
 
         _match = await MatchService.GetMatchAsync(Id);
-        if (_match is null || _match.Statut != MatchStatus.ValidationCompetences) return;
+        if (_match is null) return;
+
+        // Abonnement AVANT les retours anticipés (statut, droits, équipe) :
+        // placé en fin de méthode il aurait été sauté dès qu'un coach n'est pas
+        // en phase d'après-match, et le temps réel n'aurait jamais servi ici.
+        Notifications.MatchModifie += SurMatchModifieAsync;
+
+        if (_match.Statut != MatchStatus.ValidationCompetences) return;
 
         bool estDom = _match.EquipeDomicile?.CoachId == _userId;
         bool estExt = _match.EquipeExterieur?.CoachId == _userId;
@@ -301,6 +310,32 @@ else
             _numerosRecruté[pos.Id] = Math.Min(nextNum, 99);
         }
     }
+
+    /// <summary>
+    /// Réagit à une action de l'AUTRE coach sur ce match.
+    ///
+    /// ⚠️ On ne recharge PAS l'écran : cette page porte une saisie en cours
+    /// (XP dépensés, recrutements, relances) qu'un rechargement effacerait.
+    /// On ne réagit qu'au seul changement qui rend l'écran caduc — le passage
+    /// à « Terminé » — et on redirige alors vers le détail du match.
+    /// </summary>
+    private async Task SurMatchModifieAsync(int matchId)
+    {
+        if (matchId != Id) return;
+
+        // GetMatchFraisAsync : le DbContext vit aussi longtemps que l'onglet,
+        // sans vidage du cache EF on relirait l'ancien statut.
+        var frais = await MatchService.GetMatchFraisAsync(Id);
+        if (frais?.Statut != MatchStatus.Termine) return;
+
+        await InvokeAsync(() =>
+        {
+            Snackbar.Add("L'adversaire a validé : le match est terminé.", Severity.Success);
+            Nav.NavigateTo($"/matchs/{Id}/detail");
+        });
+    }
+
+    public void Dispose() => Notifications.MatchModifie -= SurMatchModifieAsync;
 
     /// <summary>
     /// Libellé d'une compétence dans la liste (R7). MudSelect ne rend pas

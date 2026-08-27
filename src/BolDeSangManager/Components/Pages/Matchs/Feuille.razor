@@ -6,6 +6,8 @@
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
+@inject LeagueNotificationService Notifications
+@implements IDisposable
 
 <PageTitle>Feuille de match — BolDeSang Manager</PageTitle>
 
@@ -539,6 +541,11 @@ else
         _match = await MatchService.GetMatchAsync(Id);
         if (_match is null) return;
 
+        // Abonnement AVANT les retours anticipés ci-dessous (feuille déjà
+        // saisie, non-coach) : placé en fin de méthode il aurait été sauté dans
+        // la plupart des cas, et le temps réel n'aurait jamais fonctionné ici.
+        Notifications.MatchModifie += SurMatchModifieAsync;
+
         // Barème du jeu concerné (le TD vaut 5 en Dungeon Bowl, 3 sinon)
         _bareme = XpBareme.DeLigue(_match.Division?.League,
             _match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
@@ -570,6 +577,38 @@ else
                 .Select(j => new PlayerInfo(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
                 .ToList();
     }
+
+    /// <summary>
+    /// Prévient quand l'adversaire saisit la feuille pendant que je la remplis.
+    ///
+    /// ⚠️ On ne recharge JAMAIS cet écran : il porte une saisie en cours (score,
+    /// actions des joueurs) qu'un rechargement effacerait sans prévenir. On se
+    /// contente d'avertir — le coach décide lui-même de recharger, et perd sa
+    /// saisie en connaissance de cause plutôt que par surprise.
+    /// </summary>
+    private async Task SurMatchModifieAsync(int matchId)
+    {
+        if (matchId != Id) return;
+
+        // Rien à signaler tant qu'aucune feuille n'existe côté base.
+        var frais = await MatchService.GetMatchFraisAsync(Id);
+        if (frais?.Feuille is null || _feuilleDejaSignalee) return;
+
+        _feuilleDejaSignalee = true;
+        await InvokeAsync(() =>
+        {
+            Snackbar.Add(
+                "L'adversaire vient de saisir la feuille de ce match. Rechargez la page pour la voir.",
+                Severity.Warning,
+                config => config.RequireInteraction = true);
+            StateHasChanged();
+        });
+    }
+
+    /// <summary>Évite de répéter l'avertissement à chaque action de l'adversaire.</summary>
+    bool _feuilleDejaSignalee;
+
+    public void Dispose() => Notifications.MatchModifie -= SurMatchModifieAsync;
 
     async Task Soumettre()
     {

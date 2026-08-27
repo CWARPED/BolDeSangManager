@@ -5,12 +5,39 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
 
+/// <param name="notifications">
+/// Diffusion temps réel aux écrans de match ouverts. Optionnel : les tests
+/// unitaires instancient le service sans lui, et une notification manquante ne
+/// doit jamais faire échouer une opération métier.
+/// </param>
 public class MatchService(
     ApplicationDbContext db,
     ILogger<MatchService> logger,
     GmailEmailSender emailSender,
-    SettingsService settings)
+    SettingsService settings,
+    LeagueNotificationService? notifications = null)
 {
+    /// <summary>
+    /// Prévient les écrans ouverts qu'un match vient de changer. Appelé APRÈS
+    /// le SaveChanges : on ne diffuse que des faits déjà en base.
+    /// </summary>
+    private Task NotifierMatchAsync(int matchId) =>
+        notifications?.NotifierMatchAsync(matchId) ?? Task.CompletedTask;
+
+    /// <summary>
+    /// Lit un match en ignorant le cache de suivi EF.
+    ///
+    /// ⚠️ Indispensable au rafraîchissement temps réel : le DbContext est scopé
+    /// au circuit Blazor, donc à l'onglet, et il vit aussi longtemps que la
+    /// page. Sans ce vidage EF rend l'instance chargée à l'ouverture, et
+    /// l'écran se « rafraîchit » sur des données périmées.
+    /// </summary>
+    public async Task<Match?> GetMatchFraisAsync(int matchId)
+    {
+        db.ChangeTracker.Clear();
+        return await GetMatchAsync(matchId);
+    }
+
     public async Task<Match?> GetMatchAsync(int matchId) =>
         await db.Matches
             .Include(m => m.EquipeDomicile).ThenInclude(e => e.Coach)
@@ -140,6 +167,8 @@ public class MatchService(
 
         logger.LogInformation("Match id={MatchId} programmé au {Date} à '{Lieu}' par {UserId}",
             matchId, date?.ToString("u") ?? "(non fixée)", match.Lieu, userId);
+
+        await NotifierMatchAsync(matchId);
     }
 
     public async Task<MatchSheet> SaisirFeuilleMatchAsync(int matchId, MatchSheet feuille,
@@ -198,6 +227,7 @@ public class MatchService(
             matchId, match.EquipeDomicile?.Nom, feuille.TouchdownsDomicile, feuille.TouchdownsExterieur, match.EquipeExterieur?.Nom, records.Count);
 
         await EnvoyerEmailConfirmationFeuilleAsync(match, matchId, saisiParId);
+        await NotifierMatchAsync(matchId);
         return feuille;
     }
 
@@ -229,6 +259,7 @@ public class MatchService(
         logger.LogInformation("Feuille du match id={MatchId} confirmée par coach id={CoachId}", matchId, coachId);
 
         await EnvoyerEmailApresMatchAsync(match, matchId, excludeCoachId: coachId);
+        await NotifierMatchAsync(matchId);
     }
 
     private async Task EnvoyerEmailConfirmationFeuilleAsync(Match match, int matchId, string saisiParId)
@@ -547,6 +578,7 @@ public class MatchService(
 
         await db.SaveChangesAsync();
         logger.LogInformation("Match id={MatchId} validé par le commissaire", matchId);
+        await NotifierMatchAsync(matchId);
     }
 
     public async Task ValiderApresMatchCoachAsync(
@@ -622,6 +654,10 @@ public class MatchService(
 
         await db.SaveChangesAsync();
         logger.LogInformation("Après-match validé par coach de l'équipe id={TeamId} (match id={MatchId})", teamId, matchId);
+
+        // L'autre coach doit voir arriver cette validation : c'est elle qui
+        // declenche l'auto-cloture quand les deux ont valide.
+        await NotifierMatchAsync(matchId);
     }
 
     public async Task ModifierFeuilleAsync(int matchId, MatchSheet feuilleModifiee, List<MatchPlayerRecord> nouveauxRecords)
@@ -786,6 +822,7 @@ public class MatchService(
 
         await EnvoyerEmailApresMatchAsync(match, matchId);
         logger.LogInformation("Feuille match id={MatchId} modifiée par commissaire", matchId);
+        await NotifierMatchAsync(matchId);
     }
 
     public async Task<List<Match>> GetMatchsEnAttenteValidationAsync(int ligueId) =>

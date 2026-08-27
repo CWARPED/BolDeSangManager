@@ -33,27 +33,43 @@ public class LeagueNotificationService(ILogger<LeagueNotificationService> logger
     public event Func<int, Task>? LigueModifiee;
 
     /// <summary>
+    /// Déclenché après une modification de MATCH, avec son identifiant.
+    ///
+    /// Un match est collaboratif par conception : deux coaches remplissent la
+    /// feuille, la confirment, puis dépensent leurs XP en après-match — et le
+    /// match se clôt TOUT SEUL quand les deux ont validé. Sans diffusion, celui
+    /// qui attend ne voit jamais arriver l'action de l'autre.
+    /// </summary>
+    public event Func<int, Task>? MatchModifie;
+
+    /// <summary>
     /// Signale que la ligue a changé. Chaque abonné est appelé dans son propre
     /// try/catch : un écran en erreur (circuit déjà fermé, par exemple) ne doit
     /// pas empêcher les autres d'être prévenus, ni faire échouer l'action
     /// métier qui vient de réussir en base.
     /// </summary>
-    public async Task NotifierAsync(int ligueId)
+    public Task NotifierAsync(int ligueId) =>
+        DiffuserAsync(LigueModifiee, ligueId, "ligue");
+
+    /// <summary>Signale qu'un match a changé (feuille, confirmation, après-match).</summary>
+    public Task NotifierMatchAsync(int matchId) =>
+        DiffuserAsync(MatchModifie, matchId, "match");
+
+    private async Task DiffuserAsync(Func<int, Task>? handlers, int id, string quoi)
     {
-        var handlers = LigueModifiee;
         if (handlers is null) return;
 
         foreach (var handler in handlers.GetInvocationList().Cast<Func<int, Task>>())
         {
             try
             {
-                await handler(ligueId);
+                await handler(id);
             }
             catch (Exception ex)
             {
                 // Abonné injoignable (circuit déjà fermé) : la diffusion continue,
                 // et surtout l'action métier qui vient de réussir n'échoue pas.
-                logger.LogWarning(ex, "Écran injoignable lors de la notification de la ligue {Id}", ligueId);
+                logger.LogWarning(ex, "Écran injoignable lors de la notification du {Quoi} {Id}", quoi, id);
             }
         }
     }
