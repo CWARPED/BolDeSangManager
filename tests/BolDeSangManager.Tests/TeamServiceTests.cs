@@ -498,7 +498,12 @@ public class TeamServiceTests : IDisposable
         await using var db2 = _factory.CreateContext();
         var team = await db2.Teams.Include(t => t.Joueurs).FirstAsync(t => t.Id == equipe.Id);
         Assert.Equal("Après", team.Nom);
-        Assert.Equal(400_000, team.Tresorerie);
+        // La trésorerie postée (400 000) n'est PAS retenue : le serveur la
+        // recalcule depuis le budget de la ligue, le roster et le staff facturé.
+        // 1 000 000 − 3×50 000 (joueurs) − (2×50 000 relances + 3×10 000 fans
+        // + 1×10 000 coach + 50 000 apothicaire) = 660 000.
+        Assert.Equal(660_000, team.Tresorerie);
+
         Assert.Equal(2, team.NombreRelances);
         Assert.Equal(3, team.FansDevoues);
         Assert.True(team.Apothicaire);
@@ -604,5 +609,99 @@ public class TeamServiceTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.SupprimerEquipeAsync(equipe.Id, autre.Id));
+    }
+
+    // ─── Staff : minimum inclus de base (non facturé, mais compté en VEA) ─────
+
+    /// <summary>
+    /// Prépare une ligue dont les « Relances » ont MinCreation = 1 : la première
+    /// relance est comprise de base dans l'équipe.
+    /// </summary>
+    private async Task<LeagueStaffType> AvecRelanceIncluseAsync(int ligueId)
+    {
+        await using var db = _factory.CreateContext();
+        var relances = await db.LeagueStaffTypes
+            .FirstAsync(l => l.LeagueId == ligueId && l.Nom == StaffService.NomRelances);
+        relances.MinCreation = 1;
+        await db.SaveChangesAsync();
+        return relances;
+    }
+
+    [Fact]
+    public async Task CreerEquipe_MinimumStaffInclus_NEstPasDecompteDuBudget()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        var relances = await AvecRelanceIncluseAsync(ligue.Id);
+
+        await using var db = _factory.CreateContext();
+        var equipe = new Team { Nom = "Inclus", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        // 1 relance = exactement le minimum → offerte.
+        await CreateService(db).CreerEquipeAsync(
+            equipe, [(position.Id, "J1", 1)], new Dictionary<int, int> { [relances.Id] = 1 });
+
+        await using var db2 = _factory.CreateContext();
+        var maj = await db2.Teams.FirstAsync(t => t.Id == equipe.Id);
+        // 1 000 000 − 50 000 (le joueur) − 0 (relance offerte)
+        Assert.Equal(ligue.BudgetDepart - position.Cout, maj.Tresorerie);
+    }
+
+    [Fact]
+    public async Task CreerEquipe_StaffAuDelaDuMinimum_EstFactureUniquementPourLeSupplement()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        var relances = await AvecRelanceIncluseAsync(ligue.Id);
+
+        await using var db = _factory.CreateContext();
+        var equipe = new Team { Nom = "Supplement", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        // 3 relances, dont 1 incluse → 2 seulement sont payées.
+        await CreateService(db).CreerEquipeAsync(
+            equipe, [(position.Id, "J1", 1)], new Dictionary<int, int> { [relances.Id] = 3 });
+
+        await using var db2 = _factory.CreateContext();
+        var maj = await db2.Teams.FirstAsync(t => t.Id == equipe.Id);
+        var attendu = ligue.BudgetDepart - position.Cout - 2 * teamType.CoutRelance;
+        Assert.Equal(attendu, maj.Tresorerie);
+    }
+
+    /// <summary>
+    /// Le staff offert n'est pas payé, mais il a une VALEUR : la VEA doit
+    /// compter la quantité TOTALE, minimum inclus compris.
+    /// </summary>
+    [Fact]
+    public async Task VEA_CompteLeStaffOffert_MemeSiNonFacture()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+        var relances = await AvecRelanceIncluseAsync(ligue.Id);
+
+        await using var db = _factory.CreateContext();
+        var equipe = new Team { Nom = "VEA", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = teamType.Id };
+        await CreateService(db).CreerEquipeAsync(
+            equipe, [(position.Id, "J1", 1)], new Dictionary<int, int> { [relances.Id] = 1 });
+
+        await using var db2 = _factory.CreateContext();
+        var svc = CreateService(db2);
+        var complete = await svc.GetEquipeAsync(equipe.Id);
+
+        // Joueur + la relance offerte : elle vaut son prix dans la VEA.
+        Assert.Equal(position.Cout + teamType.CoutRelance, svc.CalculerVEA(complete!));
+    }
+
+    [Fact]
+    public async Task CreerEquipe_TresorerieRecalculeeParLeServeur_IgnoreLaValeurPostee()
+    {
+        var (coach, teamType, position, ligue) = await SetupAsync();
+
+        await using var db = _factory.CreateContext();
+        var equipe = new Team
+        {
+            Nom = "Triche", CoachId = coach.Id, LeagueId = ligue.Id,
+            TeamTypeId = teamType.Id,
+            Tresorerie = 9_000_000        // valeur postée fantaisiste
+        };
+        await CreateService(db).CreerEquipeAsync(equipe, [(position.Id, "J1", 1)]);
+
+        await using var db2 = _factory.CreateContext();
+        var maj = await db2.Teams.FirstAsync(t => t.Id == equipe.Id);
+        Assert.Equal(ligue.BudgetDepart - position.Cout, maj.Tresorerie);
     }
 }

@@ -232,6 +232,28 @@ public class StaffService(ApplicationDbContext db, ILogger<StaffService> logger)
     public static int CoutUnitaire(LeagueStaffType type, TeamType? teamType) =>
         type.CoutDepuisTypeEquipe ? teamType?.CoutRelance ?? 50_000 : type.Cout;
 
+    /// <summary>
+    /// Nombre d'unités réellement FACTURÉES à la composition de l'équipe.
+    ///
+    /// Un <c>MinCreation</c> non nul signifie que ces unités sont COMPRISES DE
+    /// BASE dans l'équipe (une race qui démarre avec 1 relance, par exemple) :
+    /// elles ne sont donc pas décomptées du budget de départ. Seul le
+    /// supplément acheté au-delà du minimum coûte quelque chose.
+    ///
+    /// Attention : cela ne concerne QUE le budget. La VEA compte toujours la
+    /// quantité TOTALE (voir <c>TeamService.CalculerVEA</c>) — le staff offert
+    /// a une valeur, il est simplement offert.
+    /// </summary>
+    public static int UnitesFacturees(LeagueStaffType type, int quantite) =>
+        Math.Max(0, quantite - type.MinCreation);
+
+    /// <summary>
+    /// Coût porté au budget de départ pour une quantité de staff, minimum
+    /// inclus déduit. Voir <see cref="UnitesFacturees"/>.
+    /// </summary>
+    public static int CoutFactureCreation(LeagueStaffType type, TeamType? teamType, int quantite) =>
+        UnitesFacturees(type, quantite) * CoutUnitaire(type, teamType);
+
     // ── Validation ────────────────────────────────────────────────────────────
 
     private static void ValiderBornes(string nom, int min, int max, int? maxLigue)

@@ -251,13 +251,20 @@ else
         _staffQuantites[staff.Id] = Math.Clamp(valeur, staff.MinCreation, staff.MaxCreation);
     }
 
-    /// <summary>Coût unitaire affiché sous le champ. Le prix des relances vient de la race.</summary>
+    /// <summary>
+    /// Coût unitaire affiché sous le champ. Le prix des relances vient de la race.
+    /// Un minimum inclus est signalé comme offert : il n'entame pas le budget.
+    /// </summary>
     string LibelleCoutStaff(LeagueStaffType staff) =>
         $"{StaffService.CoutUnitaire(staff, _selectedType):N0} po"
-        + (staff.CoutDepuisTypeEquipe ? " (selon la race)" : "");
+        + (staff.CoutDepuisTypeEquipe ? " (selon la race)" : "")
+        + (staff.MinCreation > 0 ? $" — {staff.MinCreation} inclus, offert" : "");
 
+    // Seul le supplément au-delà du minimum est décompté : le minimum est
+    // compris de base dans l'équipe (il compte en revanche dans la VEA).
     int _coutStaff => _staffLigue.Sum(st =>
-        QuantiteStaff(st.Id) * StaffService.CoutUnitaire(st, _selectedType));
+        StaffService.CoutFactureCreation(st, _selectedType, QuantiteStaff(st.Id)));
+
 
     int _budgetRestant => _ligue is null ? 0 :
         _ligue.BudgetDepart

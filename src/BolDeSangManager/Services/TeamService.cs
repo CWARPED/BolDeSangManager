@@ -102,7 +102,15 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         await db.SaveChangesAsync();
 
         // Staff : validé contre les bornes de la ligue (min/max à la création).
-        await AppliquerStaffAsync(equipe, staff ?? new Dictionary<int, int>(), aLaCreation: true);
+        // Le coût retourné exclut les minimums, compris de base dans l'équipe.
+        var coutStaff = await AppliquerStaffAsync(equipe, staff ?? new Dictionary<int, int>(), aLaCreation: true);
+
+        // Trésorerie recalculée par le SERVEUR : l'écran la propose, mais la
+        // valeur postée ne fait pas foi (elle est modifiable côté client).
+        var coutJoueurs = joueurs.Sum(j => teamType.Postes.First(p => p.Id == j.positionId).Cout);
+        equipe.Tresorerie = ligue.BudgetDepart - coutJoueurs - coutStaff;
+        if (equipe.Tresorerie < 0)
+            throw new InvalidOperationException("Budget dépassé : le coût de l'équipe excède le budget de départ.");
 
         foreach (var (positionId, nom, numero) in joueurs)
         {
@@ -155,12 +163,20 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     /// ligue. Un type absent du dictionnaire est remis à zéro : l'écran envoie
     /// toujours l'état complet.
     /// </summary>
-    private async Task AppliquerStaffAsync(
+    /// <returns>
+    /// Coût FACTURÉ du staff (minimums inclus déduits) quand
+    /// <paramref name="aLaCreation"/> est vrai, sinon 0. Voir
+    /// <see cref="StaffService.UnitesFacturees"/>.
+    /// </returns>
+    private async Task<int> AppliquerStaffAsync(
         Team equipe, IReadOnlyDictionary<int, int> staff, bool aLaCreation)
     {
         var typesLigue = await db.LeagueStaffTypes
             .Where(l => l.LeagueId == equipe.LeagueId)
             .ToListAsync();
+
+        var teamType = await db.TeamTypes.FirstOrDefaultAsync(t => t.Id == equipe.TeamTypeId);
+        var coutFacture = 0;
 
         var lignes = await db.TeamStaffs
             .Where(t => t.TeamId == equipe.Id)
@@ -189,6 +205,12 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
                 throw new InvalidOperationException(
                     $"« {type.Nom} » : plafond de {plafond} atteint pour cette ligue.");
 
+            // Le minimum imposé par les règles est COMPRIS DE BASE dans l'équipe :
+            // il n'est pas décompté du budget de départ. Il compte en revanche
+            // toujours dans la VEA, qui somme la quantité totale.
+            if (aLaCreation)
+                coutFacture += StaffService.CoutFactureCreation(type, teamType, voulu);
+
             var ligne = lignes.FirstOrDefault(l => l.LeagueStaffTypeId == type.Id);
             if (ligne is null)
             {
@@ -216,6 +238,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         }
 
         await db.SaveChangesAsync();
+        return coutFacture;
     }
 
     /// <param name="staff">
@@ -255,10 +278,17 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             db.TeamPlayers.RemoveRange(equipe.Joueurs);
 
         equipe.Nom = nouveauNom;
-        equipe.Tresorerie = tresorerie;
         await db.SaveChangesAsync();
 
-        await AppliquerStaffAsync(equipe, staff, aLaCreation: true);
+        var coutStaff = await AppliquerStaffAsync(equipe, staff, aLaCreation: true);
+
+        // Même recalcul serveur qu'à la création (le paramètre tresorerie posté
+        // par l'écran n'est qu'indicatif) : minimums de staff non facturés.
+        var coutJoueurs = joueurs.Sum(j => teamType.Postes.First(p => p.Id == j.positionId).Cout);
+        equipe.Tresorerie = equipe.League!.BudgetDepart - coutJoueurs - coutStaff;
+        if (equipe.Tresorerie < 0)
+            throw new InvalidOperationException("Budget dépassé : le coût de l'équipe excède le budget de départ.");
+
 
         // Recréer le roster
         foreach (var (positionId, nom, numero) in joueurs)
