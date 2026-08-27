@@ -1547,6 +1547,91 @@ public class LeagueServiceTests : IDisposable
         Assert.Equal("—", DisplayHelpers.NomCoach(null));
     }
 
+    // ─── Promotion commissaire de ligue ───────────────────────────────────────
+
+    /// <summary>
+    /// Le cas du bug : équipe inscrite mais SANS division (ligue en Inscription).
+    /// L'ancienne UI listait les coaches via Divisions.Equipes → liste vide → le
+    /// coach n'apparaissait jamais dans la modale de promotion.
+    /// </summary>
+    [Fact]
+    public async Task CoachesPromouvables_IncluentUnCoachSansDivision()
+    {
+        var (commissaire, game, rv) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var coach = DataSeeder.CreateUser("coachlibre");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, coach.Id, teamType.Id, "Sans Division");
+
+        await using var db2 = _factory.CreateContext();
+        var promouvables = await CreateService(db2).GetCoachesPromouvablesAsync(ligue.Id);
+
+        Assert.Contains(promouvables, c => c.Id == coach.Id);
+    }
+
+    [Fact]
+    public async Task CoachesPromouvables_ExcluentUnCoachDejaCommissaireDeLigue()
+    {
+        var (commissaire, game, rv) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var coach = DataSeeder.CreateUser("dejapromu");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, coach.Id, teamType.Id, "Équipe");
+        await CreateService(db).PromouvoirCommissaireDeLigueAsync(ligue.Id, coach.Id, commissaire.Id);
+
+        await using var db2 = _factory.CreateContext();
+        var promouvables = await CreateService(db2).GetCoachesPromouvablesAsync(ligue.Id);
+
+        Assert.DoesNotContain(promouvables, c => c.Id == coach.Id);
+    }
+
+    [Fact]
+    public async Task CoachesPromouvables_ExcluentLeCommissaireCreateurEtLesComptesSupprimes()
+    {
+        var (commissaire, game, rv) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var supprime = DataSeeder.CreateUser("anonyme");
+        supprime.EstSupprime = true;
+        db.Users.Add(supprime);
+        await db.SaveChangesAsync();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, commissaire.Id, teamType.Id, "Équipe du commissaire");
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, supprime.Id, teamType.Id, "Équipe orpheline");
+
+        await using var db2 = _factory.CreateContext();
+        var promouvables = await CreateService(db2).GetCoachesPromouvablesAsync(ligue.Id);
+
+        Assert.DoesNotContain(promouvables, c => c.Id == commissaire.Id);
+        Assert.DoesNotContain(promouvables, c => c.Id == supprime.Id);
+    }
+
+    [Fact]
+    public async Task Promouvoir_RendLeCoachCommissaireDeLigue()
+    {
+        var (commissaire, game, rv) = await SetupAsync();
+        await using var db = _factory.CreateContext();
+        var coach = DataSeeder.CreateUser("promu");
+        db.Users.Add(coach);
+        await db.SaveChangesAsync();
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, coach.Id, teamType.Id, "Équipe");
+
+        await using var db2 = _factory.CreateContext();
+        await CreateService(db2).PromouvoirCommissaireDeLigueAsync(ligue.Id, coach.Id, commissaire.Id);
+
+        await using var db3 = _factory.CreateContext();
+        var auth = new AuthorizationService(db3, null!);
+        Assert.True(await auth.EstCommissaireDeLigueAsync(coach.Id, ligue.Id));
+    }
+
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService
     {

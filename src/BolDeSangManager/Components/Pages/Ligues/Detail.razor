@@ -665,7 +665,7 @@ else
     async Task OuvrirModalePromotion()
     {
         if (_ligue is null) return;
-        var coaches = GetCoachesDisponibles();
+        var coaches = await LeagueService.GetCoachesPromouvablesAsync(_ligue.Id);
         var parameters = new DialogParameters<PromotionDialog>
         {
             { x => x.LigueId, _ligue.Id },
@@ -675,20 +675,6 @@ else
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
             await ChargerCommissairesAsync();
-    }
-
-    List<ApplicationUser> GetCoachesDisponibles()
-    {
-        if (_ligue is null) return [];
-        var dejaPromus = _commissaires.Select(c => c.UserId).ToHashSet();
-        var coachesDeLigue = _ligue.Divisions
-            .SelectMany(d => d.Equipes)
-            .Select(e => e.Coach)
-            .Where(c => c is not null)
-            .Distinct()
-            .Cast<ApplicationUser>()
-            .ToList();
-        return coachesDeLigue.Where(c => !dejaPromus.Contains(c.Id)).ToList();
     }
 
     async Task RetirerCommissaireAsync(string userId)

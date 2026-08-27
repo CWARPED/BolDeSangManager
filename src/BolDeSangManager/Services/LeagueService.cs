@@ -903,6 +903,36 @@ public class LeagueService(
             .OrderBy(lc => lc.AssigneLe)
             .ToListAsync();
 
+    /// <summary>
+    /// Coaches de la ligue pouvant être promus commissaires de cette ligue.
+    /// Part de <c>Teams.LeagueId</c> et NON de <c>Divisions.Equipes</c> : une équipe
+    /// sans division (ligue en Inscription, ou format Libre avant composition du
+    /// calendrier) est le cas NORMAL, et passer par les divisions rendait alors la
+    /// liste systématiquement vide — aucun coach n'était promouvable.
+    /// Sont exclus : les déjà-commissaires de ligue, le commissaire créateur de la
+    /// ligue (il la gère déjà) et les comptes supprimés/anonymisés.
+    /// </summary>
+    public async Task<List<ApplicationUser>> GetCoachesPromouvablesAsync(int ligueId)
+    {
+        var ligue = await db.Leagues.AsNoTracking().FirstOrDefaultAsync(l => l.Id == ligueId);
+        if (ligue is null) return [];
+
+        var dejaPromus = await db.LeagueCommissioners
+            .Where(lc => lc.LeagueId == ligueId)
+            .Select(lc => lc.UserId)
+            .ToListAsync();
+
+        return await db.Teams
+            .Where(t => t.LeagueId == ligueId)
+            .Select(t => t.Coach)
+            .Where(c => !c.EstSupprime
+                        && c.Id != ligue.CommissaireId
+                        && !dejaPromus.Contains(c.Id))
+            .Distinct()
+            .OrderBy(c => c.PseudoCoach)
+            .ToListAsync();
+    }
+
     public async Task PromouvoirCommissaireDeLigueAsync(int ligueId, string userId, string assignePar)
     {
         var existe = await db.LeagueCommissioners.AnyAsync(lc => lc.LeagueId == ligueId && lc.UserId == userId);
