@@ -223,24 +223,33 @@ else
                         sera confirmée par l'équipe adverse, comme d'habitude.
                     </MudText>
                     <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap">
-                        <MudSelect T="int" @bind-Value="_openDomicileId" Label="Domicile"
+                        @* T="int?" et non "int" : avec un int non nullable, la valeur
+                           par defaut 0 s'affiche telle quelle dans le champ (« 0 »)
+                           au lieu de laisser le libelle et un champ vide.
+                           ToStringFunc est indispensable : sans elle le champ affiche
+                           l'identifiant brut de l'equipe (« 32 ») une fois choisie. *@
+                        <MudSelect T="int?" @bind-Value="_openDomicileId" Label="Domicile"
+                                   ToStringFunc="@NomEquipeOpen"
+                                   Placeholder="Choisir une équipe" Clearable="true"
                                    Variant="Variant.Outlined" Margin="Margin.Dense" Class="equipe-select">
                             @foreach (var e in _ligue.Equipes.OrderBy(e => e.Nom))
                             {
-                                <MudSelectItem T="int" Value="@e.Id">@e.Nom</MudSelectItem>
+                                <MudSelectItem T="int?" Value="@e.Id">@e.Nom</MudSelectItem>
                             }
                         </MudSelect>
                         <MudText Typo="Typo.body2" Color="Color.Secondary"><b>vs</b></MudText>
-                        <MudSelect T="int" @bind-Value="_openExterieurId" Label="Extérieur"
+                        <MudSelect T="int?" @bind-Value="_openExterieurId" Label="Extérieur"
+                                   ToStringFunc="@NomEquipeOpen"
+                                   Placeholder="Choisir une équipe" Clearable="true"
                                    Variant="Variant.Outlined" Margin="Margin.Dense" Class="equipe-select">
                             @foreach (var e in _ligue.Equipes.OrderBy(e => e.Nom))
                             {
-                                <MudSelectItem T="int" Value="@e.Id">@e.Nom</MudSelectItem>
+                                <MudSelectItem T="int?" Value="@e.Id">@e.Nom</MudSelectItem>
                             }
                         </MudSelect>
                         <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                                    StartIcon="@Icons.Material.Filled.AddCircle"
-                                   Disabled="@(_openDomicileId == 0 || _openExterieurId == 0
+                                   Disabled="@(_openDomicileId is null || _openExterieurId is null
                                                || _openDomicileId == _openExterieurId || _creationRencontre)"
                                    OnClick="ProposerRencontre">
                             Créer la rencontre
@@ -692,7 +701,14 @@ else
         _ligue = await LeagueService.GetLigueAsync(Id);
     }
 
-    int _openDomicileId, _openExterieurId;
+    int? _openDomicileId, _openExterieurId;
+
+    /// <summary>
+    /// Libellé affiché dans les listes « Proposer une rencontre » : sans elle,
+    /// MudBlazor affiche la valeur liée telle quelle, donc l'identifiant.
+    /// </summary>
+    string NomEquipeOpen(int? id) =>
+        _ligue?.Equipes.FirstOrDefault(e => e.Id == id)?.Nom ?? string.Empty;
     bool _creationRencontre;
 
     /// <summary>
@@ -701,11 +717,13 @@ else
     /// </summary>
     async Task ProposerRencontre()
     {
+        if (_openDomicileId is not int domicile || _openExterieurId is not int exterieur) return;
+
         _creationRencontre = true;
         try
         {
-            await LeagueService.ProposerRencontreAsync(Id, _openDomicileId, _openExterieurId);
-            _openDomicileId = _openExterieurId = 0;
+            await LeagueService.ProposerRencontreAsync(Id, domicile, exterieur);
+            _openDomicileId = _openExterieurId = null;
             _ligue = await LeagueService.GetLigueAsync(Id);
             Snackbar.Add("Rencontre créée.", Severity.Success);
         }
