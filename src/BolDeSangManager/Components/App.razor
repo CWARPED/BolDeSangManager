@@ -59,7 +59,13 @@
             const a = document.createElement('a');
             a.href = url; a.download = filename;
             document.body.appendChild(a); a.click();
-            document.body.removeChild(a); URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            // ⚠️ NE PAS révoquer l'URL immédiatement : Firefox lit le blob de façon
+            // ASYNCHRONE après le clic. Révoquer tout de suite détruit la source
+            // avant qu'il ait fini, et le fichier téléchargé est tronqué ou vide —
+            // symptôme observé : « impossible d'ouvrir le PDF » sous Firefox alors
+            // que Chrome, qui lit de façon synchrone, ne voyait rien.
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
         };
     </script>
 </body>

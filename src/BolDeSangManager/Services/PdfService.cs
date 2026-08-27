@@ -26,6 +26,41 @@ public class PdfService
         FontManager.RegisterFontWithCustomName(SymbolFont2, s2);
     }
 
+    /// <summary>
+    /// Rend une description de compétence « fluide », c'est-à-dire capable
+    /// d'occuper toute la largeur disponible.
+    ///
+    /// ⚠️ Les descriptions importées du livre de règles contiennent des sauts de
+    /// ligne HÉRITÉS de sa mise en page en colonne étroite (« Esquive » en a 4,
+    /// « Minus » 7). QuestPDF les respecte à la lettre : le texte se coupait donc
+    /// vers le tiers de la page en laissant les deux tiers droits vides, quelle
+    /// que soit la largeur accordée au bloc. Le symptôme ressemblait à un défaut
+    /// de mise en page, la cause était dans la DONNÉE.
+    ///
+    /// On neutralise les sauts SIMPLES (mise en page d'origine) et on préserve
+    /// les sauts DOUBLES, qui séparent de vrais paragraphes — certaines
+    /// compétences longues en ont, et tout aplatir collerait leurs alinéas.
+    /// </summary>
+    public static string TexteFluide(string? description)
+    {
+        if (string.IsNullOrWhiteSpace(description)) return string.Empty;
+
+        var normalise = description.Replace("\r\n", "\n").Replace('\r', '\n');
+
+        // Marqueur temporaire : les vrais paragraphes doivent survivre au collage.
+        const string paragraphe = "\u0001";
+        normalise = System.Text.RegularExpressions.Regex.Replace(
+            normalise, @"\n[ \t]*\n[\s]*", paragraphe);
+
+        // Sauts restants = mise en page d'origine : ils redeviennent des espaces.
+        normalise = normalise.Replace('\n', ' ');
+
+        // Espaces multiples issus du collage.
+        normalise = System.Text.RegularExpressions.Regex.Replace(normalise, "[ \t]{2,}", " ");
+
+        return normalise.Replace(paragraphe, "\n").Trim();
+    }
+
     /// <param name="paysage">
     /// Orientation du PDF (#4). En paysage la largeur utile passe de ~180 à ~267 mm :
     /// les colonnes à largeur fixe (caractéristiques, PSP, valeur) ne bougent pas,
@@ -283,7 +318,7 @@ public class PdfService
                                                 .Text(t =>
                                                 {
                                                     t.Span($"{skill.Nom} — ").Bold().FontSize(8);
-                                                    t.Span(skill.Description).FontSize(8)
+                                                    t.Span(TexteFluide(skill.Description)).FontSize(8)
                                                         .FontColor(Colors.Grey.Darken2);
                                                 });
                                         }
