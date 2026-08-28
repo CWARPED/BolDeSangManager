@@ -460,8 +460,18 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         return data;
     }
 
-    public async Task ModifierTeamTypeAsync(int id, string nom, TeamCategory categorie, int coutRelance, string reglesSpeciales, string reglesSpecialesLigue)
+    /// <param name="categorie">
+    /// Catégorie officielle LRB, de 1 (équipes les plus performantes) à 4 (les
+    /// plus faibles). <c>0</c> = non renseignée. Validée ICI et pas seulement
+    /// dans l'écran : toute valeur choisie par l'utilisateur doit être vérifiée
+    /// côté serveur.
+    /// </param>
+    public async Task ModifierTeamTypeAsync(int id, string nom, int categorie, int coutRelance, string reglesSpeciales, string reglesSpecialesLigue)
     {
+        if (categorie is < 0 or > 4)
+            throw new InvalidOperationException(
+                $"Catégorie invalide : {categorie}. Le livre de règles n'en définit que quatre (1 à 4), 0 signifiant « non renseignée ».");
+
         var t = await db.TeamTypes.FindAsync(id) ?? throw new InvalidOperationException("TeamType introuvable");
         t.Nom = nom;
         t.Categorie = categorie;

@@ -49,6 +49,17 @@ else
             <MudText Typo="Typo.body2">
                 VEA : <b>@TeamService.CalculerVEA(_equipeDetail).ToString("N0") po</b>
             </MudText>
+            @* Catégorie LRB (informative), masquée tant qu'elle n'est pas saisie. *@
+            @if (!string.IsNullOrEmpty(DisplayHelpers.CategorieLabel(_equipeDetail.TeamType?.Categorie ?? 0)))
+            {
+                <MudDivider Vertical="true" FlexItem="true" />
+                <span title="@DisplayHelpers.CategorieDescription(_equipeDetail.TeamType!.Categorie)">
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                             Color="@DisplayHelpers.CategorieColor(_equipeDetail.TeamType!.Categorie)">
+                        @DisplayHelpers.CategorieLabel(_equipeDetail.TeamType!.Categorie)
+                    </MudChip>
+                </span>
+            }
         </MudPaper>
     }
 

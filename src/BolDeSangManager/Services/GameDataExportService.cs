@@ -251,7 +251,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     GameId = gameId,
                     RulesVersionId = version.Id,
                     Nom = ttDto.Nom,
-                    Categorie = ttDto.Categorie,
+                    Categorie = ttDto.CategorieLrb,
                     CoutRelance = ttDto.CoutRelance,
                     ReglesSpeciales = ttDto.ReglesSpeciales,
                     ReglesSpecialesLigue = ttDto.ReglesSpecialesLigue
@@ -627,7 +627,13 @@ record SkillCategoryGdDto(
 
 record TeamTypeGdDto(
     string Nom,
-    TeamCategory Categorie,
+    // Nom de champ JSON volontairement DIFFÉRENT de l'ancien « Categorie ».
+    // L'ancien champ portait le style de jeu maison (0=Bashy … 3=Specialist),
+    // sérialisé en int : réutiliser le même nom ferait relire « 2 » (Agile)
+    // comme « catégorie LRB 2 » dans tout export antérieur — une donnée fausse
+    // et silencieuse. Un ancien fichier importe donc CategorieLrb = 0
+    // (« à renseigner »), ce qui est exact.
+    int CategorieLrb,
     int CoutRelance,
     string ReglesSpeciales,
     string ReglesSpecialesLigue,

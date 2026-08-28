@@ -80,6 +80,14 @@ src/BolDeSangManager/
 
 Affichage : utiliser `DisplayHelpers.NomCoach(user)` et **jamais** `PseudoCoach` directement, sinon un identifiant technique (`compte-supprime-a1b2c3d4`) s'affiche aux autres coaches.
 
+**Catégorie d'équipe** (`TeamType.Categorie`, colonne SQL `CategorieLrb`) : catégorie officielle du LRB (p.94), de **1** (équipes les plus performantes, qui pardonnent le mieux les erreurs) à **4** (les plus faibles, souvent les équipes de « Minus »). **0 = non renseignée.** Purement **informative** : elle oriente le choix d'un nouveau coach et s'affiche sur l'écran de choix de race, la feuille d'équipe et le PDF, mais ne déclenche **aucune mécanique**. Dans le LRB elle sert aussi au Jeu Égal (les catégories basses reçoivent plus de points de compétence), que l'application ne gère pas — l'y brancher serait un chantier distinct.
+
+⚠️ Il n'y a **ni valeur de seed ni backfill** : c'est un choix produit, les commissaires font la passe de saisie depuis l'Admin. Une base fraîchement migrée affiche donc « à renseigner » partout, ce qui est l'état attendu et non un bug.
+
+⚠️ **Ne pas confondre avec `TeamType.StyleJeuObsolete`** (enum `TeamCategory` : Bashy/Staller/Agile/Specialist), un « style de jeu » maison absent du livre de règles. Sa colonne SQL garde son nom d'origine `Categorie` — d'où le `[Column]` explicite sur les deux propriétés — pour que la migration reste purement additive. Elle n'est plus ni écrite, ni affichée, ni clonée, ni exportée. Ne jamais la lire, ne jamais réordonner l'enum (EF persiste ces valeurs en `int`).
+
+⚠️ L'export JSON d'une version nomme le champ **`CategorieLrb`**, volontairement différent de l'ancien `Categorie`. Réutiliser le même nom aurait fait relire un vieil export où `Categorie: 2` valait « Agile » comme « catégorie LRB 2 » — une donnée fausse et silencieuse. Un fichier antérieur s'importe donc avec `Categorie = 0`, ce qui est exact.
+
 **Rôles** : `Commissaire` et `Coach` (ASP.NET Identity). Le commissaire crée les ligues et administre ; les coaches créent des équipes, saisissent les feuilles et **font tourner le match de bout en bout sans lui**.
 
 **Cycle de vie d'une ligue** :

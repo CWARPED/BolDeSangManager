@@ -13,7 +13,32 @@ public class TeamType
     public string Nom { get; set; } = string.Empty;
     public string ReglesSpeciales { get; set; } = string.Empty;
     public int CoutRelance { get; set; } = 50000;
-    public TeamCategory Categorie { get; set; } = TeamCategory.Specialist;
+
+    /// <summary>
+    /// OBSOLÈTE — ancien « style de jeu » maison (Bashy/Staller/Agile/Specialist),
+    /// qui n'existe pas dans le LRB. La colonne SQL garde son nom d'origine
+    /// (<c>Categorie</c>) pour ne casser aucune base existante, mais elle n'est
+    /// plus ni écrite, ni affichée, ni clonée, ni exportée.
+    /// Ne pas lire dans du code nouveau : voir <see cref="Categorie"/>.
+    /// </summary>
+    [Column("Categorie")]
+    public TeamCategory StyleJeuObsolete { get; set; } = TeamCategory.Specialist;
+
+    /// <summary>
+    /// Catégorie officielle du LRB (p.94) : <b>1</b> = équipes les plus
+    /// performantes, celles qui pardonnent le mieux les erreurs … <b>4</b> = les
+    /// plus faibles (souvent les équipes de « Minus »). <b>0</b> = non renseignée.
+    ///
+    /// Purement <b>informative</b> : elle oriente le choix d'un nouveau coach mais
+    /// ne déclenche aucune mécanique. Dans le LRB elle sert aussi au Jeu Égal
+    /// (les catégories basses reçoivent plus de points de compétence), que
+    /// l'application ne gère pas.
+    ///
+    /// Renseignée à la main par les commissaires depuis l'Admin — il n'y a
+    /// volontairement ni valeur de seed ni backfill.
+    /// </summary>
+    [Column("CategorieLrb")]
+    public int Categorie { get; set; } = 0;
 
     // CSV des règles spéciales d'éligibilité aux ligues thématiques.
     // Ex: "OldWorldClassic,BadlandsBrawl". Vide = aucune règle spéciale.

@@ -170,4 +170,34 @@ public static class DisplayHelpers
         MatchStatus.FeuilleEnSaisie       => "border-left:4px solid #ff9800;",
         _                                 => ""
     };
+
+    // ── Catégorie officielle LRB (p.94) ──────────────────────────────────────
+    // Purement informative : elle situe la difficulté d'une équipe pour un
+    // nouveau coach, mais ne déclenche aucune mécanique. 0 = non renseignée.
+    // Centralisé ici pour que les quatre écrans qui l'affichent (admin, choix
+    // de race, feuille d'équipe, PDF) restent cohérents.
+
+    /// <summary>Libellé court : « Catégorie 1 », ou chaîne vide si non renseignée.</summary>
+    public static string CategorieLabel(int categorie) =>
+        categorie is >= 1 and <= 4 ? $"Catégorie {categorie}" : string.Empty;
+
+    /// <summary>Explication du LRB, destinée à une infobulle ou une aide au choix.</summary>
+    public static string CategorieDescription(int categorie) => categorie switch
+    {
+        1 => "Les équipes les plus performantes, qui pardonnent le mieux les erreurs.",
+        2 => "Peuvent concurrencer les meilleures, avec moins de flexibilité.",
+        3 => "Plus délicates à jouer : demandent réflexion et expérience.",
+        4 => "Les plus faibles, souvent les équipes de « Minus » — et souvent les plus amusantes.",
+        _ => "Catégorie non renseignée."
+    };
+
+    /// <summary>Vert pour les catégories fortes, orange pour les plus difficiles.</summary>
+    public static Color CategorieColor(int categorie) => categorie switch
+    {
+        1 => Color.Success,
+        2 => Color.Info,
+        3 => Color.Warning,
+        4 => Color.Error,
+        _ => Color.Default
+    };
 }

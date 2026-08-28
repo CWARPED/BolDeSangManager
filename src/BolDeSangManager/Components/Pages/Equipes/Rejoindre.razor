@@ -48,6 +48,20 @@ else
                             <MudText Typo="Typo.caption" Color="Color.Secondary">
                                 Relance : @tt.CoutRelance.ToString("N0") po
                             </MudText>
+                            @* Catégorie LRB : aide au choix pour un nouveau coach.
+                               Masquée tant qu'elle n'est pas renseignée — inutile
+                               d'afficher un « à renseigner » côté coach, c'est une
+                               tâche d'admin. Infobulle en title HTML : MudTooltip
+                               casse le circuit en InteractiveServer. *@
+                            @if (!string.IsNullOrEmpty(DisplayHelpers.CategorieLabel(tt.Categorie)))
+                            {
+                                <div class="mt-1" title="@DisplayHelpers.CategorieDescription(tt.Categorie)">
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Color="@DisplayHelpers.CategorieColor(tt.Categorie)">
+                                        @DisplayHelpers.CategorieLabel(tt.Categorie)
+                                    </MudChip>
+                                </div>
+                            }
                             @if (!string.IsNullOrEmpty(tt.ReglesSpeciales))
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@tt.ReglesSpeciales</MudText>

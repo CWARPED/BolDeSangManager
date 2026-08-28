@@ -22,7 +22,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège des Cieux",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Agile,
                 ReglesSpeciales = "Magicien Céleste disponible. Vitesse et équilibre."
             },
             [
@@ -51,7 +50,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège du Feu",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Bashy,
                 ReglesSpeciales = "Magicien Brillant (boule de feu). Résistance et blocage."
             },
             [
@@ -76,7 +74,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège de l'Ombre",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Agile,
                 ReglesSpeciales = "Magicien Gris. Assassins et vitesse dans les ombres."
             },
             [
@@ -107,7 +104,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège de la Lumière",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Agile,
                 ReglesSpeciales = "Magicien de Lumière. Elfes rapides et excellents lanceurs."
             },
             [
@@ -132,7 +128,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège de la Vie",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Specialist,
                 ReglesSpeciales = "Magicien de Jade. Mélange nature, halflings et mort-vivants pestilents."
             },
             [
@@ -160,7 +155,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège du Métal",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Bashy,
                 ReglesSpeciales = "Magicien d'Or. Orques et Humains robustes."
             },
             [
@@ -189,7 +183,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège de la Mort",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Specialist,
                 ReglesSpeciales = "Magicien d'Améthyste. Vampires et morts-vivants. Régénération."
             },
             [
@@ -220,7 +213,6 @@ public static class DungeonBowlTeamSeedData
                 RulesVersionId = dbVersionId,
                 Nom = "Collège des Bêtes",
                 CoutRelance = 50_000,
-                Categorie = TeamCategory.Bashy,
                 ReglesSpeciales = "Magicien d'Ambre. Créatures du Chaos et mutants."
             },
             [

@@ -46,7 +46,7 @@ public class GameDataExportServiceTests : IDisposable
             RulesVersionId = version.Id,
             Nom = "Humains",
             CoutRelance = 50_000,
-            Categorie = TeamCategory.Staller,
+            Categorie = 2,
             ReglesSpeciales = "",
             ReglesSpecialesLigue = ""
         };

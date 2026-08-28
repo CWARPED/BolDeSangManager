@@ -71,7 +71,7 @@ public static class DataSeeder
             RulesVersionId = versionId,
             Nom = "Humains",
             CoutRelance = 50_000,
-            Categorie = TeamCategory.Staller
+            Categorie = 2
         };
         db.TeamTypes.Add(teamType);
         await db.SaveChangesAsync();

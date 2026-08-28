@@ -27,11 +27,14 @@
             <MudGrid>
                 <MudItem xs="12" sm="6"><MudTextField @bind-Value="_team.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
                 <MudItem xs="6" sm="3">
-                    <MudSelect T="TeamCategory" @bind-Value="_team.Categorie" Label="Catégorie" Variant="Variant.Outlined">
-                        @foreach (var c in Enum.GetValues<TeamCategory>())
-                        {
-                            <MudSelectItem Value="@c">@c</MudSelectItem>
-                        }
+                    @* Catégorie officielle LRB (p.94), purement informative.
+                       0 = non renseignée : les commissaires font la passe de saisie. *@
+                    <MudSelect T="int" @bind-Value="_team.Categorie" Label="Catégorie (LRB)" Variant="Variant.Outlined">
+                        <MudSelectItem Value="0">Non renseignée</MudSelectItem>
+                        <MudSelectItem Value="1">1 — les plus performantes</MudSelectItem>
+                        <MudSelectItem Value="2">2 — solides</MudSelectItem>
+                        <MudSelectItem Value="3">3 — plus délicates à jouer</MudSelectItem>
+                        <MudSelectItem Value="4">4 — les plus faibles</MudSelectItem>
                     </MudSelect>
                 </MudItem>
                 <MudItem xs="6" sm="3"><MudNumericField @bind-Value="_team.CoutRelance" Label="Coût relance" Variant="Variant.Outlined" /></MudItem>
@@ -161,7 +164,7 @@
     {
         if (IsNew)
         {
-            _team = new TeamType { Nom = "", Categorie = TeamCategory.Specialist, CoutRelance = 50_000 };
+            _team = new TeamType { Nom = "", Categorie = 0, CoutRelance = 50_000 };
         }
         else if (int.TryParse(IdParam, out var id))
         {

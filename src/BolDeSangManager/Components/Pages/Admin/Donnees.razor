@@ -183,7 +183,19 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Nom">@context.Nom</MudTd>
-                    <MudTd DataLabel="Catégorie">@context.Categorie</MudTd>
+                    <MudTd DataLabel="Catégorie">
+                        @* 0 = non renseignée. Affiché en « à renseigner » plutôt qu'un
+                           « 0 » brut : la saisie est faite à la main par les commissaires,
+                           l'écran doit donc se lire comme une liste de travail. *@
+                        @if (context.Categorie == 0)
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">à renseigner</MudChip>
+                        }
+                        else
+                        {
+                            @context.Categorie
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Coût relance">@context.CoutRelance.ToString("N0") po</MudTd>
                     <MudTd DataLabel="Nb postes">@(context.Postes?.Count ?? 0)</MudTd>
                     <MudTd DataLabel="Actions">

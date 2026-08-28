@@ -68,6 +68,12 @@ public enum StaffType
     Cheerleader
 }
 
+/// <summary>
+/// OBSOLÈTE — ancien « style de jeu » maison, absent du livre de règles.
+/// Remplacé par <c>TeamType.Categorie</c> (catégorie officielle LRB 1 à 4).
+/// Conservé uniquement parce que la colonne existe en base : ne plus lire,
+/// ne plus écrire, ne JAMAIS réordonner (EF persiste ces valeurs en int).
+/// </summary>
 public enum TeamCategory
 {
     Bashy,        // Nains, Orques Noirs, Khorne, Chaos Dwarfs, Nurgle…

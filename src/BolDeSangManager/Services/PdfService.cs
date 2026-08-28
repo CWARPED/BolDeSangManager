@@ -94,7 +94,12 @@ public class PdfService
                         {
                             inner.Item().Text(equipe.Nom)
                                 .Bold().FontSize(20).FontColor(Colors.Red.Darken2);
-                            inner.Item().Text($"{equipe.TeamType?.Nom} — {equipe.TeamType?.Game?.Nom}")
+                            // Race/collège, et la catégorie LRB quand elle est
+                            // renseignée (0 = pas encore saisie par les commissaires).
+                            var categorie = DisplayHelpers.CategorieLabel(equipe.TeamType?.Categorie ?? 0);
+                            var sousTitre = $"{equipe.TeamType?.Nom} — {equipe.TeamType?.Game?.Nom}"
+                                + (categorie.Length > 0 ? $" — {categorie}" : "");
+                            inner.Item().Text(sousTitre)
                                 .FontSize(11).FontColor(Colors.Grey.Darken2);
                         });
                         row.ConstantItem(160).Column(inner =>
