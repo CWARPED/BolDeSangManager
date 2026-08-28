@@ -71,7 +71,16 @@ else
                 @foreach (var l in _equipeDetail.TeamType.ReglesSpecialesListe.OrderBy(x => x.SpecialRule.Ordre))
                 {
                     <div class="mb-2">
-                        <MudText Typo="Typo.body2"><b>@l.SpecialRule.Nom</b></MudText>
+                        <MudText Typo="Typo.body2">
+                            <b>@l.SpecialRule.Nom</b>
+                            @* Divinité retenue pour CETTE équipe, choisie par le commissaire. *@
+                            @if (l.SpecialRule.Code == SpecialRuleCodes.FavoriDe
+                                 && !string.IsNullOrEmpty(_equipeDetail.DiviniteChoisie))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning"
+                                         Variant="Variant.Outlined" Class="ml-2">@_equipeDetail.DiviniteChoisie</MudChip>
+                            }
+                        </MudText>
                         <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
                             @l.SpecialRule.Description
                         </MudText>

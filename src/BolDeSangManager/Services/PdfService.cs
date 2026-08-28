@@ -273,7 +273,15 @@ public class PdfService
                             // texte au tiers de la page.
                             col.Item().PaddingTop(2).Text(t =>
                             {
-                                t.Span($"{l.SpecialRule.Nom} — ").Bold().FontSize(7.5f);
+                                // « Favori de… » : on imprime la divinité RETENUE
+                                // pour cette équipe, pas le nom générique de la
+                                // règle — c'est l'information utile à la table.
+                                var titre = l.SpecialRule.Code == SpecialRuleCodes.FavoriDe
+                                            && !string.IsNullOrEmpty(equipe.DiviniteChoisie)
+                                    ? $"Favori de {equipe.DiviniteChoisie}"
+                                    : l.SpecialRule.Nom;
+
+                                t.Span($"{titre} — ").Bold().FontSize(7.5f);
                                 t.Span(TexteFluide(l.SpecialRule.Description))
                                     .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
                             });

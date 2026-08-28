@@ -35,7 +35,67 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
                 .ThenInclude(p => p.AccesCategories)
                 .ThenInclude(a => a.SkillCategoryDef)
             .Include(t => t.LimitesMotsCles)
+            .Include(t => t.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
             .FirstOrDefaultAsync(t => t.Id == teamTypeId);
+
+    // ── « Favori de… » : divinité de l'équipe (LRB p.93) ─────────────────────
+
+    /// <summary>
+    /// Divinités que la RACE autorise, d'après la règle « Favori de… »
+    /// rattachée à sa fiche. Liste vide = la race n'est pas concernée.
+    ///
+    /// Le cadre est défini une fois en admin (options cochées sur la fiche
+    /// d'équipe) ; le commissaire choisit ensuite pour chaque équipe dans cette
+    /// liste. Un cas particulier se règle en élargissant les options de la race,
+    /// pas en rattachant une règle à une équipe isolée.
+    /// </summary>
+    public async Task<List<string>> GetOptionsDiviniteAsync(int teamTypeId)
+    {
+        var lien = await db.TeamTypeSpecialRules
+            .Include(l => l.SpecialRule)
+            .FirstOrDefaultAsync(l => l.TeamTypeId == teamTypeId
+                                   && l.SpecialRule.Code == SpecialRuleCodes.FavoriDe);
+
+        if (lien is null) return [];
+
+        return lien.OptionsChoix
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Enregistre la divinité d'une équipe. Action de COMMISSAIRE.
+    /// </summary>
+    /// <param name="divinite">
+    /// Doit appartenir aux options de la race. Chaîne vide = effacer le choix.
+    /// Validé ICI : une valeur postée depuis un écran n'est jamais digne de foi.
+    /// </param>
+    public async Task DefinirDiviniteAsync(int teamId, string divinite)
+    {
+        var equipe = await db.Teams.FirstOrDefaultAsync(t => t.Id == teamId)
+            ?? throw new InvalidOperationException("Équipe introuvable.");
+
+        if (string.IsNullOrWhiteSpace(divinite))
+        {
+            equipe.DiviniteChoisie = string.Empty;
+            await db.SaveChangesAsync();
+            return;
+        }
+
+        var options = await GetOptionsDiviniteAsync(equipe.TeamTypeId);
+        if (options.Count == 0)
+            throw new InvalidOperationException(
+                "Cette équipe n'a pas la règle spéciale « Favori de… » : aucune divinité ne peut lui être attribuée.");
+
+        var choisie = options.FirstOrDefault(o => o.Equals(divinite.Trim(), StringComparison.OrdinalIgnoreCase))
+            ?? throw new InvalidOperationException(
+                $"« {divinite} » ne fait pas partie des divinités autorisées pour cette race ({string.Join(", ", options)}).");
+
+        // On enregistre la forme canonique de la liste, pas la saisie brute.
+        equipe.DiviniteChoisie = choisie;
+        await db.SaveChangesAsync();
+        logger.LogInformation("Divinité définie pour l'équipe id={TeamId} : {Divinite}", teamId, choisie);
+    }
 
     public async Task<Team?> GetEquipeAsync(int teamId) =>
         await db.Teams
@@ -102,6 +162,19 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             ?? throw new InvalidOperationException("Type d'équipe introuvable");
 
         ValiderRoster(teamType, joueurs);
+
+        // « Favori de… » : quand la race n'autorise qu'une seule divinité, elle
+        // est IMPOSÉE — on l'assigne sans rien demander (Pestiférés → Nurgle).
+        // Plusieurs options = c'est au commissaire de trancher, le champ reste
+        // vide jusque-là. Une valeur postée par l'écran n'est jamais reprise
+        // telle quelle.
+        var optionsDivinite = teamType.ReglesSpecialesListe
+            .FirstOrDefault(l => l.SpecialRule?.Code == SpecialRuleCodes.FavoriDe)
+            ?.OptionsChoix
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            ?? [];
+
+        equipe.DiviniteChoisie = optionsDivinite.Length == 1 ? optionsDivinite[0] : string.Empty;
 
         equipe.CreeLe = DateTime.UtcNow;
         db.Teams.Add(equipe);

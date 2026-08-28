@@ -18,6 +18,20 @@ public class Team
     // Finances
     public int Tresorerie { get; set; } = 0;
 
+    /// <summary>
+    /// Divinité vénérée au titre de la règle spéciale « Favori de… » (LRB p.93).
+    /// Vide = équipe non concernée, ou choix pas encore fait.
+    ///
+    /// Le LRB parle d'un dieu unique, le cas « plusieurs » étant couvert par
+    /// l'option « Chaos Universel ». Les divinités permises viennent de la RACE
+    /// (<c>TeamTypeSpecialRule.OptionsChoix</c>) : c'est le cadre, défini une
+    /// fois en admin. Le choix par équipe est fait par le COMMISSAIRE.
+    ///
+    /// Choix définitif côté règles (« vous ne pouvez plus en changer ») : c'est
+    /// pourquoi le coach ne le saisit pas lui-même.
+    /// </summary>
+    public string DiviniteChoisie { get; set; } = string.Empty;
+
     // Staff — colonnes HISTORIQUES.
     // Conservées en base (migration purement additive, principe #1 : aucune
     // équipe live ne doit casser), mais elles ne sont plus la source de vérité :

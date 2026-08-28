@@ -62,6 +62,48 @@ else
         </MudStack>
     </MudStack>
 
+    @* ── « Favori de… » (LRB p.93) ────────────────────────────────────────
+       La divinité est affichée à tous, mais seul le COMMISSAIRE la choisit :
+       le livre rend le choix définitif. Les options viennent de la race. *@
+    @if (_optionsDivinite.Count > 0)
+    {
+        <MudPaper Class="pa-3 mb-4" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default)">
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
+                <MudText Typo="Typo.body2"><b>Favori de…</b></MudText>
+
+                @if (_estCommissaire && _optionsDivinite.Count > 1)
+                {
+                    <MudSelect T="string" Value="@(_equipe.DiviniteChoisie)"
+                               ValueChanged="DefinirDivinite"
+                               Label="Dieu du Chaos" Variant="Variant.Outlined"
+                               Margin="Margin.Dense" Style="min-width:220px">
+                        <MudSelectItem Value="@("")">— non choisi —</MudSelectItem>
+                        @foreach (var d in _optionsDivinite)
+                        {
+                            <MudSelectItem Value="@d">@d</MudSelectItem>
+                        }
+                    </MudSelect>
+                }
+                else if (!string.IsNullOrEmpty(_equipe.DiviniteChoisie))
+                {
+                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                        @_equipe.DiviniteChoisie
+                    </MudChip>
+                    @if (_optionsDivinite.Count == 1)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">Imposé par la race.</MudText>
+                    }
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        Divinité pas encore choisie — le commissaire de la ligue peut la définir.
+                    </MudText>
+                }
+            </MudStack>
+        </MudPaper>
+    }
+
     <!-- Statistiques d'équipe -->
     <MudGrid Class="mb-4">
         <MudItem xs="6" sm="3">
@@ -290,11 +332,39 @@ else
     /// </summary>
     bool _masqueeParBrouillard;
 
+    /// <summary>Divinités que la race autorise (« Favori de… »). Vide = non concernée.</summary>
+    List<string> _optionsDivinite = [];
+
     bool _peutEditer =>
         _equipe is not null
         && _equipe.CoachId == _userId
         && _equipe.League is not null
         && DisplayHelpers.InscriptionOuverte(_equipe.League.Statut, _equipe.League.Format);
+
+    /// <summary>
+    /// Choix du Dieu du Chaos par le commissaire. Le service revalide contre les
+    /// options de la race : l'écran ne fait pas autorité.
+    /// </summary>
+    async Task DefinirDivinite(string divinite)
+    {
+        if (_equipe is null) return;
+        try
+        {
+            await TeamService.DefinirDiviniteAsync(_equipe.Id, divinite);
+            _equipe = await TeamService.GetEquipeAsync(Id);   // relit l'état réel
+            Snackbar.Add(
+                string.IsNullOrEmpty(divinite) ? "Divinité effacée" : $"Divinité : {divinite}",
+                Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -303,7 +373,10 @@ else
 
         _equipe = await TeamService.GetEquipeAsync(Id);
         if (_equipe is not null)
+        {
             _vea = TeamService.CalculerVEA(_equipe);
+            _optionsDivinite = await TeamService.GetOptionsDiviniteAsync(_equipe.TeamTypeId);
+        }
 
         // Correction d'XP (R4) : réservée au commissaire de la ligue et aux grands commissaires.
         _estCommissaire = authState.User.IsInRole("Commissaire")
