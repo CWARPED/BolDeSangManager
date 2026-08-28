@@ -88,6 +88,16 @@ Affichage : utiliser `DisplayHelpers.NomCoach(user)` et **jamais** `PseudoCoach`
 
 ⚠️ L'export JSON d'une version nomme le champ **`CategorieLrb`**, volontairement différent de l'ancien `Categorie`. Réutiliser le même nom aurait fait relire un vieil export où `Categorie: 2` valait « Agile » comme « catégorie LRB 2 » — une donnée fausse et silencieuse. Un fichier antérieur s'importe donc avec `Categorie = 0`, ce qui est exact.
 
+**Règles spéciales d'équipe** (`SpecialRule` + `TeamTypeSpecialRule`) : catalogue des règles du LRB (p.93-94) porté par la `RulesVersion`, comme les compétences et le staff, avec une liaison N-N vers les fiches d'équipe. **Liste ouverte, éditable depuis l'Admin** (onglet « Règles spéciales » de `/admin/donnees`) ; le rattachement à une race se fait depuis sa fiche.
+
+Principe central : **une règle sans `Code` est purement DESCRIPTIVE** — elle s'affiche sur la feuille d'équipe et le PDF, et se joue à la table. C'est le cas par défaut, et celui de toute règle qu'une future édition apportera : l'association peut donc suivre une nouvelle saison sans développement. Un `Code` (voir `SpecialRuleCodes`) branche un comportement écrit une fois dans le code. **Une seule règle est branchée aujourd'hui** : « Favori de… ». Un test verrouille ce fait pour qu'ajouter un `Code` reste un geste conscient.
+
+⚠️ `TeamType.ReglesSpeciales` (texte libre) reste en base et sert de **repli d'affichage** tant qu'une race n'a aucune règle rattachée. Il n'est plus la source de vérité.
+
+**« Favori de… »** (`Team.DiviniteChoisie`) : les divinités permises sont définies **sur la fiche de race** (`TeamTypeSpecialRule.OptionsChoix`, CSV) ; le **commissaire** choisit celle de chaque équipe dans cette liste depuis la fiche d'équipe. Le coach ne saisit rien — le LRB rend le choix définitif. Une seule option = divinité **imposée**, assignée automatiquement à la création (Pestiférés → Nurgle) ; plusieurs options = l'équipe naît sans divinité plutôt qu'avec un choix arbitraire. `DefinirDiviniteAsync` valide côté service contre les options de la race et enregistre la forme canonique de la liste, pas la saisie brute.
+
+⚠️ Un cas particulier (ex. Nordiques, dont le LRB conditionne Khorne au choix de la ligue thématique — non modélisé) se règle en **élargissant les options de la race**, jamais en rattachant une règle à une équipe isolée : il n'existe pas de règle spéciale par équipe, et en introduire une obligerait à fusionner deux sources partout où les règles sont lues.
+
 **Rôles** : `Commissaire` et `Coach` (ASP.NET Identity). Le commissaire crée les ligues et administre ; les coaches créent des équipes, saisissent les feuilles et **font tourner le match de bout en bout sans lui**.
 
 **Cycle de vie d'une ligue** :
