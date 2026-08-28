@@ -608,9 +608,187 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
 
         return (principales, secondaires.Where(s => !principales.Contains(s)).ToList());
     }
+
+    // ── Catalogue de règles spéciales seul ───────────────────────────────────
+    //
+    // L'export global crée une NOUVELLE version à l'import : inutilisable pour
+    // une instance déjà en service, qui a ses ligues et ses équipes en cours.
+    // Ce format-ci transporte le seul catalogue et le FUSIONNE dans une version
+    // existante, sans toucher aux races, aux postes ni aux compétences.
+
+    /// <summary>
+    /// Exporte le catalogue de règles d'une version, avec ses rattachements aux
+    /// fiches d'équipe. Races et règles sont référencées par NOM, pour que le
+    /// fichier reste portable d'une instance à l'autre.
+    /// </summary>
+    public async Task<byte[]> ExportReglesSpecialesAsync(int rulesVersionId)
+    {
+        var version = await db.RulesVersions
+            .Include(v => v.Game)
+            .FirstOrDefaultAsync(v => v.Id == rulesVersionId)
+            ?? throw new InvalidOperationException("Version de règles introuvable");
+
+        var regles = await db.SpecialRules
+            .Where(r => r.RulesVersionId == rulesVersionId)
+            .Include(r => r.TeamTypes).ThenInclude(l => l.TeamType)
+            .OrderBy(r => r.Ordre).ThenBy(r => r.Nom)
+            .ToListAsync();
+
+        var dto = new ReglesSpecialesExportDto(
+            Jeu: version.Game?.Nom ?? "",
+            Version: version.Nom,
+            Regles: regles.Select(r => new SpecialRulePortableDto(
+                r.Nom, r.Description, r.Ordre, r.Code,
+                r.TeamTypes
+                    .Where(l => l.TeamType is not null)
+                    .OrderBy(l => l.TeamType.Nom)
+                    .Select(l => new RattachementPortableDto(l.TeamType.Nom, l.OptionsChoix))
+                    .ToList()
+            )).ToList()
+        );
+
+        logger.LogInformation(
+            "Export règles spéciales : version '{V}' ({Nb} règles)", version.Nom, regles.Count);
+
+        return JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
+    }
+
+    /// <summary>
+    /// Fusionne un catalogue dans une version EXISTANTE.
+    ///
+    /// Idempotent et non destructif : une règle déjà présente (même nom) est
+    /// MISE À JOUR plutôt que dupliquée — c'est ainsi qu'on propage un
+    /// correctif de description ou l'ajout d'un comportement automatique sur
+    /// une instance en service. Aucune règle absente du fichier n'est
+    /// supprimée : un catalogue local enrichi n'est jamais écrasé.
+    ///
+    /// Une race inconnue de la cible n'interrompt pas l'import : les autres
+    /// rattachements passent et le nom manquant est signalé au commissaire.
+    /// </summary>
+    public async Task<(bool Success, List<string> Errors)> ImportReglesSpecialesAsync(
+        int rulesVersionId, Stream stream)
+    {
+        var avertissements = new List<string>();
+
+        ReglesSpecialesExportDto dto;
+        try
+        {
+            dto = await JsonSerializer.DeserializeAsync<ReglesSpecialesExportDto>(stream, JsonOpts)
+                ?? throw new InvalidOperationException("Fichier JSON invalide");
+        }
+        catch (Exception ex)
+        {
+            return (false, [$"Impossible de lire le fichier : {ex.Message}"]);
+        }
+
+        if (dto.Regles is null)
+            return (false, ["Ce fichier ne contient pas de règles spéciales."]);
+
+        var version = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == rulesVersionId);
+        if (version is null)
+            return (false, ["Version de règles introuvable."]);
+
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        try
+        {
+            var reglesExistantes = await db.SpecialRules
+                .Where(r => r.RulesVersionId == rulesVersionId)
+                .ToListAsync();
+
+            var racesCibles = await db.TeamTypes
+                .Where(t => t.RulesVersionId == rulesVersionId)
+                .ToListAsync();
+
+            foreach (var regleDto in dto.Regles)
+            {
+                var regle = reglesExistantes
+                    .FirstOrDefault(r => r.Nom.Equals(regleDto.Nom, StringComparison.OrdinalIgnoreCase));
+
+                if (regle is null)
+                {
+                    regle = new SpecialRule { RulesVersionId = rulesVersionId, Nom = regleDto.Nom };
+                    db.SpecialRules.Add(regle);
+                    reglesExistantes.Add(regle);
+                }
+
+                regle.Description = regleDto.Description;
+                regle.Ordre = regleDto.Ordre;
+                regle.Code = regleDto.Code ?? "";
+                await db.SaveChangesAsync();
+
+                foreach (var lienDto in regleDto.Rattachements ?? [])
+                {
+                    var race = racesCibles
+                        .FirstOrDefault(t => t.Nom.Equals(lienDto.EquipeNom, StringComparison.OrdinalIgnoreCase));
+
+                    if (race is null)
+                    {
+                        avertissements.Add(
+                            $"« {regleDto.Nom} » : équipe « {lienDto.EquipeNom} » absente de cette version, rattachement ignoré.");
+                        continue;
+                    }
+
+                    var lien = await db.TeamTypeSpecialRules
+                        .FirstOrDefaultAsync(l => l.TeamTypeId == race.Id && l.SpecialRuleId == regle.Id);
+
+                    if (lien is null)
+                    {
+                        db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
+                        {
+                            TeamTypeId = race.Id, SpecialRuleId = regle.Id,
+                            OptionsChoix = lienDto.OptionsChoix ?? ""
+                        });
+                    }
+                    else
+                    {
+                        lien.OptionsChoix = lienDto.OptionsChoix ?? "";
+                    }
+                }
+
+                await db.SaveChangesAsync();
+            }
+
+            await transaction.CommitAsync();
+            logger.LogInformation(
+                "Import règles spéciales dans la version id={Id} : {Nb} règles, {NbAvert} avertissement(s)",
+                rulesVersionId, dto.Regles.Count, avertissements.Count);
+
+            return (true, avertissements);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return (false, [$"Import interrompu : {ex.Message}"]);
+        }
+    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Fichier de catalogue de règles spéciales SEUL, destiné à être fusionné dans
+/// une version existante. <c>Jeu</c> et <c>Version</c> sont informatifs (ils
+/// disent d'où vient le fichier) : la cible est choisie à l'import.
+/// </summary>
+record ReglesSpecialesExportDto(
+    string Jeu,
+    string Version,
+    List<SpecialRulePortableDto> Regles
+);
+
+/// <summary>Règle + ses rattachements, tous référencés par NOM.</summary>
+record SpecialRulePortableDto(
+    string Nom,
+    string Description,
+    int Ordre,
+    string? Code,
+    List<RattachementPortableDto>? Rattachements
+);
+
+record RattachementPortableDto(
+    string EquipeNom,
+    string? OptionsChoix
+);
 
 record GameDataExportDto(
     string Jeu,

@@ -215,8 +215,21 @@
                     Elles s'affichent sur la feuille d'équipe. Rattachez-les depuis la fiche
                     de chaque équipe.
                 </MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           Size="Size.Small" OnClick="AjouterRegleSpeciale">Ajouter une règle</MudButton>
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    @* Transport du catalogue vers une autre instance (le VPS) :
+                       l'import FUSIONNE dans la version choisie sans en créer
+                       une nouvelle, contrairement à l'export global. *@
+                    <MudButton StartIcon="@Icons.Material.Filled.Download" Color="Color.Secondary"
+                               Variant="Variant.Outlined" Size="Size.Small"
+                               OnClick="ExporterReglesSpeciales"
+                               Disabled="@(_reglesSpeciales.Count == 0)">Exporter</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Color="Color.Secondary"
+                               Variant="Variant.Outlined" Size="Size.Small"
+                               OnClick="@(() => JS.InvokeVoidAsync("clickElement", "importReglesInput"))">Importer</MudButton>
+                    <InputFile id="importReglesInput" OnChange="ImporterReglesSpeciales" accept=".json" style="display:none" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               Size="Size.Small" OnClick="AjouterRegleSpeciale">Ajouter une règle</MudButton>
+                </MudStack>
             </MudStack>
 
             <MudTable Items="@_reglesSpeciales" Dense="true" Hover="true">
@@ -857,6 +870,62 @@
         catch (Exception ex)
         {
             Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Export / import du catalogue de règles seul ──────────────────────────
+    // Sert à porter les règles sur une instance DÉJÀ en service (le VPS) :
+    // l'export global recréerait une version, ce qui obligerait à remigrer
+    // ligues et équipes. Ici on fusionne dans la version sélectionnée.
+
+    async Task ExporterReglesSpeciales()
+    {
+        try
+        {
+            var bytes = await GameDataExportService.ExportReglesSpecialesAsync(_selectedVersionId);
+            var version = _versions.FirstOrDefault(v => v.Id == _selectedVersionId);
+            var nomFichier = $"regles_speciales_{version?.Nom ?? _selectedVersionId.ToString()}.json"
+                .Replace(" ", "_").Replace("/", "-");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("blazorDownloadBase64File", nomFichier, "application/json", base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error);
+        }
+    }
+
+    async Task ImporterReglesSpeciales(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+
+            var (success, messages) = await GameDataExportService.ImportReglesSpecialesAsync(
+                _selectedVersionId, ms);
+
+            if (success)
+            {
+                Snackbar.Add(
+                    "Règles spéciales importées." + (messages.Count > 0 ? $" ({messages.Count} avertissement(s))" : ""),
+                    Severity.Success);
+
+                // Les avertissements nomment les équipes absentes de cette
+                // version : le commissaire doit les voir pour les rattacher.
+                foreach (var m in messages) Snackbar.Add(m, Severity.Warning);
+
+                await ChargerDonneesAsync();
+            }
+            else
+            {
+                foreach (var m in messages) Snackbar.Add(m, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur import : {ex.Message}", Severity.Error);
         }
     }
 
