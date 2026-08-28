@@ -419,7 +419,9 @@ public class SpecialRuleTests
         });
 
         var equipe = new Team { Nom = "Les Pustuleux", TeamType = teamType };
-        var texte = LireTextePdf(new PdfService().GenererFeuilleEquipe(equipe, false));
+        // Version COMPLÈTE : c'est elle qui porte les descriptions. La version
+        // compacte ne garde que les noms (voir FavoriDeTests).
+        var texte = LireTextePdf(new PdfService().GenererFeuilleEquipe(equipe, true));
 
         Assert.Contains("Règles spéciales", texte);
         Assert.Contains("Favori de", texte);

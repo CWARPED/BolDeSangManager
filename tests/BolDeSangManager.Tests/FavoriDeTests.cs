@@ -293,4 +293,62 @@ public class FavoriDeTests
         using var doc = UglyToad.PdfPig.PdfDocument.Open(pdf);
         return string.Join("\n", doc.GetPages().Select(p => p.Text));
     }
+
+    /// <summary>
+    /// Version compacte : elle est faite pour tenir sur une page. Masquer les
+    /// descriptions de compétences sans masquer celles des règles spéciales
+    /// remplirait de texte la place justement gagnée.
+    /// </summary>
+    [Fact]
+    public void FeuilleEquipePdf_SansDescriptions_MasqueLaDescriptionDesRegles()
+    {
+        var tt = new TeamType { Nom = "Nains du Chaos", CoutRelance = 70_000 };
+        tt.ReglesSpecialesListe.Add(new TeamTypeSpecialRule
+        {
+            SpecialRule = new SpecialRule
+            {
+                Nom = "Bagarreurs Brutaux",
+                Description = "Cette equipe marque des points de spectacle supplementaires."
+            }
+        });
+
+        var equipe = new Team { Nom = "Les Testeurs", TeamType = tt };
+
+        var avec = LireTextePdf(new PdfService().GenererFeuilleEquipe(equipe, true));
+        var sans = LireTextePdf(new PdfService().GenererFeuilleEquipe(equipe, false));
+
+        // Le NOM reste dans les deux cas : le coach doit savoir quelles règles
+        // s'appliquent à son équipe.
+        Assert.Contains("Bagarreurs Brutaux", avec);
+        Assert.Contains("Bagarreurs Brutaux", sans);
+
+        // Seule la description disparaît.
+        Assert.Contains("points de spectacle", avec);
+        Assert.DoesNotContain("points de spectacle", sans);
+    }
+
+    /// <summary>
+    /// Même sans description, la divinité retenue doit rester imprimée : c'est
+    /// une donnée propre à l'équipe, pas une explication de règle.
+    /// </summary>
+    [Fact]
+    public void FeuilleEquipePdf_SansDescriptions_GardeLaDivinite()
+    {
+        var tt = new TeamType { Nom = "Renégats du Chaos", CoutRelance = 70_000 };
+        tt.ReglesSpecialesListe.Add(new TeamTypeSpecialRule
+        {
+            OptionsChoix = "Khorne,Nurgle",
+            SpecialRule = new SpecialRule
+            {
+                Nom = "Favori de…", Code = SpecialRuleCodes.FavoriDe,
+                Description = "L'équipe rend hommage à un Dieu du Chaos."
+            }
+        });
+
+        var equipe = new Team { Nom = "Les Renégats", TeamType = tt, DiviniteChoisie = "Khorne" };
+        var texte = LireTextePdf(new PdfService().GenererFeuilleEquipe(equipe, false));
+
+        Assert.Contains("Favori de Khorne", texte);
+        Assert.DoesNotContain("rend hommage", texte);
+    }
 }

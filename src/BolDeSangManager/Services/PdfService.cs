@@ -27,6 +27,17 @@ public class PdfService
     }
 
     /// <summary>
+    /// Intitulé d'une règle spéciale sur la feuille. Pour « Favori de… » on
+    /// imprime la divinité RETENUE par cette équipe (« Favori de Khorne »),
+    /// pas le nom générique : c'est l'information utile à la table.
+    /// </summary>
+    private static string TitreRegle(TeamTypeSpecialRule lien, Team equipe) =>
+        lien.SpecialRule.Code == SpecialRuleCodes.FavoriDe
+        && !string.IsNullOrEmpty(equipe.DiviniteChoisie)
+            ? $"Favori de {equipe.DiviniteChoisie}"
+            : lien.SpecialRule.Nom;
+
+    /// <summary>
     /// Rend une description de compétence « fluide », c'est-à-dire capable
     /// d'occuper toute la largeur disponible.
     ///
@@ -255,8 +266,11 @@ public class PdfService
                     });
 
                     // ── Règles spéciales de l'équipe (LRB p.93-94) ───────
-                    // Toujours imprimées : ce sont les règles que les deux
-                    // coaches doivent avoir sous les yeux pendant le match.
+                    // Les NOMS sont toujours imprimés : le coach doit savoir
+                    // quelles règles s'appliquent à son équipe. Les
+                    // DESCRIPTIONS suivent le même réglage que celles des
+                    // compétences — la version compacte est faite pour tenir
+                    // sur une page, elle ne doit pas la remplir de texte.
                     var reglesSpeciales = (equipe.TeamType?.ReglesSpecialesListe ?? [])
                         .Where(l => l.SpecialRule is not null)
                         .OrderBy(l => l.SpecialRule.Ordre).ThenBy(l => l.SpecialRule.Nom)
@@ -267,24 +281,29 @@ public class PdfService
                         col.Item().PaddingTop(6).Text("Règles spéciales")
                             .Bold().FontSize(9).FontColor(Colors.Red.Darken2);
 
-                        foreach (var l in reglesSpeciales)
+                        // Sans description, les noms tiennent sur une seule
+                        // ligne séparés par des points : trois lignes d'une
+                        // ligne chacune gaspilleraient la place gagnée.
+                        if (!inclureDescriptionsCompetences)
                         {
-                            // Pleine largeur : un bloc contraint couperait le
-                            // texte au tiers de la page.
-                            col.Item().PaddingTop(2).Text(t =>
+                            var noms = reglesSpeciales.Select(l => TitreRegle(l, equipe));
+                            col.Item().PaddingTop(2)
+                                .Text(string.Join(" · ", noms))
+                                .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
+                        }
+                        else
+                        {
+                            foreach (var l in reglesSpeciales)
                             {
-                                // « Favori de… » : on imprime la divinité RETENUE
-                                // pour cette équipe, pas le nom générique de la
-                                // règle — c'est l'information utile à la table.
-                                var titre = l.SpecialRule.Code == SpecialRuleCodes.FavoriDe
-                                            && !string.IsNullOrEmpty(equipe.DiviniteChoisie)
-                                    ? $"Favori de {equipe.DiviniteChoisie}"
-                                    : l.SpecialRule.Nom;
-
-                                t.Span($"{titre} — ").Bold().FontSize(7.5f);
-                                t.Span(TexteFluide(l.SpecialRule.Description))
-                                    .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
-                            });
+                                // Pleine largeur : un bloc contraint couperait le
+                                // texte au tiers de la page.
+                                col.Item().PaddingTop(2).Text(t =>
+                                {
+                                    t.Span($"{TitreRegle(l, equipe)} — ").Bold().FontSize(7.5f);
+                                    t.Span(TexteFluide(l.SpecialRule.Description))
+                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
+                                });
+                            }
                         }
                     }
 
