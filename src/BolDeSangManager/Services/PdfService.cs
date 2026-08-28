@@ -136,25 +136,26 @@ public class PdfService
                 page.Content().Column(col =>
                 {
                     // ── Stats de l'équipe ────────────────────────────────
-                    var vea = equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).Sum(j => j.ValeurActuelle)
-                            + equipe.NombreRelances * (equipe.TeamType?.CoutRelance ?? 50_000)
-                            + equipe.FansDevoues * 10_000
-                            + equipe.NombreCoachsAssistants * 10_000
-                            + equipe.NombreCheerleaders * 10_000
-                            + (equipe.Apothicaire ? 50_000 : 0);
+                    // VEA : source UNIQUE (Helpers/VeaCalculator), la même que
+                    // celle affichée à l'écran. Ce bloc la recalculait autrefois
+                    // depuis les colonnes de staff HISTORIQUES de Team, qui sont
+                    // à zéro sur toute équipe moderne : la feuille imprimée
+                    // annonçait une VEA amputée de tout le staff.
+                    var vea = VeaCalculator.Calculer(equipe);
 
-                    col.Item().PaddingVertical(5).Row(row =>
+                    // Cases : trésorerie, VEA, puis le staff réellement détenu
+                    // (liste ouverte — un staff créé par l'association apparaît
+                    // sans modification de code), puis les stats de ligue.
+                    var cases = new List<(string, string)>
                     {
-                        StatBox(row, "Trésorerie",        $"{equipe.Tresorerie / 1000}k po");
-                        StatBox(row, "VEA",               $"{vea / 1000}k po");
-                        StatBox(row, "Relances",           equipe.NombreRelances.ToString());
-                        StatBox(row, "Fans Dévoués",       equipe.FansDevoues.ToString());
-                        StatBox(row, "Coachs assist.",     equipe.NombreCoachsAssistants.ToString());
-                        StatBox(row, "Cheerleaders",       equipe.NombreCheerleaders.ToString());
-                        StatBox(row, "Apothicaire",        equipe.Apothicaire ? "Oui" : "Non");
-                        StatBox(row, "Matchs joués",       equipe.NombreMatchsJoues.ToString());
-                        StatBox(row, "Points ligue",       equipe.PointsLigue.ToString());
-                    });
+                        ("Trésorerie", $"{equipe.Tresorerie / 1000}k po"),
+                        ("VEA",        $"{vea / 1000}k po"),
+                    };
+                    cases.AddRange(StaffItems(equipe));
+                    cases.Add(("Matchs joués", equipe.NombreMatchsJoues.ToString()));
+                    cases.Add(("Points ligue", equipe.PointsLigue.ToString()));
+
+                    StatBoxes(col, cases, paysage);
 
                     // ── Tableau des joueurs ──────────────────────────────
                     var joueurs = equipe.Joueurs
@@ -373,16 +374,79 @@ public class PdfService
 
     // ── Helpers ──────────────────────────────────────────────────────────
 
-    private static void StatBox(RowDescriptor row, string label, string valeur)
+    /// <summary>
+    /// Staff détenu par l'équipe, prêt à l'affichage — même logique que
+    /// <c>Equipes/Detail.razor</c> (StaffItems), pour que la feuille imprimée
+    /// et l'écran montrent exactement les mêmes lignes.
+    ///
+    /// La liste est OUVERTE : un staff créé par l'association apparaît ici sans
+    /// modification de code. Repli sur les colonnes historiques pour une équipe
+    /// pas encore migrée vers <c>Team.Staff</c>.
+    /// </summary>
+    private static IEnumerable<(string Label, string Valeur)> StaffItems(Team equipe)
     {
-        row.RelativeItem()
-            .Border(0.5f).BorderColor(Colors.Grey.Lighten2)
-            .Background(Colors.Grey.Lighten5)
-            .Padding(5).Column(c =>
+        var staff = equipe.Staff
+            .Where(s => s.LeagueStaffType is not null)
+            .OrderBy(s => s.LeagueStaffType.Ordre)
+            .ThenBy(s => s.LeagueStaffType.Nom)
+            .ToList();
+
+        if (staff.Count == 0)
+        {
+            yield return ("Relances", equipe.NombreRelances.ToString());
+            yield return ("Fans Dévoués", equipe.FansDevoues.ToString());
+            yield return ("Coachs assist.", equipe.NombreCoachsAssistants.ToString());
+            yield return ("Cheerleaders", equipe.NombreCheerleaders.ToString());
+            yield return ("Apothicaire", equipe.Apothicaire ? "Oui" : "Non");
+            yield break;
+        }
+
+        foreach (var s in staff)
+        {
+            // Un staff plafonné à 1 est un oui/non, pas un compteur.
+            var valeur = s.LeagueStaffType.MaxCreation == 1 && s.LeagueStaffType.MaxLigue == 1
+                ? (s.Quantite > 0 ? "Oui" : "Non")
+                : s.Quantite.ToString();
+            yield return (s.LeagueStaffType.Nom, valeur);
+        }
+    }
+
+    /// <summary>
+    /// Ligne(s) de cases de statistiques.
+    ///
+    /// ⚠️ Le staff est une liste OUVERTE : le nombre de cases n'est pas connu à
+    /// l'avance. Une simple <c>Row</c> partageait la largeur entre toutes les
+    /// cases, si bien qu'au-delà de ~9 entrées les libellés se coupaient en
+    /// plein milieu d'un mot (« Cheerlead / ers », « Apothicair / e ») et la VEA
+    /// elle-même passait à la ligne. Une grille à nombre de colonnes FIXE donne
+    /// à chaque case une largeur constante et reporte le surplus sur une
+    /// seconde ligne — l'ajout d'un staff maison ne peut plus casser l'en-tête.
+    /// </summary>
+    private static void StatBoxes(ColumnDescriptor col,
+        IEnumerable<(string Label, string Valeur)> cases, bool paysage)
+    {
+        // A4 portrait : ~180 mm utiles / 7 = ~26 mm par case, assez pour
+        // « Cheerleaders » à 7pt. Le paysage offre ~267 mm, d'où une colonne
+        // de plus sans rétrécir les cases.
+        var colonnes = paysage ? 9 : 7;
+
+        col.Item().PaddingVertical(5).Grid(grid =>
+        {
+            grid.Columns(colonnes);
+            grid.Spacing(3);
+
+            foreach (var (label, valeur) in cases)
             {
-                c.Item().Text(label).FontSize(7).FontColor(Colors.Grey.Darken2);
-                c.Item().Text(valeur).Bold().FontSize(10);
-            });
+                grid.Item()
+                    .Border(0.5f).BorderColor(Colors.Grey.Lighten2)
+                    .Background(Colors.Grey.Lighten5)
+                    .Padding(5).Column(c =>
+                    {
+                        c.Item().Text(label).FontSize(7).FontColor(Colors.Grey.Darken2);
+                        c.Item().Text(valeur).Bold().FontSize(10);
+                    });
+            }
+        });
     }
 
     private static void Cell(TableDescriptor table, string bg, string texte, bool center = false)

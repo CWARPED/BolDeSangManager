@@ -440,21 +440,10 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
     // Valeur d'équipe actuelle (VEA)
     //
-    // Le staff est désormais une liste ouverte (StaffType configuré dans les
-    // règles) : la somme est une boucle sur TeamStaff, plus une addition de
-    // colonnes en dur. Le prix des relances vient de la race, d'où le passage
-    // du TeamType à CoutUnitaire.
-    public int CalculerVEA(Team equipe)
-    {
-        var totalJoueurs = equipe.Joueurs
-            .Where(j => !j.EstMort && !j.EstRetraite)
-            .Sum(j => j.ValeurActuelle);
-
-        var totalStaff = equipe.Staff.Sum(s =>
-            s.Quantite * StaffService.CoutUnitaire(s.LeagueStaffType, equipe.TeamType));
-
-        return totalJoueurs + totalStaff;
-    }
+    // Le calcul lui-même vit dans Helpers/VeaCalculator : c'est la source
+    // UNIQUE, partagée avec la feuille d'équipe PDF. Ne pas réimplémenter la
+    // somme ailleurs — écran et PDF ont déjà divergé une fois.
+    public int CalculerVEA(Team equipe) => VeaCalculator.Calculer(equipe);
 
     /// <param name="rulesVersionId">
     /// Version de règles (R7) : sans ce filtre la liste mélange les versions, et
