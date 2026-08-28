@@ -62,46 +62,67 @@ else
         </MudStack>
     </MudStack>
 
-    @* ── « Favori de… » (LRB p.93) ────────────────────────────────────────
-       La divinité est affichée à tous, mais seul le COMMISSAIRE la choisit :
-       le livre rend le choix définitif. Les options viennent de la race. *@
-    @if (_optionsDivinite.Count > 0)
+    @* ── Règles spéciales de l'équipe ─────────────────────────────────────
+       Toutes les règles de la race, repliées : on touche une règle pour lire
+       son effet. « Favori de… » porte en plus la divinité, que seul le
+       COMMISSAIRE peut choisir (le livre rend le choix définitif). *@
+    @if (_reglesSpeciales.Count > 0)
     {
-        <MudPaper Class="pa-3 mb-4" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default)">
-            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3" Wrap="Wrap.Wrap">
-                <MudText Typo="Typo.body2"><b>Favori de…</b></MudText>
+        <MudExpansionPanels Class="mb-4" Elevation="0" Dense="true"
+                            Style="border:1px solid var(--mud-palette-lines-default); border-radius:4px">
+            @foreach (var lien in _reglesSpeciales)
+            {
+                var estFavoriDe = lien.SpecialRule.Code == SpecialRuleCodes.FavoriDe;
+                <MudExpansionPanel Dense="true">
+                    <TitleContent>
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                            <MudText Typo="Typo.body2"><b>@lien.SpecialRule.Nom</b></MudText>
+                            @if (estFavoriDe && !string.IsNullOrEmpty(_equipe.DiviniteChoisie))
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                    @_equipe.DiviniteChoisie
+                                </MudChip>
+                            }
+                        </MudStack>
+                    </TitleContent>
+                    <ChildContent>
+                        <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                            @lien.SpecialRule.Description
+                        </MudText>
 
-                @if (_estCommissaire && _optionsDivinite.Count > 1)
-                {
-                    <MudSelect T="string" Value="@(_equipe.DiviniteChoisie)"
-                               ValueChanged="DefinirDivinite"
-                               Label="Dieu du Chaos" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" Style="min-width:220px">
-                        <MudSelectItem Value="@("")">— non choisi —</MudSelectItem>
-                        @foreach (var d in _optionsDivinite)
+                        @* Choix de la divinité : réservé au commissaire. *@
+                        @if (estFavoriDe && _optionsDivinite.Count > 0)
                         {
-                            <MudSelectItem Value="@d">@d</MudSelectItem>
+                            @if (_estCommissaire && _optionsDivinite.Count > 1)
+                            {
+                                <MudSelect T="string" Value="@(_equipe.DiviniteChoisie)"
+                                           ValueChanged="DefinirDivinite"
+                                           Label="Dieu du Chaos" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" Class="mt-3">
+                                    <MudSelectItem Value="@("")">— non choisi —</MudSelectItem>
+                                    @foreach (var d in _optionsDivinite)
+                                    {
+                                        <MudSelectItem Value="@d">@d</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                            else if (_optionsDivinite.Count == 1 && !string.IsNullOrEmpty(_equipe.DiviniteChoisie))
+                            {
+                                <MudText Typo="Typo.caption" Class="mt-2 d-block" Color="Color.Secondary">
+                                    Imposé par la race.
+                                </MudText>
+                            }
+                            else if (string.IsNullOrEmpty(_equipe.DiviniteChoisie))
+                            {
+                                <MudText Typo="Typo.caption" Class="mt-2 d-block" Color="Color.Secondary">
+                                    Divinité pas encore choisie — le commissaire de la ligue peut la définir.
+                                </MudText>
+                            }
                         }
-                    </MudSelect>
-                }
-                else if (!string.IsNullOrEmpty(_equipe.DiviniteChoisie))
-                {
-                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
-                        @_equipe.DiviniteChoisie
-                    </MudChip>
-                    @if (_optionsDivinite.Count == 1)
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">Imposé par la race.</MudText>
-                    }
-                }
-                else
-                {
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">
-                        Divinité pas encore choisie — le commissaire de la ligue peut la définir.
-                    </MudText>
-                }
-            </MudStack>
-        </MudPaper>
+                    </ChildContent>
+                </MudExpansionPanel>
+            }
+        </MudExpansionPanels>
     }
 
     <!-- Statistiques d'équipe -->
@@ -334,6 +355,13 @@ else
 
     /// <summary>Divinités que la race autorise (« Favori de… »). Vide = non concernée.</summary>
     List<string> _optionsDivinite = [];
+
+    /// <summary>Règles spéciales de la race, dans l'ordre d'affichage.</summary>
+    List<TeamTypeSpecialRule> _reglesSpeciales =>
+        _equipe?.TeamType?.ReglesSpecialesListe
+            .Where(l => l.SpecialRule is not null)
+            .OrderBy(l => l.SpecialRule.Ordre).ThenBy(l => l.SpecialRule.Nom)
+            .ToList() ?? [];
 
     bool _peutEditer =>
         _equipe is not null

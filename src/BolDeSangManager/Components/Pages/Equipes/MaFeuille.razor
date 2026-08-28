@@ -62,31 +62,34 @@ else
             }
         </MudPaper>
 
-        @* Règles spéciales de la race (LRB p.93-94) : nom + effet, pour que le
-           coach ait la règle sous les yeux sans ouvrir le livre. *@
+        @* Règles spéciales : repliées, on touche une règle pour lire son effet. *@
         @if (_equipeDetail.TeamType?.ReglesSpecialesListe.Any() == true)
         {
-            <MudPaper Class="pa-3 mb-4" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default)">
-                <MudText Typo="Typo.subtitle2" Class="mb-2">Règles spéciales</MudText>
+            <MudExpansionPanels Class="mb-4" Elevation="0" Dense="true"
+                                Style="border:1px solid var(--mud-palette-lines-default); border-radius:4px">
                 @foreach (var l in _equipeDetail.TeamType.ReglesSpecialesListe.OrderBy(x => x.SpecialRule.Ordre))
                 {
-                    <div class="mb-2">
-                        <MudText Typo="Typo.body2">
-                            <b>@l.SpecialRule.Nom</b>
-                            @* Divinité retenue pour CETTE équipe, choisie par le commissaire. *@
-                            @if (l.SpecialRule.Code == SpecialRuleCodes.FavoriDe
-                                 && !string.IsNullOrEmpty(_equipeDetail.DiviniteChoisie))
-                            {
-                                <MudChip T="string" Size="Size.Small" Color="Color.Warning"
-                                         Variant="Variant.Outlined" Class="ml-2">@_equipeDetail.DiviniteChoisie</MudChip>
-                            }
-                        </MudText>
-                        <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
-                            @l.SpecialRule.Description
-                        </MudText>
-                    </div>
+                    <MudExpansionPanel Dense="true">
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                                <MudText Typo="Typo.body2"><b>@l.SpecialRule.Nom</b></MudText>
+                                @if (l.SpecialRule.Code == SpecialRuleCodes.FavoriDe
+                                     && !string.IsNullOrEmpty(_equipeDetail.DiviniteChoisie))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                        @_equipeDetail.DiviniteChoisie
+                                    </MudChip>
+                                }
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                                @l.SpecialRule.Description
+                            </MudText>
+                        </ChildContent>
+                    </MudExpansionPanel>
                 }
-            </MudPaper>
+            </MudExpansionPanels>
         }
     }
 
