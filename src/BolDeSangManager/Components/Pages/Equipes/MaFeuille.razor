@@ -65,6 +65,7 @@ else
         @* Règles spéciales : repliées, on touche une règle pour lire son effet. *@
         @if (_equipeDetail.TeamType?.ReglesSpecialesListe.Any() == true)
         {
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Règles spéciales</MudText>
             <MudExpansionPanels Class="mb-4" Elevation="0" Dense="true"
                                 Style="border:1px solid var(--mud-palette-lines-default); border-radius:4px">
                 @foreach (var l in _equipeDetail.TeamType.ReglesSpecialesListe.OrderBy(x => x.SpecialRule.Ordre))

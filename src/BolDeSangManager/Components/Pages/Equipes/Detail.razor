@@ -68,6 +68,7 @@ else
        COMMISSAIRE peut choisir (le livre rend le choix définitif). *@
     @if (_reglesSpeciales.Count > 0)
     {
+        <MudText Typo="Typo.subtitle2" Class="mb-1">Règles spéciales</MudText>
         <MudExpansionPanels Class="mb-4" Elevation="0" Dense="true"
                             Style="border:1px solid var(--mud-palette-lines-default); border-radius:4px">
             @foreach (var lien in _reglesSpeciales)
