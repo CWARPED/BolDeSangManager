@@ -448,7 +448,72 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         }
     }
 
-    public async Task<TeamPlayer> RecruterJoueurAsync(int teamId, int positionId, string nom, int numero)
+    public async Task<TeamPlayer> RecruterJoueurAsync(int teamId, int positionId, string nom, int numero) =>
+        await RecruterAsync(teamId, positionId, nom, numero, gratuit: false);
+
+    /// <summary>
+    /// Recrutement gratuit au titre d'une règle spéciale (« Maîtres de la
+    /// Non-Vie », LRB p.94) : le joueur est embauché sans débiter la trésorerie.
+    ///
+    /// Le poste doit porter le mot-clé visé par la règle sur la fiche de race.
+    /// Vérifié ICI, côté serveur : l'écran propose, il ne fait pas foi.
+    /// </summary>
+    public async Task<TeamPlayer> RecruterJoueurGratuitAsync(
+        int teamId, int positionId, string nom, int numero)
+    {
+        var eligibles = await GetPostesRecrutementGratuitAsync(teamId);
+        if (eligibles.All(p => p.Id != positionId))
+            throw new InvalidOperationException(
+                "Ce poste n'est pas éligible au recrutement gratuit de cette équipe.");
+
+        return await RecruterAsync(teamId, positionId, nom, numero, gratuit: true);
+    }
+
+    /// <summary>
+    /// Postes que l'équipe peut embaucher gratuitement. Liste vide = la race
+    /// ne porte pas la règle, ou aucun mot-clé n'est renseigné.
+    ///
+    /// Comme pour « Vil Prix », le mot-clé vient de la fiche de race
+    /// (<c>OptionsChoix</c>) : viser un autre poste est un réglage admin, pas
+    /// un développement. Un mot-clé vide ne propose RIEN — sinon il
+    /// correspondrait à tous les postes.
+    /// </summary>
+    public async Task<List<PlayerPosition>> GetPostesRecrutementGratuitAsync(int teamId)
+    {
+        var equipe = await db.Teams
+            .Include(t => t.TeamType).ThenInclude(tt => tt.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
+            .FirstOrDefaultAsync(t => t.Id == teamId);
+
+        if (equipe?.TeamType is null) return [];
+
+        var motsCles = equipe.TeamType.ReglesSpecialesListe
+            .Where(l => l.SpecialRule?.Code == SpecialRuleCodes.RecrutementGratuitParMotCle)
+            .SelectMany(l => SpecialRuleCodes.DecouperOptions(l.OptionsChoix))
+            .ToList();
+
+        if (motsCles.Count == 0) return [];
+
+        // Le filtrage par mot-clé se fait en mémoire : les mots-clés sont un CSV
+        // en base, et une comparaison SQL par sous-chaîne ferait correspondre
+        // « Trois-quart » à « Trois-quartier ».
+        var postes = await db.PlayerPositions
+            .Where(p => p.TeamTypeId == equipe.TeamTypeId)
+            .ToListAsync();
+
+        return postes
+            .Where(p => SpecialRuleCodes.DecouperOptions(p.MotsCles)
+                .Any(m => motsCles.Contains(m, StringComparer.OrdinalIgnoreCase)))
+            .OrderBy(p => p.Nom)
+            .ToList();
+    }
+
+    /// <param name="gratuit">
+    /// Quand vrai, ni contrôle de fonds ni débit — mais TOUTES les autres
+    /// règles de roster (maximum par poste, limites de mots-clés) restent
+    /// opposables : la gratuité ne dispense pas des plafonds.
+    /// </param>
+    private async Task<TeamPlayer> RecruterAsync(
+        int teamId, int positionId, string nom, int numero, bool gratuit)
     {
         var equipe = await db.Teams.FindAsync(teamId)
             ?? throw new InvalidOperationException("Équipe introuvable");
@@ -457,7 +522,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .FirstOrDefaultAsync(p => p.Id == positionId)
             ?? throw new InvalidOperationException("Poste introuvable");
 
-        if (equipe.Tresorerie < position.Cout)
+        if (!gratuit && equipe.Tresorerie < position.Cout)
             throw new InvalidOperationException("Fonds insuffisants.");
 
         var nbDejaPoste = await db.TeamPlayers
@@ -511,9 +576,16 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
         AjouterCompetencesDepart(joueur.Id, position.CompetencesDepart);
 
-        equipe.Tresorerie -= position.Cout;
+        // Gratuit : aucun débit. Le joueur garde en revanche sa valeur (déjà
+        // posée ci-dessus) — le LRB précise qu'« il ajoute quand même sa valeur
+        // à la Valeur d'Équipe ».
+        if (!gratuit)
+            equipe.Tresorerie -= position.Cout;
+
         await db.SaveChangesAsync();
-        logger.LogInformation("Joueur recruté : {NomJoueur} (poste={Poste}, coût={Cout}) pour l'équipe id={TeamId}", nom, position.Nom, position.Cout, teamId);
+        logger.LogInformation(
+            "Joueur recruté : {NomJoueur} (poste={Poste}, coût={Cout}{Gratuit}) pour l'équipe id={TeamId}",
+            nom, position.Nom, position.Cout, gratuit ? ", GRATUIT" : "", teamId);
         return joueur;
     }
 

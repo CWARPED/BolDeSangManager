@@ -166,6 +166,47 @@ else
                 </MudStack>
             </MudPaper>
         }
+
+        @* ── Recrutement gratuit (« Maîtres de la Non-Vie ») ───────────────
+           Section distincte du recrutement payant ci-dessus : ces postes sont
+           offerts par une règle spéciale, la trésorerie n'entre pas en jeu. *@
+        @if (_postesGratuits.Count > 0)
+        {
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.subtitle2" Class="mb-1">Recrutement gratuit</MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2 d-block">
+                Accordé par une règle spéciale de l'équipe. Sans coût.
+            </MudText>
+
+            @foreach (var pos in _postesGratuits)
+            {
+                var countG = _equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite && j.PlayerPositionId == pos.Id);
+                var completG = countG >= pos.QuantiteMax;
+                <MudPaper Outlined="true" Class="pa-2 mb-2" Style="@($"opacity:{(completG ? "0.5" : "1")}")">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <div style="flex:1; min-width:100px">
+                            <MudText Typo="Typo.body2"><b>@pos.Nom</b></MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Gratuit &nbsp;·&nbsp; @countG/@pos.QuantiteMax
+                            </MudText>
+                        </div>
+                        <MudTextField @bind-Value="@_nomsGratuit[pos.Id]" Placeholder="Nom (optionnel)"
+                                     Variant="Variant.Text" Margin="Margin.Dense" Style="min-width:120px; flex:1"
+                                     Disabled="@completG" />
+                        <MudNumericField @bind-Value="@_numerosGratuit[pos.Id]" Min="1" Max="99"
+                                       Label="#" Variant="Variant.Text" Margin="Margin.Dense" Style="width:56px"
+                                       Disabled="@completG" />
+                        <MudIconButton Icon="@Icons.Material.Filled.CardGiftcard"
+                                     Size="Size.Small"
+                                     Color="@(!completG ? Color.Success : Color.Default)"
+                                     Disabled="@completG"
+                                     OnClick="@(() => RecruterGratuit(pos))"
+                                     title="@(completG ? "Limite atteinte" : "Recruter gratuitement")" />
+                    </MudStack>
+                </MudPaper>
+            }
+        }
+
         @if (_recrutesEnAttente.Any())
         {
             <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-2 d-block">
@@ -235,6 +276,13 @@ else
     List<PlayerPosition> _postesDisponibles = [];
     List<AmeliorationData> _ameliorations = [];
     List<RecrueData> _recrutesEnAttente = [];
+
+    // Recrutement gratuit (« Maîtres de la Non-Vie »). Appliqué IMMÉDIATEMENT,
+    // pas mis en attente comme les recrues payantes : il n'y a rien à financer,
+    // donc rien à arbitrer au moment de valider.
+    List<PlayerPosition> _postesGratuits = [];
+    Dictionary<int, string> _nomsGratuit = [];
+    Dictionary<int, int> _numerosGratuit = [];
     Dictionary<int, string> _nomsRecruté = [];
     Dictionary<int, int> _numerosRecruté = [];
     int _nouvellesRelances;
@@ -285,6 +333,15 @@ else
         _skills = await TeamService.GetCompetencesAsync(
             rulesVersionId: _match.Division?.League?.RulesVersionId);
         _postesDisponibles = await TeamService.GetPostesDisponiblesAsync(_equipe.TeamTypeId);
+
+        // Postes offerts par une règle spéciale de la race. Liste vide dans la
+        // très grande majorité des cas : la section n'apparaît alors même pas.
+        _postesGratuits = await TeamService.GetPostesRecrutementGratuitAsync(_equipe.Id);
+        foreach (var p in _postesGratuits)
+        {
+            _nomsGratuit.TryAdd(p.Id, "");
+            _numerosGratuit.TryAdd(p.Id, 1);
+        }
 
         _ameliorations = _match.Feuille?.RecordsJoueurs
             .Where(r => r.TeamPlayer is not null
@@ -381,6 +438,38 @@ else
 
     bool DejaValide() => _match?.Feuille is { } f
         && (_estDomicile ? f.ApresMatchDomicileValide : f.ApresMatchExterieurValide);
+
+    /// <summary>
+    /// Recrutement gratuit, appliqué immédiatement. Le service revalide
+    /// l'éligibilité du poste : l'écran propose, il ne fait pas autorité.
+    /// </summary>
+    async Task RecruterGratuit(PlayerPosition pos)
+    {
+        if (_equipe is null) return;
+        try
+        {
+            var numero = _numerosGratuit.GetValueOrDefault(pos.Id, 1);
+            var nom = _nomsGratuit.GetValueOrDefault(pos.Id, "");
+
+            await TeamService.RecruterJoueurGratuitAsync(_equipe.Id, pos.Id, nom, numero);
+
+            _nomsGratuit[pos.Id] = "";
+            _numerosGratuit[pos.Id] = Math.Min(numero + 1, 99);
+
+            // On relit l'équipe : le compteur du poste et la VEA doivent
+            // refléter la base, pas un état devinné côté écran.
+            _equipe = await TeamService.GetEquipeAsync(_equipe.Id);
+            Snackbar.Add($"{pos.Nom} recruté gratuitement", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
 
     void AjouterRecrue(PlayerPosition pos)
     {
