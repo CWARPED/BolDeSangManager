@@ -48,6 +48,70 @@
             </MudGrid>
         </MudPaper>
 
+        @* ── Règles spéciales du LRB (p.93-94) ──────────────────────────────
+           Rattachement depuis le catalogue de la version. Le champ texte libre
+           ci-dessus reste affiché pour l'historique, mais c'est cette liste qui
+           fait foi sur la feuille d'équipe. *@
+        @if (!IsNew)
+        {
+            <MudPaper Class="pa-4 mb-3" Elevation="1">
+                <MudText Typo="Typo.h6" Class="mb-1">Règles spéciales</MudText>
+                <MudText Typo="Typo.caption" Class="mb-3" Style="color:var(--mud-palette-text-secondary)">
+                    Cochez les règles de cette équipe. Pour « Favori de… », listez les Dieux
+                    autorisés séparés par des virgules : une seule valeur impose la divinité,
+                    plusieurs laissent le commissaire choisir pour chaque équipe.
+                </MudText>
+
+                @if (_reglesDisponibles.Count == 0)
+                {
+                    <MudAlert Severity="Severity.Info" Dense="true">
+                        Aucune règle spéciale définie pour cette version. Créez-les d'abord dans
+                        l'onglet « Règles spéciales » des données de jeu.
+                    </MudAlert>
+                }
+                else
+                {
+                    <MudTable Items="@_reglesDisponibles" Dense="true" Hover="true" Elevation="0">
+                        <HeaderContent>
+                            <MudTh Style="width:8%">Active</MudTh>
+                            <MudTh Style="width:25%">Règle</MudTh>
+                            <MudTh>Options (Dieux du Chaos, etc.)</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Active">
+                                <MudCheckBox T="bool"
+                                             Value="@EstActive(context.Id)"
+                                             ValueChanged="@(v => BasculerRegle(context, v))" />
+                            </MudTd>
+                            <MudTd DataLabel="Règle">
+                                <b>@context.Nom</b>
+                                @if (!string.IsNullOrEmpty(context.Code))
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info"
+                                             Variant="Variant.Outlined" Class="ml-2">@context.Code</MudChip>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Options">
+                                @if (EstActive(context.Id) && context.Code == SpecialRuleCodes.FavoriDe)
+                                {
+                                    <MudTextField T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Value="@OptionsDe(context.Id)"
+                                                  ValueChanged="@(v => DefinirOptions(context, v))"
+                                                  Placeholder="Khorne,Nurgle,Tzeentch" />
+                                }
+                                else if (EstActive(context.Id))
+                                {
+                                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                                        Aucun choix à faire.
+                                    </MudText>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudPaper>
+        }
+
         @if (!IsNew)
         {
             <MudPaper Class="pa-4 mb-3" Elevation="1">
@@ -158,6 +222,9 @@
     string _nouveauMotCle = "";
     int _nouveauMax = 1;
 
+    /// <summary>Catalogue de règles spéciales de la version de l'équipe éditée.</summary>
+    List<SpecialRule> _reglesDisponibles = [];
+
     protected override async Task OnInitializedAsync() => await ChargerAsync();
 
     async Task ChargerAsync()
@@ -170,6 +237,51 @@
         {
             _team = await DataEditService.GetTeamTypeAsync(id);
             if (_team is null) { Nav.NavigateTo("/admin/donnees"); return; }
+
+            // Le catalogue est scopé par version : on ne propose que les règles
+            // de la version de CETTE équipe, sinon on créerait un rattachement
+            // inter-versions que le service refuse (à juste titre).
+            _reglesDisponibles = await DataEditService.GetReglesSpecialesAsync(_team.RulesVersionId);
+        }
+    }
+
+    // ── Règles spéciales ────────────────────────────────────────────────────
+
+    bool EstActive(int regleId) =>
+        _team?.ReglesSpecialesListe.Any(l => l.SpecialRuleId == regleId) ?? false;
+
+    string OptionsDe(int regleId) =>
+        _team?.ReglesSpecialesListe.FirstOrDefault(l => l.SpecialRuleId == regleId)?.OptionsChoix ?? "";
+
+    async Task BasculerRegle(SpecialRule regle, bool active)
+    {
+        if (_team is null) return;
+        try
+        {
+            if (active)
+                await DataEditService.AssocierRegleSpecialeAsync(_team.Id, regle.Id, OptionsDe(regle.Id));
+            else
+                await DataEditService.DissocierRegleSpecialeAsync(_team.Id, regle.Id);
+
+            await ChargerAsync();   // relit l'état réel plutôt que de le deviner
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    async Task DefinirOptions(SpecialRule regle, string options)
+    {
+        if (_team is null) return;
+        try
+        {
+            await DataEditService.AssocierRegleSpecialeAsync(_team.Id, regle.Id, options);
+            await ChargerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
         }
     }
 

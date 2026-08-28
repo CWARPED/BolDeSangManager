@@ -254,6 +254,32 @@ public class PdfService
                             .Text("Stat réduite par blessure").FontSize(7).FontColor(Colors.Red.Darken3);
                     });
 
+                    // ── Règles spéciales de l'équipe (LRB p.93-94) ───────
+                    // Toujours imprimées : ce sont les règles que les deux
+                    // coaches doivent avoir sous les yeux pendant le match.
+                    var reglesSpeciales = (equipe.TeamType?.ReglesSpecialesListe ?? [])
+                        .Where(l => l.SpecialRule is not null)
+                        .OrderBy(l => l.SpecialRule.Ordre).ThenBy(l => l.SpecialRule.Nom)
+                        .ToList();
+
+                    if (reglesSpeciales.Count > 0)
+                    {
+                        col.Item().PaddingTop(6).Text("Règles spéciales")
+                            .Bold().FontSize(9).FontColor(Colors.Red.Darken2);
+
+                        foreach (var l in reglesSpeciales)
+                        {
+                            // Pleine largeur : un bloc contraint couperait le
+                            // texte au tiers de la page.
+                            col.Item().PaddingTop(2).Text(t =>
+                            {
+                                t.Span($"{l.SpecialRule.Nom} — ").Bold().FontSize(7.5f);
+                                t.Span(TexteFluide(l.SpecialRule.Description))
+                                    .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
+                            });
+                        }
+                    }
+
                     // ── Rappel des compétences ───────────────────────────
                     if (inclureDescriptionsCompetences)
                     {

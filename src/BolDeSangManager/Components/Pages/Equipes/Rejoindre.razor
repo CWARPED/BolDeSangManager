@@ -62,7 +62,21 @@ else
                                     </MudChip>
                                 </div>
                             }
-                            @if (!string.IsNullOrEmpty(tt.ReglesSpeciales))
+                            @* Règles spéciales du LRB. Le catalogue fait foi ;
+                               le texte libre historique n'est montré que si la
+                               race n'a encore aucune règle rattachée. *@
+                            @if (tt.ReglesSpecialesListe.Any())
+                            {
+                                <div class="mt-1">
+                                    @foreach (var l in tt.ReglesSpecialesListe.OrderBy(x => x.SpecialRule.Ordre))
+                                    {
+                                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                                 Class="ma-0 mr-1"
+                                                 title="@l.SpecialRule.Description">@l.SpecialRule.Nom</MudChip>
+                                    }
+                                </div>
+                            }
+                            else if (!string.IsNullOrEmpty(tt.ReglesSpeciales))
                             {
                                 <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">@tt.ReglesSpeciales</MudText>
                             }

@@ -47,6 +47,13 @@ public class TeamType
     public ICollection<PlayerPosition> Postes { get; set; } = [];
     public ICollection<Team> Equipes { get; set; } = [];
     public ICollection<TeamTypeKeywordLimit> LimitesMotsCles { get; set; } = [];
+
+    /// <summary>
+    /// Règles spéciales du LRB (p.93-94) rattachées à cette fiche d'équipe.
+    /// Remplace le texte libre <see cref="ReglesSpeciales"/>, conservé en base
+    /// mais qui n'est plus la source de vérité.
+    /// </summary>
+    public ICollection<TeamTypeSpecialRule> ReglesSpecialesListe { get; set; } = [];
 }
 
 public class PlayerPosition

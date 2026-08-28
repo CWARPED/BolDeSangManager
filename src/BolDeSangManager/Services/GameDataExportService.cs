@@ -39,6 +39,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             .Include(tt => tt.Postes).ThenInclude(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
             .Include(tt => tt.Postes).ThenInclude(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Include(tt => tt.LimitesMotsCles)
+            .Include(tt => tt.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
             .Where(tt => tt.RulesVersionId == rulesVersionId)
             .OrderBy(tt => tt.Nom)
             .ToListAsync();
@@ -58,6 +59,12 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
         var staffTypes = await db.StaffTypes
             .Where(s => s.RulesVersionId == rulesVersionId)
             .OrderBy(s => s.Ordre).ThenBy(s => s.Nom)
+            .ToListAsync();
+
+        // Catalogue de règles spéciales de la version (LRB p.93-94).
+        var reglesSpeciales = await db.SpecialRules
+            .Where(r => r.RulesVersionId == rulesVersionId)
+            .OrderBy(r => r.Ordre).ThenBy(r => r.Nom)
             .ToListAsync();
 
         // F3 : chaque export produit une nouvelle révision, persistée sur la
@@ -99,7 +106,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     p.AccesCategories.Where(a => a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList(),
                     p.AccesCategories.Where(a => !a.EstPrincipale).Select(a => a.SkillCategoryDef.Nom).OrderBy(n => n).ToList()
                 )).ToList(),
-                tt.LimitesMotsCles.Select(l => new KeywordLimitGdDto(l.MotCle, l.Max)).ToList()
+                tt.LimitesMotsCles.Select(l => new KeywordLimitGdDto(l.MotCle, l.Max)).ToList(),
+                tt.ReglesSpecialesListe
+                    .OrderBy(l => l.SpecialRule.Ordre).ThenBy(l => l.SpecialRule.Nom)
+                    .Select(l => new TeamTypeSpecialRuleGdDto(l.SpecialRule.Nom, l.OptionsChoix))
+                    .ToList()
             )).ToList(),
             Reserve: reserve.Select(p => new PlayerPositionGdDto(
                 p.Nom, p.QuantiteMax, p.Cout, p.Mouvement, p.Force, p.Agilite,
@@ -118,6 +129,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             Staff: staffTypes.Select(s => new StaffTypeGdDto(
                 s.Nom, s.Description, s.Ordre, s.EstActif, s.Cout,
                 s.CoutDepuisTypeEquipe, s.MinCreation, s.MaxCreation, s.MaxLigue
+            )).ToList(),
+            ReglesSpeciales: reglesSpeciales.Select(r => new SpecialRuleGdDto(
+                r.Nom, r.Description, r.Ordre, r.Code
             )).ToList()
         );
 
@@ -243,6 +257,24 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 skillMap[s.Nom] = skill.Id;
             }
 
+            // 3 bis. Catalogue de règles spéciales, AVANT les fiches d'équipe
+            // qui les référencent par nom.
+            var regleMap = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in dto.ReglesSpeciales ?? [])
+            {
+                var regle = new SpecialRule
+                {
+                    RulesVersionId = version.Id,
+                    Nom = r.Nom,
+                    Description = r.Description,
+                    Ordre = r.Ordre,
+                    Code = r.Code
+                };
+                db.SpecialRules.Add(regle);
+                await db.SaveChangesAsync();
+                regleMap[r.Nom] = regle.Id;
+            }
+
             // 4. TypesEquipes + Postes + Limites
             foreach (var ttDto in dto.TypesEquipes)
             {
@@ -311,6 +343,25 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                         TeamTypeId = tt.Id,
                         MotCle = lim.MotCle,
                         Max = lim.Max
+                    });
+                }
+                await db.SaveChangesAsync();
+
+                // Rattachement des règles spéciales, résolues par NOM comme le
+                // reste de cet export. Une règle absente du fichier est signalée
+                // sans interrompre l'import : le reste de la fiche est valide.
+                foreach (var rDto in ttDto.ReglesSpecialesRattachees ?? [])
+                {
+                    if (!regleMap.TryGetValue(rDto.RegleNom, out var regleId))
+                    {
+                        errors.Add($"Règle spéciale introuvable : « {rDto.RegleNom} » (équipe : {ttDto.Nom})");
+                        continue;
+                    }
+                    db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
+                    {
+                        TeamTypeId = tt.Id,
+                        SpecialRuleId = regleId,
+                        OptionsChoix = rDto.OptionsChoix
                     });
                 }
                 await db.SaveChangesAsync();
@@ -583,7 +634,28 @@ record GameDataExportDto(
     int? XpBonusMvp = null,
     // Staff configurable. Optionnel : un JSON exporté avant cette fonctionnalité
     // reste importable, la version reprend alors le staff standard.
-    List<StaffTypeGdDto>? Staff = null
+    List<StaffTypeGdDto>? Staff = null,
+    // Catalogue de règles spéciales (LRB p.93-94). Optionnel pour la même
+    // raison : un export antérieur s'importe sans règles spéciales.
+    List<SpecialRuleGdDto>? ReglesSpeciales = null
+);
+
+/// <summary>
+/// Règle spéciale exportée. Le rattachement aux fiches d'équipe se fait par NOM
+/// de règle, côté <c>TeamTypeGdDto.ReglesSpecialesRattachees</c> — comme partout
+/// ailleurs dans cet export, pour qu'un fichier reste portable entre instances.
+/// </summary>
+record SpecialRuleGdDto(
+    string Nom,
+    string Description,
+    int Ordre,
+    string Code
+);
+
+/// <summary>Rattachement d'une règle à une fiche d'équipe, référencée par nom.</summary>
+record TeamTypeSpecialRuleGdDto(
+    string RegleNom,
+    string OptionsChoix
 );
 
 /// <summary>Définition de staff exportée. Référencée par NOM, comme le reste.</summary>
@@ -638,7 +710,10 @@ record TeamTypeGdDto(
     string ReglesSpeciales,
     string ReglesSpecialesLigue,
     List<PlayerPositionGdDto> Postes,
-    List<KeywordLimitGdDto> Limites
+    List<KeywordLimitGdDto> Limites,
+    // Règles spéciales rattachées à cette fiche, référencées par nom.
+    // Optionnel : un export antérieur au catalogue s'importe sans rattachement.
+    List<TeamTypeSpecialRuleGdDto>? ReglesSpecialesRattachees = null
 );
 
 record PlayerPositionGdDto(

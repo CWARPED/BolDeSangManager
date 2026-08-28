@@ -1,0 +1,90 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" sm="9">
+                <MudTextField @bind-Value="_nom" Label="Nom" Variant="Variant.Outlined"
+                              HelperText="Tel qu'il figure dans le livre de règles, ex. « Capitaine »" />
+            </MudItem>
+            <MudItem xs="12" sm="3">
+                <MudNumericField @bind-Value="_ordre" Label="Ordre" Variant="Variant.Outlined"
+                                 HelperText="Affichage" />
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined"
+                              Lines="5"
+                              HelperText="L'effet de la règle, rappelé au coach sur sa feuille d'équipe." />
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+            <MudText Typo="Typo.caption">
+                Une règle <b>sans code</b> est <b>descriptive</b> : elle s'affiche sur la feuille
+                d'équipe et se joue à la table. C'est le cas de la plupart des règles, et de toutes
+                celles qu'une nouvelle édition apportera — vous pouvez donc les ajouter vous-même
+                sans développement.
+            </MudText>
+        </MudAlert>
+
+        <MudSelect T="string" @bind-Value="_code" Label="Comportement automatique" Class="mt-3"
+                   Variant="Variant.Outlined"
+                   HelperText="Ne changez ceci que si l'application sait vraiment gérer la règle.">
+            <MudSelectItem Value="@("")">Aucun — règle descriptive</MudSelectItem>
+            <MudSelectItem Value="@SpecialRuleCodes.FavoriDe">Favori de… — choix d'un Dieu du Chaos</MudSelectItem>
+        </MudSelect>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="Sauvegarder">Sauvegarder</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int VersionId { get; set; }
+    [Parameter] public SpecialRule? Existant { get; set; }
+
+    string _nom = "";
+    string _description = "";
+    string _code = "";
+    int _ordre;
+
+    protected override void OnInitialized()
+    {
+        if (Existant is not null)
+        {
+            _nom = Existant.Nom;
+            _description = Existant.Description;
+            _code = Existant.Code;
+            _ordre = Existant.Ordre;
+        }
+    }
+
+    void Annuler() => MudDialog.Cancel();
+
+    async Task Sauvegarder()
+    {
+        try
+        {
+            if (Existant is null)
+                await DataEditService.CreerRegleSpecialeAsync(VersionId, _nom, _description, _code, _ordre);
+            else
+                await DataEditService.ModifierRegleSpecialeAsync(Existant.Id, _nom, _description, _code, _ordre);
+
+            Snackbar.Add("Règle spéciale sauvegardée", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+}

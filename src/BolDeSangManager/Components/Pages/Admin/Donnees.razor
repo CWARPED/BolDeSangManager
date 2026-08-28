@@ -208,6 +208,55 @@
             </MudTable>
         </MudTabPanel>
 
+        <MudTabPanel Text="Règles spéciales">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                    Règles spéciales d'équipe du livre de règles (p.93-94). Elles appartiennent à la
+                    version sélectionnée et sont clonées avec elle. Une règle <b>sans comportement
+                    automatique</b> est simplement affichée sur la feuille d'équipe : vous pouvez donc
+                    ajouter les règles d'une nouvelle édition sans développement.
+                    Le rattachement aux équipes se fait depuis la fiche de chaque équipe.
+                </MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           Size="Size.Small" OnClick="AjouterRegleSpeciale">Ajouter une règle</MudButton>
+            </MudStack>
+
+            <MudTable Items="@_reglesSpeciales" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh Style="width:6%">Ordre</MudTh>
+                    <MudTh Style="width:20%">Nom</MudTh>
+                    <MudTh>Description</MudTh>
+                    <MudTh Style="width:14%">Comportement</MudTh>
+                    <MudTh Style="width:10%">Équipes</MudTh>
+                    <MudTh Style="width:10%">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Ordre">@context.Ordre</MudTd>
+                    <MudTd DataLabel="Nom"><b>@context.Nom</b></MudTd>
+                    <MudTd DataLabel="Description">
+                        <MudText Typo="Typo.caption">@context.Description</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Comportement">
+                        @if (string.IsNullOrEmpty(context.Code))
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">descriptive</MudChip>
+                        }
+                        else
+                        {
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@context.Code</MudChip>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Équipes">@(context.TeamTypes?.Count ?? 0)</MudTd>
+                    <MudTd DataLabel="Actions">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => EditerRegleSpeciale(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerRegleSpeciale(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
         <MudTabPanel Text="Compétences">
             <MudExpansionPanels Elevation="0" Class="mb-3">
                 <MudExpansionPanel Dense="true">
@@ -384,6 +433,7 @@
     List<PoolPosition> _reserve = [];
     List<Skill> _skills = [];
     List<SkillCategoryDef> _categories = [];
+    List<SpecialRule> _reglesSpeciales = [];
     int _selectedGameId;
     int _selectedVersionId;
     int? _categorieFiltre;
@@ -413,9 +463,10 @@
 
     async Task ChargerDonneesAsync()
     {
-        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; _categories = []; _staff = []; return; }
+        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; _categories = []; _staff = []; _reglesSpeciales = []; return; }
         _teamTypes = await DataEditService.GetTeamTypesAsync(_selectedVersionId);
         _categories = await DataEditService.GetCategoriesAsync(_selectedVersionId);
+        _reglesSpeciales = await DataEditService.GetReglesSpecialesAsync(_selectedVersionId);
         _skills = await DataEditService.GetSkillsAsync(_selectedVersionId);
         _reserve = await DataEditService.GetReserveAsync(_selectedVersionId);
         _staff = await StaffService.GetStaffTypesAsync(_selectedVersionId);
@@ -528,6 +579,55 @@
         var result = await dialog.Result;
         if (result is { Canceled: false })
             await ChargerVersionsAsync();
+    }
+
+    // ── Règles spéciales ────────────────────────────────────────────────────
+
+    async Task AjouterRegleSpeciale()
+    {
+        if (_selectedVersionId == 0) return;
+        var parameters = new DialogParameters<EditionRegleSpecialeDialog>
+        {
+            { x => x.VersionId, _selectedVersionId },
+            { x => x.Existant, null }
+        };
+        var dialog = await DialogService.ShowAsync<EditionRegleSpecialeDialog>("Nouvelle règle spéciale", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task EditerRegleSpeciale(SpecialRule r)
+    {
+        var parameters = new DialogParameters<EditionRegleSpecialeDialog>
+        {
+            { x => x.VersionId, _selectedVersionId },
+            { x => x.Existant, r }
+        };
+        var dialog = await DialogService.ShowAsync<EditionRegleSpecialeDialog>("Éditer la règle spéciale", parameters);
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task SupprimerRegleSpeciale(SpecialRule r)
+    {
+        var ok = await DialogService.ShowMessageBox(
+            "Confirmer", $"Supprimer la règle spéciale « {r.Nom} » ?", "Supprimer", "Annuler");
+        if (ok != true) return;
+        try
+        {
+            await DataEditService.SupprimerRegleSpecialeAsync(r.Id);
+            Snackbar.Add("Règle spéciale supprimée", Severity.Success);
+            await ChargerDonneesAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Cas normal : la règle est encore rattachée à des équipes.
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
     }
 
     async Task AjouterCategorie()

@@ -19,6 +19,9 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     public async Task<List<TeamType>> GetTypesEquipesParVersionAsync(int versionId) =>
         await db.TeamTypes
             .Include(t => t.Postes)
+            // Règles spéciales : affichées dès le choix de la race, c'est un
+            // critère de décision pour le coach.
+            .Include(t => t.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
             .Where(t => t.RulesVersionId == versionId)
             .OrderBy(t => t.Nom)
             .ToListAsync();
@@ -38,6 +41,9 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         await db.Teams
             .Include(t => t.Coach)
             .Include(t => t.TeamType).ThenInclude(tt => tt.Game)
+            // Règles spéciales de la race : affichées sur la feuille d'équipe
+            // et sur le PDF. Sans ce Include, elles disparaîtraient en silence.
+            .Include(t => t.TeamType).ThenInclude(tt => tt.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
             .Include(t => t.League)
             .Include(t => t.Joueurs)
                 .ThenInclude(j => j.PlayerPosition)

@@ -38,6 +38,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<StaffDefinition> StaffTypes => Set<StaffDefinition>();
     public DbSet<LeagueStaffType> LeagueStaffTypes => Set<LeagueStaffType>();
     public DbSet<TeamStaff> TeamStaffs => Set<TeamStaff>();
+    public DbSet<SpecialRule> SpecialRules => Set<SpecialRule>();
+    public DbSet<TeamTypeSpecialRule> TeamTypeSpecialRules => Set<TeamTypeSpecialRule>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
@@ -304,6 +306,42 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(s => s.RulesVersion)
             .WithMany()
             .HasForeignKey(s => s.RulesVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // SpecialRule → RulesVersion (Restrict, comme TeamType et Skill :
+        // supprimer une version doit passer par SupprimerVersionAsync, qui
+        // retire les enfants dans le bon ordre, pas par une cascade implicite).
+        builder.Entity<SpecialRule>()
+            .HasOne(r => r.RulesVersion)
+            .WithMany()
+            .HasForeignKey(r => r.RulesVersionId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Nom unique par version : deux « Capitaine » dans la même édition
+        // seraient indiscernables sur une feuille d'équipe.
+        builder.Entity<SpecialRule>()
+            .HasIndex(r => new { r.RulesVersionId, r.Nom })
+            .IsUnique();
+
+        // TeamTypeSpecialRule : table de liaison, clé composite.
+        builder.Entity<TeamTypeSpecialRule>()
+            .HasKey(l => new { l.TeamTypeId, l.SpecialRuleId });
+
+        // Cascade depuis la fiche d'équipe : supprimer une race retire ses
+        // rattachements, jamais les règles elles-mêmes.
+        builder.Entity<TeamTypeSpecialRule>()
+            .HasOne(l => l.TeamType)
+            .WithMany(t => t.ReglesSpecialesListe)
+            .HasForeignKey(l => l.TeamTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // Restrict depuis la règle : supprimer une règle encore rattachée doit
+        // échouer avec un message clair plutôt que vider silencieusement les
+        // fiches d'équipe qui s'en servent.
+        builder.Entity<TeamTypeSpecialRule>()
+            .HasOne(l => l.SpecialRule)
+            .WithMany(r => r.TeamTypes)
+            .HasForeignKey(l => l.SpecialRuleId)
             .OnDelete(DeleteBehavior.Restrict);
 
         // SkillCategoryDef → RulesVersion (cascade : les catégories suivent leur version)

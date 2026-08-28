@@ -178,6 +178,50 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
         await db.SaveChangesAsync();
 
+        // 3 bis. Cloner le catalogue de règles spéciales, puis les
+        // rattachements aux fiches d'équipe (remappés via les deux maps).
+        // Sans ce bloc, créer une nouvelle édition perdrait toutes les règles
+        // spéciales — l'association devrait tout ressaisir à chaque saison.
+        var sourceRegles = await db.SpecialRules
+            .Where(r => r.RulesVersionId == sourceVersionId)
+            .ToListAsync();
+
+        var regleMap = new Dictionary<int, SpecialRule>();
+        foreach (var src in sourceRegles)
+        {
+            var copie = new SpecialRule
+            {
+                RulesVersionId = destVersionId,
+                Nom = src.Nom,
+                Description = src.Description,
+                Ordre = src.Ordre,
+                Code = src.Code
+            };
+            db.SpecialRules.Add(copie);
+            regleMap[src.Id] = copie;
+        }
+        await db.SaveChangesAsync();
+
+        var sourceLiaisons = await db.TeamTypeSpecialRules
+            .Where(l => l.SpecialRule.RulesVersionId == sourceVersionId)
+            .ToListAsync();
+
+        foreach (var lien in sourceLiaisons)
+        {
+            // Une liaison ne se clone que si SES DEUX extrémités ont été
+            // clonées : sinon on fabriquerait une FK vers une autre version.
+            if (!teamTypeMap.TryGetValue(lien.TeamTypeId, out var destType)) continue;
+            if (!regleMap.TryGetValue(lien.SpecialRuleId, out var destRegle)) continue;
+
+            db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
+            {
+                TeamTypeId = destType.Id,
+                SpecialRuleId = destRegle.Id,
+                OptionsChoix = lien.OptionsChoix
+            });
+        }
+        await db.SaveChangesAsync();
+
         // 4. Cloner les PlayerPositions + leurs CompetencesDepart (avec mapping skill)
         foreach (var src in sourceTypes)
         {
@@ -398,6 +442,14 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             db.TeamTypes.RemoveRange(teamTypes);
             await db.SaveChangesAsync();
 
+            // Les règles spéciales partent APRÈS les TeamTypes : la liaison
+            // TeamTypeSpecialRule → SpecialRule est en Restrict, donc une règle
+            // encore rattachée à une fiche d'équipe ne peut pas être supprimée.
+            // (Les liaisons, elles, tombent en cascade avec leur TeamType.)
+            var reglesSpeciales = await db.SpecialRules.Where(r => r.RulesVersionId == id).ToListAsync();
+            db.SpecialRules.RemoveRange(reglesSpeciales);
+            await db.SaveChangesAsync();
+
             // La Réserve doit partir AVANT les compétences et les catégories :
             // PoolPositionSkill → Skill et PoolPositionCategoryAccess → SkillCategoryDef
             // sont en Restrict avec une FK non nullable.
@@ -433,6 +485,141 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         }
     }
 
+    // ═══════════════════ Règles spéciales (LRB p.93-94) ═══════════════════
+    //
+    // Catalogue porté par la version de règles, éditable par l'association sans
+    // dev. Une règle sans Code est purement descriptive : elle s'affiche sur la
+    // feuille d'équipe, et c'est tout. Un Code connu (SpecialRuleCodes) branche
+    // un comportement écrit une fois dans le code.
+
+    public async Task<List<SpecialRule>> GetReglesSpecialesAsync(int versionId) =>
+        await db.SpecialRules
+            .Include(r => r.TeamTypes)   // la liste admin affiche le nombre d'équipes rattachées
+            .Where(r => r.RulesVersionId == versionId)
+            .OrderBy(r => r.Ordre).ThenBy(r => r.Nom)
+            .ToListAsync();
+
+    public async Task<SpecialRule> CreerRegleSpecialeAsync(
+        int versionId, string nom, string description, string code = "", int ordre = 0)
+    {
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom de la règle spéciale est obligatoire.");
+
+        // Insensible à la casse, comme partout ailleurs dans le projet.
+        var existe = await db.SpecialRules
+            .AnyAsync(r => r.RulesVersionId == versionId && r.Nom.ToLower() == nom.ToLower());
+        if (existe)
+            throw new InvalidOperationException($"Une règle spéciale « {nom} » existe déjà dans cette version.");
+
+        var regle = new SpecialRule
+        {
+            RulesVersionId = versionId,
+            Nom = nom.Trim(),
+            Description = description,
+            Code = code.Trim(),
+            Ordre = ordre
+        };
+        db.SpecialRules.Add(regle);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Règle spéciale créée : {Nom} (id={Id}) sur version {VersionId}", regle.Nom, regle.Id, versionId);
+        return regle;
+    }
+
+    public async Task ModifierRegleSpecialeAsync(
+        int id, string nom, string description, string code, int ordre)
+    {
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom de la règle spéciale est obligatoire.");
+
+        var regle = await db.SpecialRules.FindAsync(id)
+            ?? throw new InvalidOperationException("Règle spéciale introuvable.");
+
+        var doublon = await db.SpecialRules.AnyAsync(r =>
+            r.RulesVersionId == regle.RulesVersionId && r.Id != id && r.Nom.ToLower() == nom.ToLower());
+        if (doublon)
+            throw new InvalidOperationException($"Une autre règle spéciale « {nom} » existe déjà dans cette version.");
+
+        regle.Nom = nom.Trim();
+        regle.Description = description;
+        regle.Code = code.Trim();
+        regle.Ordre = ordre;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Supprime une règle du catalogue. Refuse si elle est encore rattachée à
+    /// des fiches d'équipe : la FK est en Restrict, et un message explicite
+    /// vaut mieux qu'une exception SQLite incompréhensible.
+    /// </summary>
+    public async Task SupprimerRegleSpecialeAsync(int id)
+    {
+        var nbRattachements = await db.TeamTypeSpecialRules.CountAsync(l => l.SpecialRuleId == id);
+        if (nbRattachements > 0)
+            throw new InvalidOperationException(
+                $"{nbRattachements} fiche(s) d'équipe utilisent cette règle. Retirez-la de ces équipes d'abord.");
+
+        var regle = await db.SpecialRules.FindAsync(id)
+            ?? throw new InvalidOperationException("Règle spéciale introuvable.");
+        db.SpecialRules.Remove(regle);
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Rattache une règle à une fiche d'équipe (ou mets à jour ses options).
+    /// </summary>
+    /// <param name="optionsChoix">
+    /// Options proposées à CETTE race, en CSV — voir
+    /// <see cref="TeamTypeSpecialRule.OptionsChoix"/>. Une seule valeur =
+    /// imposée ; vide = aucun choix à faire.
+    /// </param>
+    public async Task AssocierRegleSpecialeAsync(int teamTypeId, int regleId, string optionsChoix = "")
+    {
+        var teamType = await db.TeamTypes.FindAsync(teamTypeId)
+            ?? throw new InvalidOperationException("Type d'équipe introuvable.");
+        var regle = await db.SpecialRules.FindAsync(regleId)
+            ?? throw new InvalidOperationException("Règle spéciale introuvable.");
+
+        // Garde-fou : une FK choisie par l'utilisateur dans une entité scopée
+        // par version doit être vérifiée comme appartenant à CETTE version,
+        // sinon on recrée la corruption « catégorie d'une autre version ».
+        if (regle.RulesVersionId != teamType.RulesVersionId)
+            throw new InvalidOperationException(
+                $"La règle « {regle.Nom} » appartient à une autre version de règles que l'équipe « {teamType.Nom} ».");
+
+        var lien = await db.TeamTypeSpecialRules
+            .FirstOrDefaultAsync(l => l.TeamTypeId == teamTypeId && l.SpecialRuleId == regleId);
+
+        if (lien is null)
+        {
+            db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
+            {
+                TeamTypeId = teamTypeId,
+                SpecialRuleId = regleId,
+                OptionsChoix = NormaliserOptions(optionsChoix)
+            });
+        }
+        else
+        {
+            lien.OptionsChoix = NormaliserOptions(optionsChoix);
+        }
+        await db.SaveChangesAsync();
+    }
+
+    public async Task DissocierRegleSpecialeAsync(int teamTypeId, int regleId)
+    {
+        var lien = await db.TeamTypeSpecialRules
+            .FirstOrDefaultAsync(l => l.TeamTypeId == teamTypeId && l.SpecialRuleId == regleId);
+        if (lien is null) return;
+
+        db.TeamTypeSpecialRules.Remove(lien);
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Nettoie un CSV saisi à la main : espaces parasites, entrées vides.</summary>
+    private static string NormaliserOptions(string csv) =>
+        string.Join(",", (csv ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
     // ═══════════════════ TeamType ═══════════════════
 
     public async Task<List<TeamType>> GetTeamTypesAsync(int versionId) =>
@@ -447,6 +634,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             .Include(t => t.Postes).ThenInclude(p => p.CompetencesDepart).ThenInclude(pps => pps.Skill)
             .Include(t => t.Postes).ThenInclude(p => p.AccesCategories).ThenInclude(a => a.SkillCategoryDef)
             .Include(t => t.LimitesMotsCles)
+            .Include(t => t.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
             .FirstOrDefaultAsync(t => t.Id == id);
 
     public async Task<TeamType> CreerTeamTypeAsync(int versionId, TeamType data)

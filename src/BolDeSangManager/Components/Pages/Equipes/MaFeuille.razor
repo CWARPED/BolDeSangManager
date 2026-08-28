@@ -61,6 +61,24 @@ else
                 </span>
             }
         </MudPaper>
+
+        @* Règles spéciales de la race (LRB p.93-94) : nom + effet, pour que le
+           coach ait la règle sous les yeux sans ouvrir le livre. *@
+        @if (_equipeDetail.TeamType?.ReglesSpecialesListe.Any() == true)
+        {
+            <MudPaper Class="pa-3 mb-4" Elevation="0" Style="border:1px solid var(--mud-palette-lines-default)">
+                <MudText Typo="Typo.subtitle2" Class="mb-2">Règles spéciales</MudText>
+                @foreach (var l in _equipeDetail.TeamType.ReglesSpecialesListe.OrderBy(x => x.SpecialRule.Ordre))
+                {
+                    <div class="mb-2">
+                        <MudText Typo="Typo.body2"><b>@l.SpecialRule.Nom</b></MudText>
+                        <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                            @l.SpecialRule.Description
+                        </MudText>
+                    </div>
+                }
+            </MudPaper>
+        }
     }
 
     @if (_equipeDetail is null)

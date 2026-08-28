@@ -224,6 +224,45 @@ public static class DbSeeder
             }
             await db.SaveChangesAsync();
         }
+
+        await SeedReglesSpecialesAsync(db, bbVersion.Id);
+    }
+
+    /// <summary>
+    /// Catalogue de règles spéciales (LRB p.93-94) et rattachement aux fiches
+    /// d'équipe. Idempotent : ne fait rien si la version en a déjà.
+    ///
+    /// Appelé APRÈS la création des TeamTypes, dont les rattachements dépendent.
+    /// </summary>
+    private static async Task SeedReglesSpecialesAsync(ApplicationDbContext db, int versionId)
+    {
+        if (await db.SpecialRules.AnyAsync(r => r.RulesVersionId == versionId)) return;
+
+        var regles = SpecialRuleSeedData.GetRegles(versionId).ToList();
+        db.SpecialRules.AddRange(regles);
+        await db.SaveChangesAsync();
+
+        var parNom = regles.ToDictionary(r => r.Nom, r => r.Id);
+        var equipes = await db.TeamTypes
+            .Where(t => t.RulesVersionId == versionId)
+            .ToDictionaryAsync(t => t.Nom, t => t.Id);
+
+        foreach (var (nomRegle, nomEquipe, options) in SpecialRuleSeedData.GetRattachements())
+        {
+            // Un nom qui ne correspond à rien serait une faute de frappe du
+            // seed : on l'ignore silencieusement plutôt que d'empêcher toute
+            // l'application de démarrer, mais un test verrouille la cohérence.
+            if (!parNom.TryGetValue(nomRegle, out var regleId)) continue;
+            if (!equipes.TryGetValue(nomEquipe, out var equipeId)) continue;
+
+            db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
+            {
+                TeamTypeId = equipeId,
+                SpecialRuleId = regleId,
+                OptionsChoix = options
+            });
+        }
+        await db.SaveChangesAsync();
     }
 
     private static async Task SeedDungeonBowlTeamsAsync(ApplicationDbContext db)
