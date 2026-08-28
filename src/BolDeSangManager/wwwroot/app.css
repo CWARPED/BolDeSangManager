@@ -1110,3 +1110,30 @@ h1:focus {
     display: block;
     text-align: center;
 }
+
+/* ------------------------------------------------------------
+   MudSelect — le libellé ne doit jamais chevaucher la valeur.
+
+   Signalé par capture téléphone : « Comportement automatique » s'affichait
+   PAR-DESSUS « Aucun — règle descriptive ». MudBlazor ne remonte le libellé
+   dans l'encoche que s'il juge le champ « rempli », et il considère vide
+   toute valeur égale au défaut du type (0 pour un int, "" pour une string).
+   Un `Placeholder` ne suffit pas : le calcul est fait côté C#, pas en CSS.
+
+   Or un MudSelect affiche TOUJOURS quelque chose (l'option correspondant à
+   la valeur courante) : son libellé doit donc être remonté en permanence,
+   comme le fait déjà le variant Outlined dès qu'on choisit une option.
+   Générique : vaut pour tous les select de l'app, présents et à venir.
+   ------------------------------------------------------------ */
+.mud-select .mud-input-label-inputcontrol {
+    transform: translate(14px, -8px) scale(0.75) !important;
+    transform-origin: top left !important;
+    background-color: var(--mud-palette-surface);
+    padding: 0 4px;
+    pointer-events: none;
+}
+
+/* L'encoche de la bordure doit suivre, sinon le trait passe sous le texte. */
+.mud-select .mud-input-outlined-border {
+    border-top-color: transparent;
+}

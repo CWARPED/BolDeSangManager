@@ -28,8 +28,12 @@
                 <MudItem xs="12" sm="6"><MudTextField @bind-Value="_team.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
                 <MudItem xs="6" sm="3">
                     @* Catégorie officielle LRB (p.94), purement informative.
-                       0 = non renseignée : les commissaires font la passe de saisie. *@
-                    <MudSelect T="int" @bind-Value="_team.Categorie" Label="Catégorie (LRB)" Variant="Variant.Outlined">
+                       0 = non renseignée : les commissaires font la passe de saisie.
+                       Placeholder : sans lui MudBlazor ne fait pas remonter le
+                       libellé quand la valeur vaut le défaut du type (0), et le
+                       libellé se superpose au texte affiché. *@
+                    <MudSelect T="int" @bind-Value="_team.Categorie" Label="Catégorie (LRB)"
+                               Variant="Variant.Outlined" Placeholder=" ">
                         <MudSelectItem Value="0">Non renseignée</MudSelectItem>
                         <MudSelectItem Value="1">1 — les plus performantes</MudSelectItem>
                         <MudSelectItem Value="2">2 — solides</MudSelectItem>
