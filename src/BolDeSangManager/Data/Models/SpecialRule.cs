@@ -53,6 +53,32 @@ public static class SpecialRuleCodes
     /// celle de l'équipe (<c>Team.DiviniteChoisie</c>).
     /// </summary>
     public const string FavoriDe = "FavoriDe";
+
+    /// <summary>
+    /// « Trois-quarts à Vil Prix » (LRB p.93) : dans la VEA, le coût d'embauche
+    /// des joueurs visés compte pour 0 po.
+    ///
+    /// Le MOT-CLÉ des postes concernés est lu dans
+    /// <see cref="TeamTypeSpecialRule.OptionsChoix"/> (typiquement
+    /// « Trois-quart ») — pas codé en dur, pour qu'une future édition visant
+    /// un autre mot-clé se règle en admin, sans développement.
+    /// </summary>
+    public const string CoutNulParMotCle = "CoutNulParMotCle";
+
+    /// <summary>
+    /// « Maîtres de la Non-Vie » (LRB p.94) : recrutement gratuit d'un joueur
+    /// en après-match. Même principe : le mot-clé des postes éligibles vient
+    /// de <see cref="TeamTypeSpecialRule.OptionsChoix"/>.
+    /// </summary>
+    public const string RecrutementGratuitParMotCle = "RecrutementGratuitParMotCle";
+
+    /// <summary>
+    /// Découpe un CSV d'options en valeurs propres (vides et espaces retirés).
+    /// Utilisé pour les divinités comme pour les mots-clés.
+    /// </summary>
+    public static string[] DecouperOptions(string? options) =>
+        (options ?? string.Empty)
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 }
 
 /// <summary>

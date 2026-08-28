@@ -41,7 +41,54 @@ public static class DbSeeder
         // écrasée.
         await SeedReglesSpecialesToutesVersionsAsync(db, logger);
 
+        // Les règles seedées AVANT l'ajout des comportements automatiques
+        // existent déjà en base sans Code ni mot-clé : elles resteraient
+        // descriptives pour toujours. On les complète ici, une seule fois.
+        await ActiverComportementsAutomatiquesAsync(db, logger);
+
         await SeedAdminUserAsync(userManager, config);
+    }
+
+    /// <summary>
+    /// Renseigne le <c>Code</c> et le mot-clé visé des règles déjà présentes en
+    /// base, quand elles ont été créées avant que le comportement existe.
+    ///
+    /// Idempotent et prudent : on ne touche qu'une règle dont le Code est VIDE
+    /// (jamais un choix fait en admin), et on ne remplit <c>OptionsChoix</c>
+    /// que s'il est vide lui aussi. Un commissaire qui aurait déjà saisi un
+    /// autre mot-clé garde sa valeur.
+    /// </summary>
+    private static async Task ActiverComportementsAutomatiquesAsync(
+        ApplicationDbContext db, ILogger logger)
+    {
+        // Nom de la règle → (code à poser, mot-clé par défaut).
+        var aBrancher = new Dictionary<string, (string Code, string MotCle)>
+        {
+            ["Trois-quarts à Vil Prix"] = (SpecialRuleCodes.CoutNulParMotCle, "Trois-quart"),
+            ["Maîtres de la Non-Vie"] = (SpecialRuleCodes.RecrutementGratuitParMotCle, "Trois-quart")
+        };
+
+        var regles = await db.SpecialRules
+            .Where(r => r.Code == "" && aBrancher.Keys.Contains(r.Nom))
+            .Include(r => r.TeamTypes)
+            .ToListAsync();
+
+        if (regles.Count == 0) return;
+
+        foreach (var regle in regles)
+        {
+            var (code, motCle) = aBrancher[regle.Nom];
+            regle.Code = code;
+
+            foreach (var lien in regle.TeamTypes.Where(l => string.IsNullOrWhiteSpace(l.OptionsChoix)))
+                lien.OptionsChoix = motCle;
+
+            logger.LogInformation(
+                "Règle « {Nom} » (id={Id}) branchée sur le comportement {Code}, mot-clé « {MotCle} »",
+                regle.Nom, regle.Id, code, motCle);
+        }
+
+        await db.SaveChangesAsync();
     }
 
     /// <summary>

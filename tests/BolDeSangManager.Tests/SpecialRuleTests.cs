@@ -375,19 +375,44 @@ public class SpecialRuleTests
     }
 
     /// <summary>
-    /// Une seule règle porte un Code aujourd'hui ; les autres sont
-    /// descriptives. C'est le principe du catalogue, et ce test le rend
-    /// explicite pour qu'ajouter un Code reste un geste conscient.
+    /// La plupart des règles restent DESCRIPTIVES : elles s'affichent et se
+    /// jouent à la table. Seules celles listées ici portent un comportement
+    /// automatique. Ce test rend l'inventaire explicite pour qu'ajouter un Code
+    /// reste un geste conscient — et pour que le mot-clé visé ne soit jamais
+    /// oublié sur une règle qui en a besoin.
     /// </summary>
     [Fact]
-    public void SeedCatalogue_UneSeuleRegleEstBranchee()
+    public void SeedCatalogue_SeulesLesReglesAttenduesSontBranchees()
     {
-        var avecCode = SpecialRuleSeedData.GetRegles(1)
+        var codesParRegle = SpecialRuleSeedData.GetRegles(1)
             .Where(r => !string.IsNullOrEmpty(r.Code))
+            .ToDictionary(r => r.Nom, r => r.Code);
+
+        Assert.Equal(3, codesParRegle.Count);
+        Assert.Equal(SpecialRuleCodes.FavoriDe, codesParRegle["Favori de…"]);
+        Assert.Equal(SpecialRuleCodes.CoutNulParMotCle, codesParRegle["Trois-quarts à Vil Prix"]);
+        Assert.Equal(SpecialRuleCodes.RecrutementGratuitParMotCle, codesParRegle["Maîtres de la Non-Vie"]);
+    }
+
+    /// <summary>
+    /// Une règle à comportement automatique sans paramètre ne ferait RIEN
+    /// (aucun mot-clé visé, aucune divinité proposée) : le seed doit donc
+    /// renseigner OptionsChoix sur chacun de ses rattachements.
+    /// </summary>
+    [Fact]
+    public void SeedRattachements_ToutesLesReglesBrancheesOntUnParametre()
+    {
+        var reglesBranchees = SpecialRuleSeedData.GetRegles(1)
+            .Where(r => !string.IsNullOrEmpty(r.Code))
+            .Select(r => r.Nom)
+            .ToHashSet();
+
+        var sansParametre = SpecialRuleSeedData.GetRattachements()
+            .Where(r => reglesBranchees.Contains(r.Regle) && string.IsNullOrWhiteSpace(r.Options))
+            .Select(r => $"{r.Regle} / {r.Equipe}")
             .ToList();
 
-        Assert.Single(avecCode);
-        Assert.Equal(SpecialRuleCodes.FavoriDe, avecCode[0].Code);
+        Assert.Empty(sansParametre);
     }
 
     // ── Feuille imprimée ─────────────────────────────────────────────────────

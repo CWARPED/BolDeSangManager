@@ -89,7 +89,8 @@
                                                    OnClick="@(() => RetirerRegle(lien.SpecialRule))" />
                                 </MudStack>
 
-                                @* Seule « Favori de… » demande un réglage. *@
+                                @* Les règles à comportement automatique ont un
+                                   réglage : le dieu, ou le mot-clé des postes visés. *@
                                 @if (lien.SpecialRule.Code == SpecialRuleCodes.FavoriDe)
                                 {
                                     <MudTextField T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
@@ -99,6 +100,17 @@
                                                   Value="@lien.OptionsChoix"
                                                   ValueChanged="@(v => DefinirOptions(lien.SpecialRule, v))"
                                                   Placeholder="Khorne,Nurgle,Tzeentch" />
+                                }
+                                else if (lien.SpecialRule.Code == SpecialRuleCodes.CoutNulParMotCle
+                                         || lien.SpecialRule.Code == SpecialRuleCodes.RecrutementGratuitParMotCle)
+                                {
+                                    <MudTextField T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="mt-2"
+                                                  Label="Postes concernés (mot-clé)"
+                                                  HelperText="Séparés par des virgules."
+                                                  Value="@lien.OptionsChoix"
+                                                  ValueChanged="@(v => DefinirOptions(lien.SpecialRule, v))"
+                                                  Placeholder="Trois-quart" />
                                 }
                             </MudPaper>
                         }

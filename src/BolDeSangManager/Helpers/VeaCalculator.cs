@@ -32,7 +32,7 @@ public static class VeaCalculator
     {
         var totalJoueurs = equipe.Joueurs
             .Where(j => !j.EstMort && !j.EstRetraite)
-            .Sum(j => j.ValeurActuelle);
+            .Sum(j => ValeurComptee(j, equipe.TeamType));
 
         var totalStaff = equipe.Staff
             .Where(s => s.LeagueStaffType is not null)
@@ -40,4 +40,47 @@ public static class VeaCalculator
 
         return totalJoueurs + totalStaff;
     }
+
+    /// <summary>
+    /// Valeur d'un joueur dans la VEA, après application de « Trois-quarts à
+    /// Vil Prix » si la race la porte.
+    ///
+    /// On soustrait le COÛT D'EMBAUCHE du poste, on ne met pas la valeur à
+    /// zéro : le LRB précise que « toute augmentation de valeur de ces joueurs
+    /// est incluse normalement ». Un Snotling embauché 15 000 et amélioré à
+    /// 35 000 compte donc 20 000, pas 0.
+    /// </summary>
+    private static int ValeurComptee(TeamPlayer joueur, TeamType? teamType)
+    {
+        var poste = joueur.PlayerPosition;
+        if (poste is null || teamType is null) return joueur.ValeurActuelle;
+
+        var motsClesExoneres = MotsClesExoneres(teamType);
+        if (motsClesExoneres.Count == 0) return joueur.ValeurActuelle;
+
+        var motsClesDuPoste = SpecialRuleCodes.DecouperOptions(poste.MotsCles);
+        var estExonere = motsClesDuPoste.Any(m =>
+            motsClesExoneres.Contains(m, StringComparer.OrdinalIgnoreCase));
+
+        if (!estExonere) return joueur.ValeurActuelle;
+
+        // Jamais de contribution négative : un joueur dont la valeur est
+        // inférieure à son coût d'embauche compte 0, pas un montant négatif
+        // qui viendrait amputer la valeur des coéquipiers.
+        return Math.Max(0, joueur.ValeurActuelle - poste.Cout);
+    }
+
+    /// <summary>
+    /// Mots-clés dont le coût d'embauche est annulé pour cette race.
+    ///
+    /// Ils viennent de la fiche de race (<c>OptionsChoix</c> sur la liaison),
+    /// jamais du code : une future édition visant un autre mot-clé se règle en
+    /// admin. Une valeur vide n'exonère personne — sinon elle correspondrait à
+    /// tous les postes et mettrait la VEA à zéro.
+    /// </summary>
+    private static List<string> MotsClesExoneres(TeamType teamType) =>
+        teamType.ReglesSpecialesListe
+            .Where(l => l.SpecialRule?.Code == SpecialRuleCodes.CoutNulParMotCle)
+            .SelectMany(l => SpecialRuleCodes.DecouperOptions(l.OptionsChoix))
+            .ToList();
 }

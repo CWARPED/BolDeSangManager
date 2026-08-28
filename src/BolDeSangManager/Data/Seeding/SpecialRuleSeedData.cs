@@ -44,12 +44,14 @@ public static class SpecialRuleSeedData
         {
             RulesVersionId = versionId, Ordre = 4,
             Nom = "Trois-quarts à Vil Prix",
+            Code = SpecialRuleCodes.CoutNulParMotCle,
             Description = "En Jeu en Ligue, quand l'équipe calcule sa Valeur d'Équipe Actuelle, les Coûts d'Embauche de ses joueurs Trois-quarts comptent pour 0 pièce d'or. Toute augmentation de valeur de ces joueurs est incluse normalement."
         },
         new SpecialRule
         {
             RulesVersionId = versionId, Ordre = 5,
             Nom = "Maîtres de la Non-Vie",
+            Code = SpecialRuleCodes.RecrutementGratuitParMotCle,
             Description = "Une fois par match, si un joueur adverse de Force 4 ou moins et sans le Trait Minus subit un résultat Mort, l'équipe peut Relever le Mort : elle ajoute immédiatement un joueur Trois-quart de sa Fiche d'Équipe à son Box des Réserves, pouvant temporairement dépasser 16 joueurs. À l'Après-match, ce joueur peut être embauché gratuitement et définitivement si la liste ne compte pas déjà 16 joueurs ; il ajoute quand même sa valeur à la Valeur d'Équipe."
         },
         new SpecialRule
@@ -108,14 +110,14 @@ public static class SpecialRuleSeedData
         ("Chantage et Corruption", "Snotlings", ""),
 
         // ── Trois-quarts à Vil Prix ──────────────────────────────────────────
-        ("Trois-quarts à Vil Prix", "Ogres", ""),
-        ("Trois-quarts à Vil Prix", "Snotlings", ""),
+        ("Trois-quarts à Vil Prix", "Ogres", "Trois-quart"),
+        ("Trois-quarts à Vil Prix", "Snotlings", "Trois-quart"),
 
         // ── Maîtres de la Non-Vie ────────────────────────────────────────────
-        ("Maîtres de la Non-Vie", "Horreurs Nécromantiques", ""),
-        ("Maîtres de la Non-Vie", "Morts-Ambulants", ""),
-        ("Maîtres de la Non-Vie", "Rois des Tombes", ""),
-        ("Maîtres de la Non-Vie", "Vampires", ""),
+        ("Maîtres de la Non-Vie", "Horreurs Nécromantiques", "Trois-quart"),
+        ("Maîtres de la Non-Vie", "Morts-Ambulants", "Trois-quart"),
+        ("Maîtres de la Non-Vie", "Rois des Tombes", "Trois-quart"),
+        ("Maîtres de la Non-Vie", "Vampires", "Trois-quart"),
 
         // ── Déferlement ──────────────────────────────────────────────────────
         ("Déferlement", "Snotlings", ""),
