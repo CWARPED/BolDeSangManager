@@ -48,19 +48,13 @@
             </MudGrid>
         </MudPaper>
 
-        @* ── Règles spéciales du LRB (p.93-94) ──────────────────────────────
-           Rattachement depuis le catalogue de la version. Le champ texte libre
-           ci-dessus reste affiché pour l'historique, mais c'est cette liste qui
-           fait foi sur la feuille d'équipe. *@
+        @* ── Règles spéciales ───────────────────────────────────────────────
+           On n'affiche QUE les règles rattachées à l'équipe : la liste complète
+           du catalogue ne sert qu'à en ajouter une, via le sélecteur. *@
         @if (!IsNew)
         {
             <MudPaper Class="pa-4 mb-3" Elevation="1">
-                <MudText Typo="Typo.h6" Class="mb-1">Règles spéciales</MudText>
-                <MudText Typo="Typo.caption" Class="mb-3" Style="color:var(--mud-palette-text-secondary)">
-                    Cochez les règles de cette équipe. Pour « Favori de… », listez les Dieux
-                    autorisés séparés par des virgules — un seul l'impose, plusieurs laissent
-                    le commissaire choisir.
-                </MudText>
+                <MudText Typo="Typo.h6" Class="mb-3">Règles spéciales</MudText>
 
                 @if (_reglesDisponibles.Count == 0)
                 {
@@ -71,43 +65,60 @@
                 }
                 else
                 {
-                    <MudTable Items="@_reglesDisponibles" Dense="true" Hover="true" Elevation="0">
-                        <HeaderContent>
-                            <MudTh Style="width:8%">Active</MudTh>
-                            <MudTh Style="width:25%">Règle</MudTh>
-                            <MudTh>Options (Dieux du Chaos, etc.)</MudTh>
-                        </HeaderContent>
-                        <RowTemplate>
-                            <MudTd DataLabel="Active">
-                                <MudCheckBox T="bool"
-                                             Value="@EstActive(context.Id)"
-                                             ValueChanged="@(v => BasculerRegle(context, v))" />
-                            </MudTd>
-                            <MudTd DataLabel="Règle">
-                                <b>@context.Nom</b>
-                                @if (!string.IsNullOrEmpty(context.Code))
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info"
-                                             Variant="Variant.Outlined" Class="ml-2">@context.Code</MudChip>
-                                }
-                            </MudTd>
-                            <MudTd DataLabel="Options">
-                                @if (EstActive(context.Id) && context.Code == SpecialRuleCodes.FavoriDe)
+                    @if (_reglesActives.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Class="mb-3" Style="color:var(--mud-palette-text-secondary)">
+                            Cette équipe n'a aucune règle spéciale.
+                        </MudText>
+                    }
+                    else
+                    {
+                        @foreach (var lien in _reglesActives)
+                        {
+                            <MudPaper Class="pa-3 mb-2" Elevation="0"
+                                      Style="border:1px solid var(--mud-palette-lines-default)">
+                                <MudStack Row="true" AlignItems="AlignItems.Center"
+                                          Justify="Justify.SpaceBetween" Spacing="2">
+                                    <MudText Typo="Typo.body2"><b>@lien.SpecialRule.Nom</b></MudText>
+                                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => RetirerRegle(lien.SpecialRule))" />
+                                </MudStack>
+
+                                @* Seule « Favori de… » demande un réglage. *@
+                                @if (lien.SpecialRule.Code == SpecialRuleCodes.FavoriDe)
                                 {
                                     <MudTextField T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
-                                                  Value="@OptionsDe(context.Id)"
-                                                  ValueChanged="@(v => DefinirOptions(context, v))"
+                                                  Class="mt-2"
+                                                  Label="Dieux autorisés"
+                                                  HelperText="Séparés par des virgules. Un seul l'impose, plusieurs laissent le commissaire choisir."
+                                                  Value="@lien.OptionsChoix"
+                                                  ValueChanged="@(v => DefinirOptions(lien.SpecialRule, v))"
                                                   Placeholder="Khorne,Nurgle,Tzeentch" />
                                 }
-                                else if (EstActive(context.Id))
+                            </MudPaper>
+                        }
+                    }
+
+                    @if (_reglesAjoutables.Count > 0)
+                    {
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mt-3" Wrap="Wrap.Wrap">
+                            @* Placeholder à 0 : sans lui MudSelect affiche « 0 » brut. *@
+                            <MudSelect T="int" @bind-Value="_regleAAjouter" Label="Ajouter une règle"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense"
+                                       Style="flex:1 1 240px; min-width:0">
+                                <MudSelectItem Value="0">— choisir —</MudSelectItem>
+                                @foreach (var r in _reglesAjoutables)
                                 {
-                                    <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
-                                        Aucun choix à faire.
-                                    </MudText>
+                                    <MudSelectItem Value="@r.Id">@r.Nom</MudSelectItem>
                                 }
-                            </MudTd>
-                        </RowTemplate>
-                    </MudTable>
+                            </MudSelect>
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
+                                       StartIcon="@Icons.Material.Filled.Add"
+                                       Disabled="@(_regleAAjouter == 0)"
+                                       OnClick="AjouterRegle">Ajouter</MudButton>
+                        </MudStack>
+                    }
                 }
             </MudPaper>
         }
@@ -246,24 +257,50 @@
     }
 
     // ── Règles spéciales ────────────────────────────────────────────────────
+    // La page ne montre QUE les règles rattachées ; le catalogue complet ne sert
+    // qu'à alimenter le sélecteur d'ajout, pour ne pas surcharger l'écran.
 
-    bool EstActive(int regleId) =>
-        _team?.ReglesSpecialesListe.Any(l => l.SpecialRuleId == regleId) ?? false;
+    /// <summary>Règles réellement rattachées, dans l'ordre d'affichage.</summary>
+    List<TeamTypeSpecialRule> _reglesActives =>
+        _team?.ReglesSpecialesListe
+            .Where(l => l.SpecialRule is not null)
+            .OrderBy(l => l.SpecialRule.Ordre).ThenBy(l => l.SpecialRule.Nom)
+            .ToList() ?? [];
+
+    /// <summary>Catalogue moins ce qui est déjà rattaché.</summary>
+    List<SpecialRule> _reglesAjoutables =>
+        _reglesDisponibles
+            .Where(r => _team?.ReglesSpecialesListe.All(l => l.SpecialRuleId != r.Id) ?? true)
+            .ToList();
+
+    /// <summary>Règle sélectionnée dans le menu déroulant. 0 = aucune.</summary>
+    int _regleAAjouter;
 
     string OptionsDe(int regleId) =>
         _team?.ReglesSpecialesListe.FirstOrDefault(l => l.SpecialRuleId == regleId)?.OptionsChoix ?? "";
 
-    async Task BasculerRegle(SpecialRule regle, bool active)
+    async Task AjouterRegle()
+    {
+        if (_team is null || _regleAAjouter == 0) return;
+        try
+        {
+            await DataEditService.AssocierRegleSpecialeAsync(_team.Id, _regleAAjouter);
+            _regleAAjouter = 0;
+            await ChargerAsync();   // relit l'état réel plutôt que de le deviner
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    async Task RetirerRegle(SpecialRule regle)
     {
         if (_team is null) return;
         try
         {
-            if (active)
-                await DataEditService.AssocierRegleSpecialeAsync(_team.Id, regle.Id, OptionsDe(regle.Id));
-            else
-                await DataEditService.DissocierRegleSpecialeAsync(_team.Id, regle.Id);
-
-            await ChargerAsync();   // relit l'état réel plutôt que de le deviner
+            await DataEditService.DissocierRegleSpecialeAsync(_team.Id, regle.Id);
+            await ChargerAsync();
         }
         catch (Exception ex)
         {
