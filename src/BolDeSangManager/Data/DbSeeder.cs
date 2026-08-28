@@ -32,7 +32,39 @@ public static class DbSeeder
             await SeedPositionCategoryAccessAsync(db, logger);
         }
 
+        // Règles spéciales : peuplées AUSSI sur une base existante.
+        // Le bloc ci-dessus ne s'exécute que sur une base vierge ; sans cet
+        // appel, toute instance déjà déployée (le VPS de l'association) aurait
+        // un catalogue vide après mise à jour, et la fonctionnalité arriverait
+        // inutilisable. La méthode est idempotente : elle ne fait rien si la
+        // version a déjà des règles, donc une saisie manuelle n'est jamais
+        // écrasée.
+        await SeedReglesSpecialesToutesVersionsAsync(db, logger);
+
         await SeedAdminUserAsync(userManager, config);
+    }
+
+    /// <summary>
+    /// Applique le catalogue de règles spéciales à toute version de Blood Bowl
+    /// qui n'en a pas encore. Rattachements résolus par nom d'équipe.
+    /// </summary>
+    private static async Task SeedReglesSpecialesToutesVersionsAsync(
+        ApplicationDbContext db, ILogger logger)
+    {
+        var versionsBB = await db.RulesVersions
+            .Include(v => v.Game)
+            .Where(v => v.Game.Type == GameType.BloodBowl)
+            .Select(v => v.Id)
+            .ToListAsync();
+
+        foreach (var versionId in versionsBB)
+        {
+            if (await db.SpecialRules.AnyAsync(r => r.RulesVersionId == versionId)) continue;
+
+            await SeedReglesSpecialesAsync(db, versionId);
+            logger.LogInformation(
+                "Règles spéciales initialisées pour la version de règles id={VersionId}", versionId);
+        }
     }
 
     private static async Task SeedRolesAsync(
@@ -225,6 +257,8 @@ public static class DbSeeder
             await db.SaveChangesAsync();
         }
 
+        // Appelé aussi par SeedReglesSpecialesToutesVersionsAsync pour les
+        // bases déjà en service.
         await SeedReglesSpecialesAsync(db, bbVersion.Id);
     }
 
