@@ -23,16 +23,14 @@
 
         <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
             <MudText Typo="Typo.caption">
-                Une règle <b>sans code</b> est <b>descriptive</b> : elle s'affiche sur la feuille
-                d'équipe et se joue à la table. C'est le cas de la plupart des règles, et de toutes
-                celles qu'une nouvelle édition apportera — vous pouvez donc les ajouter vous-même
-                sans développement.
+                Sans comportement automatique, la règle est simplement affichée aux coaches
+                et s'applique à la table. C'est le cas de la plupart d'entre elles.
             </MudText>
         </MudAlert>
 
         <MudSelect T="string" @bind-Value="_code" Label="Comportement automatique" Class="mt-3"
                    Variant="Variant.Outlined"
-                   HelperText="Ne changez ceci que si l'application sait vraiment gérer la règle.">
+                   HelperText="À ne changer que si l'application sait gérer la règle.">
             <MudSelectItem Value="@("")">Aucun — règle descriptive</MudSelectItem>
             <MudSelectItem Value="@SpecialRuleCodes.FavoriDe">Favori de… — choix d'un Dieu du Chaos</MudSelectItem>
         </MudSelect>

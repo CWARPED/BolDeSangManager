@@ -433,6 +433,25 @@ h1:focus {
     .mud-table-row .mud-table-cell[data-label]::before {
         font-weight: 600;
         opacity: 0.75;
+        /* Le libellé ne doit JAMAIS se casser lettre par lettre. MudBlazor
+           pose le td en flex : face à une valeur longue (une description de
+           règle), le libellé se retrouve comprimé à quelques pixels et
+           s'affiche à la verticale, une lettre par ligne. Constaté sur
+           « Description » dans les règles spéciales — c'est générique, toute
+           table à texte long est concernée. */
+        white-space: nowrap;
+        flex-shrink: 0;
+        margin-right: 12px;
+    }
+
+    /* Cellule à contenu long : le libellé passe AU-DESSUS de la valeur.
+       Côte à côte, il ne resterait qu'une colonne de 2 mots pour le texte. */
+    .mud-table-row .mud-table-cell.cellule-texte-long {
+        display: block !important;
+    }
+    .mud-table-row .mud-table-cell.cellule-texte-long::before {
+        display: block;
+        margin-bottom: 4px;
     }
 
     /* les cellules centrées en desktop doivent repasser à gauche en mode

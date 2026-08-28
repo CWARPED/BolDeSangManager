@@ -211,11 +211,9 @@
         <MudTabPanel Text="Règles spéciales">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
                 <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
-                    Règles spéciales d'équipe du livre de règles (p.93-94). Elles appartiennent à la
-                    version sélectionnée et sont clonées avec elle. Une règle <b>sans comportement
-                    automatique</b> est simplement affichée sur la feuille d'équipe : vous pouvez donc
-                    ajouter les règles d'une nouvelle édition sans développement.
-                    Le rattachement aux équipes se fait depuis la fiche de chaque équipe.
+                    Capacités propres à certaines équipes (Capitaine, Bagarreurs Brutaux…).
+                    Elles s'affichent sur la feuille d'équipe. Rattachez-les depuis la fiche
+                    de chaque équipe.
                 </MudText>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
                            Size="Size.Small" OnClick="AjouterRegleSpeciale">Ajouter une règle</MudButton>
@@ -223,18 +221,19 @@
 
             <MudTable Items="@_reglesSpeciales" Dense="true" Hover="true">
                 <HeaderContent>
-                    <MudTh Style="width:6%">Ordre</MudTh>
-                    <MudTh Style="width:20%">Nom</MudTh>
-                    <MudTh>Description</MudTh>
+                    <MudTh>Règle</MudTh>
                     <MudTh Style="width:14%">Comportement</MudTh>
                     <MudTh Style="width:10%">Équipes</MudTh>
                     <MudTh Style="width:10%">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Ordre">@context.Ordre</MudTd>
-                    <MudTd DataLabel="Nom"><b>@context.Nom</b></MudTd>
-                    <MudTd DataLabel="Description">
-                        <MudText Typo="Typo.caption">@context.Description</MudText>
+                    @* Nom et effet dans la MÊME cellule : en colonne séparée, la
+                       description écrasait son libellé sur mobile. *@
+                    <MudTd DataLabel="Règle" Class="cellule-texte-long">
+                        <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
+                        <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                            @context.Description
+                        </MudText>
                     </MudTd>
                     <MudTd DataLabel="Comportement">
                         @if (string.IsNullOrEmpty(context.Code))
