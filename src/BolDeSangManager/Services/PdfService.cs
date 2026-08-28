@@ -80,7 +80,13 @@ public class PdfService
                 page.DefaultTextStyle(x => x.FontSize(9).FontFamily("Arial"));
 
                 // ── En-tête ─────────────────────────────────────────────
-                page.Header().Column(col =>
+                // ⚠️ QuestPDF répète page.Header() sur CHAQUE page. Le bandeau
+                // complet (nom d'équipe en corps 20, race, coach, ligue, QR code)
+                // mangeait donc ~2 cm en haut de chaque page suivante pour une
+                // information déjà lue. On le rend uniquement sur la première ;
+                // le nom d'équipe reste rappelé discrètement en pied de page,
+                // qui coûte une ligne de 7 pt au lieu d'un bandeau.
+                page.Header().ShowOnce().Column(col =>
                 {
                     col.Item().Row(row =>
                     {
@@ -137,7 +143,7 @@ public class PdfService
                             + equipe.NombreCheerleaders * 10_000
                             + (equipe.Apothicaire ? 50_000 : 0);
 
-                    col.Item().PaddingVertical(8).Row(row =>
+                    col.Item().PaddingVertical(5).Row(row =>
                     {
                         StatBox(row, "Trésorerie",        $"{equipe.Tresorerie / 1000}k po");
                         StatBox(row, "VEA",               $"{vea / 1000}k po");
@@ -208,7 +214,7 @@ public class PdfService
                                 var cell = table.Cell()
                                     .Background(bg)
                                     .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
-                                    .PaddingVertical(6).PaddingHorizontal(4);
+                                    .PaddingVertical(4).PaddingHorizontal(4);
                                 cell.Column(col2 =>
                                 {
                                     col2.Item().Text(pos?.Nom ?? "—").FontSize(8);
@@ -340,7 +346,10 @@ public class PdfService
                 // ── Pied de page ─────────────────────────────────────────
                 page.Footer().BorderTop(0.5f).BorderColor(Colors.Grey.Lighten2).PaddingTop(4).Row(row =>
                 {
-                    row.RelativeItem().Text($"Généré le {DateTime.Now:dd/MM/yyyy HH:mm} — BolDeSangManager")
+                    // Le nom d'équipe est ici, et NON répété en tête de chaque
+                    // page : une ligne de 7 pt suffit à savoir de quel roster il
+                    // s'agit, là où le bandeau coûtait ~2 cm par page.
+                    row.RelativeItem().Text($"{equipe.Nom} — généré le {DateTime.Now:dd/MM/yyyy HH:mm}")
                         .FontSize(7).FontColor(Colors.Grey.Darken1);
                     row.ConstantItem(60).AlignRight().Text(text =>
                     {
@@ -381,7 +390,7 @@ public class PdfService
         var content = table.Cell()
             .Background(bg)
             .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
-            .PaddingVertical(10).PaddingHorizontal(4);
+            .PaddingVertical(4).PaddingHorizontal(4);
 
         if (center)
             content.AlignCenter().Text(texte).FontSize(8);
@@ -394,7 +403,7 @@ public class PdfService
         table.Cell()
             .Background(sequel ? Colors.Red.Lighten5 : bg)
             .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
-            .PaddingVertical(10).PaddingHorizontal(4)
+            .PaddingVertical(4).PaddingHorizontal(4)
             .Text(text =>
             {
                 text.Span(nom).Bold().FontSize(8);
@@ -412,7 +421,7 @@ public class PdfService
         table.Cell()
             .Background(effectiveBg)
             .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
-            .PaddingVertical(10).PaddingHorizontal(4)
+            .PaddingVertical(4).PaddingHorizontal(4)
             .AlignCenter()
             .Text(texte).FontSize(8)
             .FontColor(textColor);
@@ -432,7 +441,7 @@ public class PdfService
         table.Cell()
             .Background(bg)
             .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
-            .PaddingVertical(10).PaddingHorizontal(4)
+            .PaddingVertical(4).PaddingHorizontal(4)
             .Text(text =>
             {
                 text.AlignCenter();
