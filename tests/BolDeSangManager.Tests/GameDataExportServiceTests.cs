@@ -48,7 +48,7 @@ public class GameDataExportServiceTests : IDisposable
             CoutRelance = 50_000,
             Categorie = 2,
             ReglesSpeciales = "",
-            ReglesSpecialesLigue = ""
+            LiguesTexteObsolete = ""
         };
         db.TeamTypes.Add(teamType);
         await db.SaveChangesAsync();

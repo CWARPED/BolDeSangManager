@@ -1,0 +1,72 @@
+@using BolDeSangManager.Data.Models
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+@*
+    Édition d'un coup de pouce. Purement descriptif : nom, effet, coût.
+    L'application ne débite rien et ne déclenche aucune mécanique — la fiche
+    sert au coach à décider à la table.
+*@
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_nom" Label="Nom" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+        <MudTextField @bind-Value="_description" Label="Effet" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="mt-3" Lines="3" />
+
+        <MudNumericField @bind-Value="_cout" Label="Coût (po)" Variant="Variant.Outlined"
+                         Margin="Margin.Dense" Class="mt-3" Min="0" Step="10000"
+                         HelperText="0 si le coût est variable." />
+
+        <MudNumericField @bind-Value="_ordre" Label="Ordre d'affichage" Variant="Variant.Outlined"
+                         Margin="Margin.Dense" Class="mt-3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Valider">Enregistrer</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>Coup de pouce à modifier. Null = création.</summary>
+    [Parameter] public Inducement? Existant { get; set; }
+
+    [Parameter] public int VersionId { get; set; }
+
+    string _nom = "";
+    string _description = "";
+    int _cout;
+    int _ordre;
+
+    protected override void OnInitialized()
+    {
+        if (Existant is null) return;
+
+        _nom = Existant.Nom;
+        _description = Existant.Description;
+        _cout = Existant.Cout;
+        _ordre = Existant.Ordre;
+    }
+
+    async Task Valider()
+    {
+        try
+        {
+            if (Existant is null)
+                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _ordre);
+            else
+                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _ordre);
+
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    void Annuler() => Dialog.Cancel();
+}

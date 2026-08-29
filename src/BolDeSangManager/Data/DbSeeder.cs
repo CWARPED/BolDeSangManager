@@ -45,6 +45,7 @@ public static class DbSeeder
         // existent déjà en base sans Code ni mot-clé : elles resteraient
         // descriptives pour toujours. On les complète ici, une seule fois.
         await ActiverComportementsAutomatiquesAsync(db, logger);
+        await SeedLiguesThematiquesAsync(db, logger);
 
         await SeedAdminUserAsync(userManager, config);
     }
@@ -112,6 +113,72 @@ public static class DbSeeder
         }
 
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Construit le catalogue de ligues thématiques à partir de l'ancienne
+    /// saisie en texte libre (colonne « ReglesSpecialesLigue »), puis rattache
+    /// chaque race aux ligues correspondantes.
+    ///
+    /// Sans ce backfill, la fonctionnalité arriverait INERTE sur une base en
+    /// service : les 60 races déjà renseignées perdraient leurs ligues et le
+    /// commissaire devrait tout ressaisir.
+    ///
+    /// Idempotent : ne crée que ce qui manque, ne touche pas aux rattachements
+    /// faits à la main depuis l'écran d'administration.
+    /// </summary>
+    private static async Task SeedLiguesThematiquesAsync(
+        ApplicationDbContext db, ILogger logger)
+    {
+        var races = await db.TeamTypes
+            .Include(t => t.LiguesListe)
+            .Where(t => t.LiguesTexteObsolete != "")
+            .ToListAsync();
+
+        if (races.Count == 0) return;
+
+        var catalogue = await db.ThemedLeagues.ToListAsync();
+        var creees = 0;
+        var rattachees = 0;
+
+        foreach (var race in races)
+        {
+            var noms = race.LiguesTexteObsolete
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+            foreach (var nom in noms)
+            {
+                var ligue = catalogue.FirstOrDefault(l =>
+                    l.RulesVersionId == race.RulesVersionId &&
+                    string.Equals(l.Nom, nom, StringComparison.OrdinalIgnoreCase));
+
+                if (ligue is null)
+                {
+                    ligue = new ThemedLeague { RulesVersionId = race.RulesVersionId, Nom = nom };
+                    db.ThemedLeagues.Add(ligue);
+                    await db.SaveChangesAsync();   // besoin de l'Id pour la liaison
+                    catalogue.Add(ligue);
+                    creees++;
+                }
+
+                if (race.LiguesListe.All(x => x.ThemedLeagueId != ligue.Id))
+                {
+                    db.Set<TeamTypeThemedLeague>().Add(new TeamTypeThemedLeague
+                    {
+                        TeamTypeId = race.Id, ThemedLeagueId = ligue.Id
+                    });
+                    rattachees++;
+                }
+            }
+        }
+
+        if (creees > 0 || rattachees > 0)
+        {
+            await db.SaveChangesAsync();
+            logger.LogInformation(
+                "Ligues thématiques : {Creees} ligue(s) créée(s), {Rattachees} rattachement(s)",
+                creees, rattachees);
+        }
     }
 
     /// <summary>

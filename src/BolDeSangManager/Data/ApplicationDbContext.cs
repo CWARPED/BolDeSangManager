@@ -41,6 +41,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SpecialRule> SpecialRules => Set<SpecialRule>();
     public DbSet<Inducement> Inducements => Set<Inducement>();
     public DbSet<StarPlayer> StarPlayers => Set<StarPlayer>();
+    public DbSet<ThemedLeague> ThemedLeagues => Set<ThemedLeague>();
     public DbSet<TeamTypeSpecialRule> TeamTypeSpecialRules => Set<TeamTypeSpecialRule>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -345,6 +346,42 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         builder.Entity<StarPlayer>()
             .HasIndex(s => new { s.RulesVersionId, s.Nom })
             .IsUnique();
+
+        // Catalogue de ligues thématiques + ses deux tables de liaison.
+        builder.Entity<ThemedLeague>()
+            .HasOne(l => l.RulesVersion).WithMany()
+            .HasForeignKey(l => l.RulesVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<ThemedLeague>()
+            .HasIndex(l => new { l.RulesVersionId, l.Nom })
+            .IsUnique();
+
+        builder.Entity<TeamTypeThemedLeague>()
+            .HasKey(x => new { x.TeamTypeId, x.ThemedLeagueId });
+
+        builder.Entity<TeamTypeThemedLeague>()
+            .HasOne(x => x.TeamType).WithMany(t => t.LiguesListe)
+            .HasForeignKey(x => x.TeamTypeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<TeamTypeThemedLeague>()
+            .HasOne(x => x.ThemedLeague).WithMany(l => l.Equipes)
+            .HasForeignKey(x => x.ThemedLeagueId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<StarPlayerThemedLeague>()
+            .HasKey(x => new { x.StarPlayerId, x.ThemedLeagueId });
+
+        builder.Entity<StarPlayerThemedLeague>()
+            .HasOne(x => x.StarPlayer).WithMany(s => s.Ligues)
+            .HasForeignKey(x => x.StarPlayerId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<StarPlayerThemedLeague>()
+            .HasOne(x => x.ThemedLeague).WithMany(l => l.StarPlayers)
+            .HasForeignKey(x => x.ThemedLeagueId)
+            .OnDelete(DeleteBehavior.Cascade);
 
         // TeamTypeSpecialRule : table de liaison, clé composite.
         builder.Entity<TeamTypeSpecialRule>()

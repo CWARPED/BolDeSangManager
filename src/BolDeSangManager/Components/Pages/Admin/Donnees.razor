@@ -36,7 +36,7 @@
         </MudSelect>
     </MudStack>
 
-    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pa-4">
+    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact tabs-sticky" PanelClass="pa-4">
         <MudTabPanel Text="Réserve">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_reserve.Count poste(s) en réserve</b></MudText>
@@ -297,6 +297,134 @@
             </MudTable>
         </MudTabPanel>
 
+        <MudTabPanel Text="Ligues">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                    Ligues thématiques (Old World Classic, Badlands Brawl…). Rattachez-les
+                    aux équipes depuis leur fiche, et aux star players : c'est le
+                    recoupement des deux qui détermine qui peut engager qui.
+                </MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           Size="Size.Small" OnClick="AjouterLigue">Ajouter</MudButton>
+            </MudStack>
+
+            <MudTable Items="@_ligues" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Ligue</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Équipes</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Stars</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Ligue">@context.Nom</MudTd>
+                    <MudTd DataLabel="Équipes" Style="white-space:nowrap">@context.Equipes.Count</MudTd>
+                    <MudTd DataLabel="Stars" Style="white-space:nowrap">@context.StarPlayers.Count</MudTd>
+                    <MudTd Style="white-space:nowrap">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => ModifierLigue(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerLigue(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+            @if (_ligues.Count == 0)
+            {
+                <MudText Typo="Typo.body2" Class="mt-2" Color="Color.Secondary">
+                    Aucune ligue. Sans ligue, tous les star players sont accessibles à toutes les équipes.
+                </MudText>
+            }
+        </MudTabPanel>
+
+        <MudTabPanel Text="Coups de pouce">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                    Options achetées avant un match pour compenser un écart de valeur.
+                    Purement informatif : l'application les imprime sur la feuille, les
+                    coaches s'arrangent à la table.
+                </MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           Size="Size.Small" OnClick="AjouterCoupDePouce">Ajouter</MudButton>
+            </MudStack>
+
+            <MudTable Items="@_coupsDePouce" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Coup de pouce</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Coût</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Coup de pouce">
+                        <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
+                        @if (!string.IsNullOrWhiteSpace(context.Description))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Coût" Style="white-space:nowrap">
+                        @(context.Cout > 0 ? $"{context.Cout / 1000} k" : "variable")
+                    </MudTd>
+                    <MudTd Style="white-space:nowrap">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => ModifierCoupDePouce(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerCoupDePouce(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
+        <MudTabPanel Text="Star players">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
+                    Mercenaires que l'on loue pour un match. Ils ne rejoignent jamais un
+                    effectif. Sans ligue renseignée, un star player est proposé à toutes
+                    les équipes.
+                </MudText>
+                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                           Size="Size.Small" OnClick="AjouterStarPlayer">Ajouter</MudButton>
+            </MudStack>
+
+            <MudTable Items="@_starPlayers" Dense="true" Hover="true">
+                <HeaderContent>
+                    <MudTh>Star player</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">M F AG CP AR</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Coût</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap"></MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Star player">
+                        <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
+                        @if (!string.IsNullOrWhiteSpace(context.Competences))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Competences</MudText>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                            @if (context.Ligues.Count == 0)
+                            {
+                                <span>Toutes ligues</span>
+                            }
+                            else
+                            {
+                                @string.Join(", ", context.Ligues
+                                    .Select(l => _ligues.FirstOrDefault(x => x.Id == l.ThemedLeagueId)?.Nom)
+                                    .Where(n => n is not null))
+                            }
+                        </MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Stats" Style="white-space:nowrap">
+                        @context.Mouvement @context.Force @context.Agilite @context.CapacitePasse @context.Armure
+                    </MudTd>
+                    <MudTd DataLabel="Coût" Style="white-space:nowrap">@(context.Cout / 1000) k</MudTd>
+                    <MudTd Style="white-space:nowrap">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       OnClick="@(() => ModifierStarPlayer(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
+                                       OnClick="@(() => SupprimerStarPlayer(context))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        </MudTabPanel>
+
         <MudTabPanel Text="Compétences">
             <MudExpansionPanels Elevation="0" Class="mb-3">
                 <MudExpansionPanel Dense="true">
@@ -474,6 +602,9 @@
     List<Skill> _skills = [];
     List<SkillCategoryDef> _categories = [];
     List<SpecialRule> _reglesSpeciales = [];
+    List<ThemedLeague> _ligues = [];
+    List<Inducement> _coupsDePouce = [];
+    List<StarPlayer> _starPlayers = [];
     int _selectedGameId;
     int _selectedVersionId;
     int? _categorieFiltre;
@@ -503,13 +634,21 @@
 
     async Task ChargerDonneesAsync()
     {
-        if (_selectedVersionId == 0) { _teamTypes = []; _skills = []; _reserve = []; _categories = []; _staff = []; _reglesSpeciales = []; return; }
+        if (_selectedVersionId == 0)
+        {
+            _teamTypes = []; _skills = []; _reserve = []; _categories = [];
+            _staff = []; _reglesSpeciales = []; _ligues = []; _coupsDePouce = []; _starPlayers = [];
+            return;
+        }
         _teamTypes = await DataEditService.GetTeamTypesAsync(_selectedVersionId);
         _categories = await DataEditService.GetCategoriesAsync(_selectedVersionId);
         _reglesSpeciales = await DataEditService.GetReglesSpecialesAsync(_selectedVersionId);
         _skills = await DataEditService.GetSkillsAsync(_selectedVersionId);
         _reserve = await DataEditService.GetReserveAsync(_selectedVersionId);
         _staff = await StaffService.GetStaffTypesAsync(_selectedVersionId);
+        _ligues = await DataEditService.GetLiguesAsync(_selectedVersionId);
+        _coupsDePouce = await DataEditService.GetCoupsDePouceAsync(_selectedVersionId);
+        _starPlayers = await DataEditService.GetStarPlayersAsync(_selectedVersionId);
         // Le filtre pointe sur une catégorie d'une autre version : le réinitialiser
         if (_categorieFiltre is int f && !_categories.Any(c => c.Id == f)) _categorieFiltre = null;
     }
@@ -1057,5 +1196,105 @@
         {
             _importEnCours = false;
         }
+    }
+
+    // ── Ligues thématiques ──────────────────────────────────────────────────
+    // Catalogue partagé par les races et les star players : c'est le
+    // recoupement des deux qui détermine qui peut engager qui.
+
+    async Task AjouterLigue()
+    {
+        var dlg = await DialogService.ShowAsync<SaisieTexteDialog>("Nouvelle ligue",
+            new DialogParameters { ["Label"] = "Nom de la ligue", ["Valeur"] = "" });
+        var r = await dlg.Result;
+        if (r is null || r.Canceled || r.Data is not string nom || string.IsNullOrWhiteSpace(nom)) return;
+
+        try
+        {
+            await DataEditService.CreerLigueThematiqueAsync(_selectedVersionId, nom);
+            await ChargerDonneesAsync();
+            Snackbar.Add($"Ligue « {nom} » créée", Severity.Success);
+        }
+        catch (InvalidOperationException ex) { Snackbar.Add(ex.Message, Severity.Warning); }
+    }
+
+    async Task ModifierLigue(ThemedLeague ligue)
+    {
+        var dlg = await DialogService.ShowAsync<SaisieTexteDialog>("Renommer la ligue",
+            new DialogParameters { ["Label"] = "Nom de la ligue", ["Valeur"] = ligue.Nom });
+        var r = await dlg.Result;
+        if (r is null || r.Canceled || r.Data is not string nom || string.IsNullOrWhiteSpace(nom)) return;
+
+        try
+        {
+            await DataEditService.ModifierLigueThematiqueAsync(ligue.Id, nom, ligue.Ordre);
+            await ChargerDonneesAsync();
+        }
+        catch (InvalidOperationException ex) { Snackbar.Add(ex.Message, Severity.Warning); }
+    }
+
+    async Task SupprimerLigue(ThemedLeague ligue)
+    {
+        // On annonce l'effet de bord : les rattachements partent en cascade.
+        var detail = ligue.Equipes.Count + ligue.StarPlayers.Count > 0
+            ? $" Elle est rattachée à {ligue.Equipes.Count} équipe(s) et {ligue.StarPlayers.Count} star player(s) ; ces liens seront perdus."
+            : "";
+
+        var ok = await DialogService.ShowMessageBox("Supprimer",
+            $"Supprimer la ligue « {ligue.Nom} » ?{detail}", yesText: "Supprimer", cancelText: "Annuler");
+        if (ok != true) return;
+
+        await DataEditService.SupprimerLigueThematiqueAsync(ligue.Id);
+        await ChargerDonneesAsync();
+    }
+
+    // ── Coups de pouce ──────────────────────────────────────────────────────
+
+    async Task AjouterCoupDePouce() => await OuvrirCoupDePouce(null);
+    async Task ModifierCoupDePouce(Inducement cp) => await OuvrirCoupDePouce(cp);
+
+    async Task OuvrirCoupDePouce(Inducement? existant)
+    {
+        var dlg = await DialogService.ShowAsync<EditionCoupDePouceDialog>(
+            existant is null ? "Nouveau coup de pouce" : "Modifier le coup de pouce",
+            new DialogParameters { ["Existant"] = existant, ["VersionId"] = _selectedVersionId });
+
+        var r = await dlg.Result;
+        if (r is not null && !r.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task SupprimerCoupDePouce(Inducement cp)
+    {
+        var ok = await DialogService.ShowMessageBox("Supprimer",
+            $"Supprimer « {cp.Nom} » ?", yesText: "Supprimer", cancelText: "Annuler");
+        if (ok != true) return;
+
+        await DataEditService.SupprimerCoupDePouceAsync(cp.Id);
+        await ChargerDonneesAsync();
+    }
+
+    // ── Star players ────────────────────────────────────────────────────────
+
+    async Task AjouterStarPlayer() => await OuvrirStarPlayer(null);
+    async Task ModifierStarPlayer(StarPlayer sp) => await OuvrirStarPlayer(sp);
+
+    async Task OuvrirStarPlayer(StarPlayer? existant)
+    {
+        var dlg = await DialogService.ShowAsync<EditionStarPlayerDialog>(
+            existant is null ? "Nouveau star player" : "Modifier le star player",
+            new DialogParameters { ["Existant"] = existant, ["VersionId"] = _selectedVersionId });
+
+        var r = await dlg.Result;
+        if (r is not null && !r.Canceled) await ChargerDonneesAsync();
+    }
+
+    async Task SupprimerStarPlayer(StarPlayer sp)
+    {
+        var ok = await DialogService.ShowMessageBox("Supprimer",
+            $"Supprimer « {sp.Nom} » ?", yesText: "Supprimer", cancelText: "Annuler");
+        if (ok != true) return;
+
+        await DataEditService.SupprimerStarPlayerAsync(sp.Id);
+        await ChargerDonneesAsync();
     }
 }

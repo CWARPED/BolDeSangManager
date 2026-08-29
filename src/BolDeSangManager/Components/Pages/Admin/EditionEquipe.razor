@@ -43,7 +43,27 @@
                 </MudItem>
                 <MudItem xs="6" sm="3"><MudNumericField @bind-Value="_team.CoutRelance" Label="Coût relance" Variant="Variant.Outlined" /></MudItem>
                 <MudItem xs="12"><MudTextField @bind-Value="_team.ReglesSpeciales" Label="Règles spéciales (texte libre)" Variant="Variant.Outlined" Lines="2" /></MudItem>
-                <MudItem xs="12"><MudTextField @bind-Value="_team.ReglesSpecialesLigue" Label="Règles ligues thématiques (CSV)" Variant="Variant.Outlined" /></MudItem>
+                @* Ligues thématiques : rattachement par CATALOGUE (onglet
+                   « Ligues » des données) et non plus en texte libre — une
+                   faute de frappe rendait un star player introuvable. *@
+                <MudItem xs="12">
+                    <MudSelect T="int" Label="Ligues thématiques" Variant="Variant.Outlined"
+                               MultiSelection="true" SelectedValues="@_liguesSelectionnees"
+                               SelectedValuesChanged="DefinirLigues"
+                               HelperText="Déterminent les star players accessibles à cette race."
+                               ToStringFunc="@(id => _catalogueLigues.FirstOrDefault(l => l.Id == id)?.Nom ?? "?")">
+                        @foreach (var l in _catalogueLigues)
+                        {
+                            <MudSelectItem T="int" Value="@l.Id">@l.Nom</MudSelectItem>
+                        }
+                    </MudSelect>
+                    @if (_catalogueLigues.Count == 0)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Warning">
+                            Aucune ligue au catalogue. Créez-en dans l'onglet « Ligues ».
+                        </MudText>
+                    }
+                </MudItem>
                 <MudItem xs="12">
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SauvegarderEquipe">
                         Sauvegarder
@@ -312,6 +332,33 @@
             // de la version de CETTE équipe, sinon on créerait un rattachement
             // inter-versions que le service refuse (à juste titre).
             _reglesDisponibles = await DataEditService.GetReglesSpecialesAsync(_team.RulesVersionId);
+
+            // Ligues thématiques : catalogue de la version + sélection actuelle.
+            _catalogueLigues = await DataEditService.GetLiguesAsync(_team.RulesVersionId);
+            _liguesSelectionnees = (await DataEditService.GetLiguesDeLaRaceAsync(_team.Id)).ToHashSet();
+        }
+    }
+
+    // ── Ligues thématiques ──────────────────────────────────────────────────
+
+    List<ThemedLeague> _catalogueLigues = [];
+    IEnumerable<int> _liguesSelectionnees = new HashSet<int>();
+
+    /// <summary>
+    /// Applique la sélection immédiatement : le rattachement vit dans sa propre
+    /// table, il n'a pas à attendre le bouton « Sauvegarder » de la fiche.
+    /// </summary>
+    async Task DefinirLigues(IEnumerable<int> ids)
+    {
+        if (_team is null) return;
+        try
+        {
+            _liguesSelectionnees = ids.ToHashSet();
+            await DataEditService.DefinirLiguesDeLaRaceAsync(_team.Id, _liguesSelectionnees);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
         }
     }
 
@@ -409,7 +456,7 @@
             }
             else
             {
-                await DataEditService.ModifierTeamTypeAsync(_team.Id, _team.Nom, _team.Categorie, _team.CoutRelance, _team.ReglesSpeciales, _team.ReglesSpecialesLigue);
+                await DataEditService.ModifierTeamTypeAsync(_team.Id, _team.Nom, _team.Categorie, _team.CoutRelance, _team.ReglesSpeciales, _team.LiguesTexteObsolete);
                 Snackbar.Add("Équipe modifiée", Severity.Success);
             }
         }

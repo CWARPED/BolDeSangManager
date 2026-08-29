@@ -24,7 +24,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Alliance du Vieux Monde",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "OldWorldClassic",
+                LiguesTexteObsolete = "OldWorldClassic",
                 ReglesSpeciales = "Alliance hétérogène d'humains, nains et halflings."
             },
             [
@@ -52,7 +52,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Amazones",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "LustrianSuperleague",
+                LiguesTexteObsolete = "LustrianSuperleague",
                 ReglesSpeciales = "Toutes les amazones ont Esquive de base. Équipe agile sans Gros Bras."
             },
             [
@@ -74,7 +74,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Bas-fonds",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "UnderworldChallenge",
+                LiguesTexteObsolete = "UnderworldChallenge",
                 ReglesSpeciales = "Chantage & Corruption. Mélange de races des bas-fonds."
             },
             [
@@ -99,7 +99,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Bretonniens",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "OldWorldClassic",
+                LiguesTexteObsolete = "OldWorldClassic",
                 ReglesSpeciales = "Chevaliers bretonniens et écuyers. Équipe équilibrée avec excellente armure."
             },
             [
@@ -120,7 +120,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Elfes Noirs",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "ElvenKingdoms",
+                LiguesTexteObsolete = "ElvenKingdoms",
                 ReglesSpeciales = "Elfes cruels et agiles. Équipe agile avec compétences scélérates."
             },
             [
@@ -142,7 +142,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Elfes Sylvains",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "ElvenKingdoms",
+                LiguesTexteObsolete = "ElvenKingdoms",
                 ReglesSpeciales = "Elfes rapides et agiles des forêts. Incluent un Homme-arbre."
             },
             [
@@ -165,7 +165,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Élus du Chaos",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "ChaosClash,FavoredOfChaos",
+                LiguesTexteObsolete = "ChaosClash,FavoredOfChaos",
                 ReglesSpeciales = "Favoris de… (au choix). Hommes-bêtes et élus avec mutations."
             },
             [
@@ -187,7 +187,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Gnomes",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "HalflingThimbleCup",
+                LiguesTexteObsolete = "HalflingThimbleCup",
                 ReglesSpeciales = "Petite race agile avec animaux renards. Nombreuses compétences défensives."
             },
             [
@@ -210,7 +210,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Gobelins",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "BadlandsBrawl,UnderworldChallenge",
+                LiguesTexteObsolete = "BadlandsBrawl,UnderworldChallenge",
                 ReglesSpeciales = "Chantage & Corruption. Spécialistes farfelus avec armes secrètes."
             },
             [
@@ -235,7 +235,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Halflings",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "HalflingThimbleCup",
+                LiguesTexteObsolete = "HalflingThimbleCup",
                 ReglesSpeciales = "Petite race avec Hommes-arbres. Difficile à gérer, très fun."
             },
             [
@@ -256,7 +256,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Hauts Elfes",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "ElvenKingdoms",
+                LiguesTexteObsolete = "ElvenKingdoms",
                 ReglesSpeciales = "Elfes nobles et équilibrés. Bon mix offensif/défensif."
             },
             [
@@ -277,7 +277,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Hommes-lézards",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "LustrianSuperleague",
+                LiguesTexteObsolete = "LustrianSuperleague",
                 ReglesSpeciales = "Combinaison de Skinks agiles et de Saurus puissants. Kroxigor disponible."
             },
             [
@@ -299,7 +299,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Horreurs Nécromantiques",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "MastersOfUndeath",
+                LiguesTexteObsolete = "MastersOfUndeath",
                 ReglesSpeciales = "Maîtres de la Non-Vie. Pas d'apothicaire. Zombies, goules, spectres, golems et loups-garous."
             },
             [
@@ -322,7 +322,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Humains",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "OldWorldClassic",
+                LiguesTexteObsolete = "OldWorldClassic",
                 ReglesSpeciales = "Capitaine. Équipe équilibrée polyvalente avec un Ogre optionnel."
             },
             [
@@ -346,7 +346,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Khorne",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "ChaosClash",
+                LiguesTexteObsolete = "ChaosClash",
                 ReglesSpeciales = "Favoris de Khorne, Bagarreurs Brutaux. Équipe agressive dédiée au combat."
             },
             [
@@ -368,7 +368,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Morts-Ambulants",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "MastersOfUndeath",
+                LiguesTexteObsolete = "MastersOfUndeath",
                 ReglesSpeciales = "Maîtres de la Non-Vie. Pas d'apothicaire. Squelettes, zombies, goules, blitzers et momies."
             },
             [
@@ -391,7 +391,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Nains",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "BadlandsBrawl",
+                LiguesTexteObsolete = "BadlandsBrawl",
                 ReglesSpeciales = "Chantage & Corruption, Bagarreurs Brutaux. Équipe lente mais très résistante avec Roule-Mort."
             },
             [
@@ -414,7 +414,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Nains du Chaos",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "ChaosClash,BadlandsBrawl",
+                LiguesTexteObsolete = "ChaosClash,BadlandsBrawl",
                 ReglesSpeciales = "Favoris de Hashut. Nains du chaos avec hobgobelins et minotaure."
             },
             [
@@ -437,7 +437,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Noblesse Impériale",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "OldWorldClassic",
+                LiguesTexteObsolete = "OldWorldClassic",
                 ReglesSpeciales = "Équipe noble avec gardes du corps robustes et Ogre optionnel."
             },
             [
@@ -460,7 +460,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Nordiques",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "OldWorldClassic,ChaosClash",
+                LiguesTexteObsolete = "OldWorldClassic,ChaosClash",
                 ReglesSpeciales = "Si Clash du Chaos → Favoris de Khorne. Barbares nordiques solides avec Yéti."
             },
             [
@@ -484,7 +484,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Nurgle",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "ChaosClash,FavoredOfNurgle",
+                LiguesTexteObsolete = "ChaosClash,FavoredOfNurgle",
                 ReglesSpeciales = "Favoris de Nurgle, Bagarreurs Brutaux. Pas d'apothicaire. Équipe pestilentielle et robuste."
             },
             [
@@ -507,7 +507,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Ogres",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "BadlandsBrawl,OldWorldClassic",
+                LiguesTexteObsolete = "BadlandsBrawl,OldWorldClassic",
                 ReglesSpeciales = "Bagarreurs Brutaux, Trois-quarts à Vil Prix. Ogres avec Gnoblars minuscules."
             },
             [
@@ -528,7 +528,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Orques",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "BadlandsBrawl",
+                LiguesTexteObsolete = "BadlandsBrawl",
                 ReglesSpeciales = "Bagarreurs Brutaux, Capitaine. Équipe équilibrée avec gobelins et Troll."
             },
             [
@@ -552,7 +552,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Orques Noirs",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "BadlandsBrawl",
+                LiguesTexteObsolete = "BadlandsBrawl",
                 ReglesSpeciales = "Chantage & Corruption, Bagarreurs Brutaux. Orques noirs très physiques."
             },
             [
@@ -574,7 +574,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Renégats du Chaos",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "ChaosClash,FavoredOfChaos",
+                LiguesTexteObsolete = "ChaosClash,FavoredOfChaos",
                 ReglesSpeciales = "Favoris de… (au choix). Mélange de races renégates. Maximum 3 Gros Bras."
             },
             [
@@ -602,7 +602,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Rois des Tombes",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "MastersOfUndeath",
+                LiguesTexteObsolete = "MastersOfUndeath",
                 ReglesSpeciales = "Maîtres de la Non-Vie. Pas d'apothicaire. Morts-vivants khémriens avec Gardiens des Tombes."
             },
             [
@@ -623,7 +623,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Skavens",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "UnderworldChallenge",
+                LiguesTexteObsolete = "UnderworldChallenge",
                 ReglesSpeciales = "Rats rapides et agiles. Coureurs d'Égouts très mobiles et Rat Ogre disponible."
             },
             [
@@ -646,7 +646,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Snotlings",
                 CoutRelance = 70_000,
-                ReglesSpecialesLigue = "UnderworldChallenge",
+                LiguesTexteObsolete = "UnderworldChallenge",
                 ReglesSpeciales = "Chantage & Corruption, Trois-quarts à Vil Prix, Déferlement. Hordes de snotlings avec chariots et trolls."
             },
             [
@@ -669,7 +669,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Union Elfique",
                 CoutRelance = 50_000,
-                ReglesSpecialesLigue = "ElvenKingdoms",
+                LiguesTexteObsolete = "ElvenKingdoms",
                 ReglesSpeciales = "Union d'elfes polyvalents. Receveurs coûteux mais excellents."
             },
             [
@@ -691,7 +691,7 @@ public static class BloodBowlTeamSeedData
                 RulesVersionId = bbVersionId,
                 Nom = "Vampires",
                 CoutRelance = 60_000,
-                ReglesSpecialesLigue = "MastersOfUndeath",
+                LiguesTexteObsolete = "MastersOfUndeath",
                 ReglesSpeciales = "Maîtres de la Non-Vie. Vampires puissants avec Soif de Sang sur les sbires."
             },
             [

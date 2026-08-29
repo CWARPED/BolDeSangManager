@@ -659,6 +659,27 @@ h1:focus {
 }
 
 /* ------------------------------------------------------------
+   Barre d'onglets collante (page des données)
+   ------------------------------------------------------------
+   Les onglets « Réserve / Staff / Équipes… » disparaissaient dès
+   qu'on descendait dans une longue liste, obligeant à remonter
+   tout en haut pour changer de section. Elle se fige désormais
+   sous la barre d'application.
+
+   z-index sous celui des popovers MudBlazor (1300+), sinon un
+   menu déroulant ouvert passerait DERRIÈRE les onglets.
+   ------------------------------------------------------------ */
+.tabs-sticky > .mud-tabs-tabbar {
+    position: sticky;
+    top: var(--mud-appbar-height, 64px);
+    z-index: 100;
+    background: var(--mud-palette-surface);
+    /* Sans cette ombre, le contenu qui défile dessous se confond
+       avec la barre. */
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35);
+}
+
+/* ------------------------------------------------------------
    Après-match — audit R9e (écran enfin auditable après avoir
    fabriqué un match en ValidationCompetences avec des joueurs
    à 6+ PSP).

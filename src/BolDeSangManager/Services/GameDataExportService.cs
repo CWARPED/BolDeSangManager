@@ -89,7 +89,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 tt.Categorie,
                 tt.CoutRelance,
                 tt.ReglesSpeciales,
-                tt.ReglesSpecialesLigue,
+                tt.LiguesTexteObsolete,
                 tt.Postes.OrderBy(p => p.Cout).Select(p => new PlayerPositionGdDto(
                     p.Nom,
                     p.QuantiteMax,
@@ -286,7 +286,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     Categorie = ttDto.CategorieLrb,
                     CoutRelance = ttDto.CoutRelance,
                     ReglesSpeciales = ttDto.ReglesSpeciales,
-                    ReglesSpecialesLigue = ttDto.ReglesSpecialesLigue
+                    LiguesTexteObsolete = ttDto.Ligues
                 };
                 db.TeamTypes.Add(tt);
                 await db.SaveChangesAsync();
@@ -896,7 +896,7 @@ record TeamTypeGdDto(
     int CategorieLrb,
     int CoutRelance,
     string ReglesSpeciales,
-    string ReglesSpecialesLigue,
+    string Ligues,
     List<PlayerPositionGdDto> Postes,
     List<KeywordLimitGdDto> Limites,
     // Règles spéciales rattachées à cette fiche, référencées par nom.

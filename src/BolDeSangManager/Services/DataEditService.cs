@@ -171,7 +171,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                 CoutRelance = src.CoutRelance,
                 Categorie = src.Categorie,
                 ReglesSpeciales = src.ReglesSpeciales,
-                ReglesSpecialesLigue = src.ReglesSpecialesLigue
+                LiguesTexteObsolete = src.LiguesTexteObsolete
             };
             db.TeamTypes.Add(copie);
             teamTypeMap[src.Id] = copie;
@@ -499,6 +499,117 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             .OrderBy(r => r.Ordre).ThenBy(r => r.Nom)
             .ToListAsync();
 
+    // ── Ligues thématiques ───────────────────────────────────────────────────
+    // Catalogue éditable : les races et les star players y pointent tous les
+    // deux, ce qui supprime les divergences de saisie du texte libre.
+
+    public async Task<List<ThemedLeague>> GetLiguesAsync(int versionId) =>
+        await db.ThemedLeagues
+            // Le tableau d'administration affiche le nombre de rattachements :
+            // sans ces Include, il afficherait 0 partout.
+            .Include(l => l.Equipes)
+            .Include(l => l.StarPlayers)
+            .Where(l => l.RulesVersionId == versionId)
+            .OrderBy(l => l.Ordre).ThenBy(l => l.Nom)
+            .ToListAsync();
+
+    public async Task<ThemedLeague> CreerLigueThematiqueAsync(int versionId, string nom, int ordre = 0)
+    {
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom de la ligue est obligatoire.");
+
+        var existe = await db.ThemedLeagues
+            .AnyAsync(l => l.RulesVersionId == versionId && l.Nom.ToLower() == nom.ToLower());
+        if (existe)
+            throw new InvalidOperationException($"Une ligue « {nom} » existe déjà dans cette version.");
+
+        var ligue = new ThemedLeague { RulesVersionId = versionId, Nom = nom.Trim(), Ordre = ordre };
+        db.ThemedLeagues.Add(ligue);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Ligue thématique créée : {Nom} (id={Id})", ligue.Nom, ligue.Id);
+        return ligue;
+    }
+
+    public async Task ModifierLigueThematiqueAsync(int id, string nom, int ordre)
+    {
+        var ligue = await db.ThemedLeagues.FindAsync(id)
+            ?? throw new InvalidOperationException("Ligue introuvable.");
+
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom de la ligue est obligatoire.");
+
+        var doublon = await db.ThemedLeagues.AnyAsync(l =>
+            l.RulesVersionId == ligue.RulesVersionId && l.Id != id && l.Nom.ToLower() == nom.ToLower());
+        if (doublon)
+            throw new InvalidOperationException($"Une ligue « {nom} » existe déjà dans cette version.");
+
+        ligue.Nom = nom.Trim();
+        ligue.Ordre = ordre;
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Supprime une ligue du catalogue. Les rattachements (races et star
+    /// players) partent en cascade : c'est voulu, la ligue n'existe plus.
+    /// </summary>
+    public async Task SupprimerLigueThematiqueAsync(int id)
+    {
+        var ligue = await db.ThemedLeagues.FindAsync(id);
+        if (ligue is null) return;
+        db.ThemedLeagues.Remove(ligue);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Ligue thématique supprimée : {Nom} (id={Id})", ligue.Nom, id);
+    }
+
+    /// <summary>Ligues rattachées à une race.</summary>
+    public async Task<List<int>> GetLiguesDeLaRaceAsync(int teamTypeId) =>
+        await db.Set<TeamTypeThemedLeague>()
+            .Where(x => x.TeamTypeId == teamTypeId)
+            .Select(x => x.ThemedLeagueId)
+            .ToListAsync();
+
+    /// <summary>Remplace les ligues d'une race par la sélection fournie.</summary>
+    public async Task DefinirLiguesDeLaRaceAsync(int teamTypeId, IEnumerable<int> ligueIds)
+    {
+        var actuelles = await db.Set<TeamTypeThemedLeague>()
+            .Where(x => x.TeamTypeId == teamTypeId)
+            .ToListAsync();
+
+        db.Set<TeamTypeThemedLeague>().RemoveRange(actuelles);
+
+        foreach (var id in ligueIds.Distinct())
+            db.Set<TeamTypeThemedLeague>().Add(new TeamTypeThemedLeague
+            {
+                TeamTypeId = teamTypeId, ThemedLeagueId = id
+            });
+
+        await db.SaveChangesAsync();
+    }
+
+    /// <summary>Ligues donnant accès à un star player.</summary>
+    public async Task<List<int>> GetLiguesDuStarPlayerAsync(int starPlayerId) =>
+        await db.Set<StarPlayerThemedLeague>()
+            .Where(x => x.StarPlayerId == starPlayerId)
+            .Select(x => x.ThemedLeagueId)
+            .ToListAsync();
+
+    public async Task DefinirLiguesDuStarPlayerAsync(int starPlayerId, IEnumerable<int> ligueIds)
+    {
+        var actuelles = await db.Set<StarPlayerThemedLeague>()
+            .Where(x => x.StarPlayerId == starPlayerId)
+            .ToListAsync();
+
+        db.Set<StarPlayerThemedLeague>().RemoveRange(actuelles);
+
+        foreach (var id in ligueIds.Distinct())
+            db.Set<StarPlayerThemedLeague>().Add(new StarPlayerThemedLeague
+            {
+                StarPlayerId = starPlayerId, ThemedLeagueId = id
+            });
+
+        await db.SaveChangesAsync();
+    }
+
     // ── Coups de pouce et star players ───────────────────────────────────────
     // Deux catalogues INFORMATIFS rattachés à une version de règles. Aucune
     // mécanique : ils s'affichent pour que les coaches comparent les VEA.
@@ -566,6 +677,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
     public async Task<List<StarPlayer>> GetStarPlayersAsync(int versionId) =>
         await db.StarPlayers
+            .Include(s => s.Ligues)
             .Where(s => s.RulesVersionId == versionId)
             .OrderBy(s => s.Ordre).ThenBy(s => s.Nom)
             .ToListAsync();
@@ -591,7 +703,6 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             CapacitePasse = modele.CapacitePasse,
             Armure = modele.Armure,
             Competences = NormaliserOptions(modele.Competences),
-            Ligues = NormaliserOptions(modele.Ligues),
             Ordre = modele.Ordre
         };
         db.StarPlayers.Add(star);
@@ -621,7 +732,6 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         star.CapacitePasse = modele.CapacitePasse;
         star.Armure = modele.Armure;
         star.Competences = NormaliserOptions(modele.Competences);
-        star.Ligues = NormaliserOptions(modele.Ligues);
         star.Ordre = modele.Ordre;
         await db.SaveChangesAsync();
     }
@@ -804,7 +914,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     /// dans l'écran : toute valeur choisie par l'utilisateur doit être vérifiée
     /// côté serveur.
     /// </param>
-    public async Task ModifierTeamTypeAsync(int id, string nom, int categorie, int coutRelance, string reglesSpeciales, string reglesSpecialesLigue)
+    public async Task ModifierTeamTypeAsync(int id, string nom, int categorie, int coutRelance, string reglesSpeciales, string ligues)
     {
         if (categorie is < 0 or > 4)
             throw new InvalidOperationException(
@@ -815,7 +925,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         t.Categorie = categorie;
         t.CoutRelance = coutRelance;
         t.ReglesSpeciales = reglesSpeciales;
-        t.ReglesSpecialesLigue = reglesSpecialesLigue;
+        t.LiguesTexteObsolete = ligues;
         await db.SaveChangesAsync();
     }
 

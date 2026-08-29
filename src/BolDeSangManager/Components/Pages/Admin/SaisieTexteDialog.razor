@@ -1,0 +1,27 @@
+@*
+    Saisie d'une valeur texte unique. Sert aux catalogues dont l'entrée n'a
+    qu'un nom (ligues thématiques) : ouvrir un formulaire complet pour un seul
+    champ serait disproportionné.
+*@
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="Valeur" Label="@Label" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Immediate="true"
+                      OnKeyDown="@(e => { if (e.Key == "Enter") Valider(); })" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Valider">Enregistrer</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance Dialog { get; set; } = null!;
+
+    [Parameter] public string Label { get; set; } = "Valeur";
+    [Parameter] public string Valeur { get; set; } = "";
+
+    void Valider() => Dialog.Close(DialogResult.Ok(Valeur?.Trim() ?? ""));
+    void Annuler() => Dialog.Cancel();
+}

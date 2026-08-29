@@ -69,27 +69,20 @@ public class StarPlayer
     public string Competences { get; set; } = string.Empty;
 
     /// <summary>
-    /// Ligues qui donnent accès à ce star player, en CSV
-    /// (« BadlandsBrawl, UnderworldChallenge »).
+    /// Ligues qui donnent accès à ce star player. Rattachement par CATALOGUE
+    /// (voir <see cref="ThemedLeague"/>) et non par texte libre : une faute de
+    /// frappe rendait auparavant un star player introuvable sans explication.
     ///
-    /// Recoupé avec <see cref="TeamType.ReglesSpecialesLigue"/>, le champ
-    /// « Règles ligues thématiques » DÉJÀ présent sur la fiche de race et
-    /// renseigné pour la plupart d'entre elles : un star player n'apparaît sur
-    /// la feuille d'une équipe que si au moins une ligue est commune aux deux.
-    ///
-    /// VIDE = accessible à TOUTES les équipes (choix produit) : un oubli de
-    /// saisie rend le star player visible plutôt qu'introuvable sans raison.
+    /// AUCUNE ligue rattachée = accessible à TOUTES les équipes (choix
+    /// produit) : un oubli de saisie le rend visible plutôt qu'invisible.
     /// </summary>
-    public string Ligues { get; set; } = string.Empty;
+    public ICollection<StarPlayerThemedLeague> Ligues { get; set; } = [];
+
     public int Ordre { get; set; }
 
     /// <summary>Compétences éclatées pour l'affichage.</summary>
     [NotMapped]
     public string[] CompetencesListe => Decouper(Competences);
-
-    /// <summary>Ligues d'accès éclatées. Vide = ouvert à tous.</summary>
-    [NotMapped]
-    public string[] LiguesListe => Decouper(Ligues);
 
     private static string[] Decouper(string? csv) =>
         (csv ?? "")
@@ -98,16 +91,14 @@ public class StarPlayer
 
     /// <summary>
     /// Ce star player est-il accessible à une équipe inscrite dans ces ligues ?
-    /// Comparaison insensible à la casse et aux espaces, la saisie étant
-    /// manuelle des deux côtés — une majuscule ne doit pas rendre un joueur
-    /// introuvable sans explication.
+    /// Comparaison sur les identifiants du catalogue : plus de divergence
+    /// possible entre deux saisies manuelles.
     /// </summary>
-    public bool EstAccessible(IEnumerable<string> liguesDeLEquipe)
+    public bool EstAccessible(IEnumerable<int> liguesDeLEquipe)
     {
-        var requises = LiguesListe;
-        if (requises.Length == 0) return true;   // ouvert à tous
+        if (Ligues.Count == 0) return true;   // ouvert à tous
 
-        return requises.Any(r =>
-            liguesDeLEquipe.Any(e => string.Equals(e.Trim(), r, StringComparison.OrdinalIgnoreCase)));
+        var requises = Ligues.Select(l => l.ThemedLeagueId).ToHashSet();
+        return liguesDeLEquipe.Any(requises.Contains);
     }
 }

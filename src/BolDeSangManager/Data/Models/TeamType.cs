@@ -40,9 +40,23 @@ public class TeamType
     [Column("CategorieLrb")]
     public int Categorie { get; set; } = 0;
 
-    // CSV des règles spéciales d'éligibilité aux ligues thématiques.
-    // Ex: "OldWorldClassic,BadlandsBrawl". Vide = aucune règle spéciale.
-    public string ReglesSpecialesLigue { get; set; } = string.Empty;
+    /// <summary>
+    /// Ancienne saisie des ligues en texte libre (« OldWorldClassic,… »).
+    ///
+    /// ⚠️ CONSERVÉE mais plus utilisée : le rattachement passe désormais par le
+    /// catalogue (<see cref="LiguesListe"/>). La colonne reste en base pour ne
+    /// pas perdre les 60 races déjà renseignées — le seed s'en sert pour créer
+    /// le catalogue initial et les rattachements.
+    /// </summary>
+    [Column("ReglesSpecialesLigue")]
+    public string LiguesTexteObsolete { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Ligues thématiques de cette race, rattachées depuis le catalogue.
+    /// Recoupées avec celles d'un <see cref="StarPlayer"/> pour savoir quels
+    /// mercenaires l'équipe peut engager.
+    /// </summary>
+    public ICollection<TeamTypeThemedLeague> LiguesListe { get; set; } = [];
 
     public ICollection<PlayerPosition> Postes { get; set; } = [];
     public ICollection<Team> Equipes { get; set; } = [];

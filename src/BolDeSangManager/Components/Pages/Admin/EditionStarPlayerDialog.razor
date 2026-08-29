@@ -1,0 +1,150 @@
+@using BolDeSangManager.Data.Models
+@inject DataEditService DataEditService
+@inject ISnackbar Snackbar
+
+@*
+    Édition d'un star player. Informatif : nom, stats, compétences, coût et
+    ligues qui y donnent accès. Aucun lien avec les effectifs — un star player
+    se loue pour un match, il ne rejoint jamais une équipe.
+*@
+
+<MudDialog>
+    <DialogContent>
+        <MudTextField @bind-Value="_nom" Label="Nom" Variant="Variant.Outlined" Margin="Margin.Dense" />
+
+        <MudNumericField @bind-Value="_cout" Label="Coût (po)" Variant="Variant.Outlined"
+                         Margin="Margin.Dense" Class="mt-3" Min="0" Step="10000" />
+
+        <MudText Typo="Typo.subtitle2" Class="mt-4 mb-1">Caractéristiques</MudText>
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            <MudNumericField @bind-Value="_mouvement" Label="M" Variant="Variant.Outlined"
+                             Margin="Margin.Dense" Min="1" Max="12" Style="width:70px" />
+            <MudNumericField @bind-Value="_force" Label="F" Variant="Variant.Outlined"
+                             Margin="Margin.Dense" Min="1" Max="9" Style="width:70px" />
+            <MudSelect T="string" @bind-Value="_agilite" Label="AG" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="width:90px">
+                @foreach (var v in Jets) { <MudSelectItem Value="@v">@v</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_capacitePasse" Label="CP" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="width:90px">
+                @foreach (var v in Jets) { <MudSelectItem Value="@v">@v</MudSelectItem> }
+            </MudSelect>
+            <MudSelect T="string" @bind-Value="_armure" Label="AR" Variant="Variant.Outlined"
+                       Margin="Margin.Dense" Style="width:90px">
+                @foreach (var v in Armures) { <MudSelectItem Value="@v">@v</MudSelectItem> }
+            </MudSelect>
+        </MudStack>
+
+        @* Texte libre volontairement : un star player porte souvent des
+           capacités qui lui sont propres, absentes du catalogue. Comme la
+           fiche est informative, aucun calcul n'en dépend. *@
+        <MudTextField @bind-Value="_competences" Label="Compétences" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="mt-3" Lines="2"
+                      HelperText="Séparées par des virgules." />
+
+        <MudSelect T="int" Label="Ligues" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3"
+                   MultiSelection="true" SelectedValues="@_liguesSelectionnees"
+                   SelectedValuesChanged="@(v => _liguesSelectionnees = v.ToHashSet())"
+                   HelperText="Aucune sélection = proposé à toutes les équipes."
+                   ToStringFunc="@(id => _catalogue.FirstOrDefault(l => l.Id == id)?.Nom ?? "?")">
+            @foreach (var l in _catalogue)
+            {
+                <MudSelectItem T="int" Value="@l.Id">@l.Nom</MudSelectItem>
+            }
+        </MudSelect>
+
+        <MudNumericField @bind-Value="_ordre" Label="Ordre d'affichage" Variant="Variant.Outlined"
+                         Margin="Margin.Dense" Class="mt-3" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Annuler">Annuler</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled" OnClick="Valider">Enregistrer</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance Dialog { get; set; } = null!;
+
+    /// <summary>Star player à modifier. Null = création.</summary>
+    [Parameter] public StarPlayer? Existant { get; set; }
+
+    [Parameter] public int VersionId { get; set; }
+
+    static readonly string[] Jets = ["1+", "2+", "3+", "4+", "5+", "6+", "-"];
+    static readonly string[] Armures = ["6+", "7+", "8+", "9+", "10+", "11+", "12+"];
+
+    string _nom = "";
+    int _cout;
+    int _mouvement = 6;
+    int _force = 3;
+    string _agilite = "3+";
+    string _capacitePasse = "-";
+    string _armure = "9+";
+    string _competences = "";
+    int _ordre;
+
+    List<ThemedLeague> _catalogue = [];
+    IEnumerable<int> _liguesSelectionnees = new HashSet<int>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _catalogue = await DataEditService.GetLiguesAsync(VersionId);
+
+        if (Existant is not null)
+        {
+            _nom = Existant.Nom;
+            _cout = Existant.Cout;
+            _mouvement = Existant.Mouvement;
+            _force = Existant.Force;
+            _agilite = Existant.Agilite;
+            _capacitePasse = Existant.CapacitePasse;
+            _armure = Existant.Armure;
+            _competences = Existant.Competences;
+            _ordre = Existant.Ordre;
+            _liguesSelectionnees =
+                (await DataEditService.GetLiguesDuStarPlayerAsync(Existant.Id)).ToHashSet();
+        }
+    }
+
+    async Task Valider()
+    {
+        try
+        {
+            var modele = new StarPlayer
+            {
+                Nom = _nom,
+                Cout = _cout,
+                Mouvement = _mouvement,
+                Force = _force,
+                Agilite = _agilite,
+                CapacitePasse = _capacitePasse,
+                Armure = _armure,
+                Competences = _competences,
+                Ordre = _ordre
+            };
+
+            var id = Existant?.Id ?? 0;
+            if (Existant is null)
+            {
+                var cree = await DataEditService.CreerStarPlayerAsync(VersionId, modele);
+                id = cree.Id;
+            }
+            else
+            {
+                await DataEditService.ModifierStarPlayerAsync(Existant.Id, modele);
+            }
+
+            // Les ligues vivent dans leur propre table : elles se posent après
+            // que le star player a un identifiant.
+            await DataEditService.DefinirLiguesDuStarPlayerAsync(id, _liguesSelectionnees);
+
+            Dialog.Close(DialogResult.Ok(true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    void Annuler() => Dialog.Cancel();
+}
