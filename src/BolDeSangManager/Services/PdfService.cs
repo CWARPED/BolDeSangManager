@@ -419,42 +419,86 @@ public class PdfService
                     // Purement informatif : le coach compare les valeurs
                     // d'équipe et décide à la table, l'application ne débite
                     // rien.
+                    //
+                    // Tableau plutôt qu'une suite de paragraphes : la
+                    // description occupait une ligne à elle seule sous un titre
+                    // court, laissant la moitié droite de la feuille vide. En
+                    // colonnes, chiffres à gauche et texte à droite, la
+                    // description récupère toute la largeur restante.
                     if (coupsDePouce is { Count: > 0 })
                     {
-                        // Titre et contenu dans un SEUL item, comme le rappel
-                        // des compétences : sinon QuestPDF peut laisser le
-                        // titre orphelin en bas de page.
+                        // Titre et tableau dans un SEUL item : sinon QuestPDF
+                        // peut laisser le titre orphelin en bas de page.
                         col.Item().PaddingTop(14).Column(bloc =>
                         {
                             bloc.Item().Text("Coups de Pouce")
                                 .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
                             bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
 
-                            foreach (var cp in coupsDePouce)
+                            bloc.Item().PaddingTop(4).Table(t =>
                             {
-                                bloc.Item().PaddingTop(5).Text(t =>
+                                t.ColumnsDefinition(cols =>
                                 {
-                                    var quantite = cp.QuantiteMax > 0 ? $"0-{cp.QuantiteMax} " : "";
-                                    var prix = cp.Cout > 0 ? $" — {cp.Cout:N0} po" : " — prix variable";
-                                    t.Span($"{quantite}{cp.Nom}{prix}")
-                                        .Bold().FontSize(8.5f);
-
-                                    if (!string.IsNullOrWhiteSpace(cp.Restriction))
-                                        t.Span($"  ({cp.Restriction})")
-                                            .FontSize(7.5f).FontColor(Colors.Grey.Darken1).Italic();
+                                    cols.ConstantColumn(28);   // Max (« 0-3 »)
+                                    cols.RelativeColumn(3);    // Nom
+                                    cols.ConstantColumn(52);   // Coût
+                                    cols.RelativeColumn(8);    // Effet — le reste de la largeur
                                 });
 
-                                if (!string.IsNullOrWhiteSpace(cp.Description))
-                                    bloc.Item().Text(cp.Description)
-                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
-                            }
+                                t.Header(h =>
+                                {
+                                    foreach (var titre in new[] { "Max", "Coup de pouce", "Coût", "Effet" })
+                                    {
+                                        h.Cell()
+                                            .Background(Colors.Red.Darken2)
+                                            .BorderBottom(2).BorderColor(Colors.Red.Darken4)
+                                            .PaddingVertical(5).PaddingHorizontal(4)
+                                            .Text(titre).FontColor(Colors.White).Bold().FontSize(8);
+                                    }
+                                });
+
+                                var pair = false;
+                                foreach (var cp in coupsDePouce)
+                                {
+                                    var bg = pair ? Colors.Grey.Lighten3 : Colors.White;
+
+                                    Cell(t, bg, cp.QuantiteMax > 0 ? $"0-{cp.QuantiteMax}" : "—", center: true);
+                                    Cell(t, bg, cp.Nom);
+                                    Cell(t, bg, cp.Cout > 0 ? $"{cp.Cout / 1000} k" : "variable", center: true);
+
+                                    // Effet + restriction dans la MÊME cellule :
+                                    // une colonne dédiée à la restriction serait
+                                    // vide pour la majorité des lignes.
+                                    var cellule = t.Cell()
+                                        .Background(bg)
+                                        .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
+                                        .PaddingVertical(4).PaddingHorizontal(4);
+
+                                    cellule.Text(txt =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(cp.Description))
+                                            txt.Span(cp.Description).FontSize(7.5f);
+
+                                        if (!string.IsNullOrWhiteSpace(cp.Restriction))
+                                            txt.Span($"  ({cp.Restriction})")
+                                                .FontSize(7).FontColor(Colors.Grey.Darken2).Italic();
+                                    });
+
+                                    pair = !pair;
+                                }
+                            });
                         });
                     }
 
                     // ── Star players ─────────────────────────────────────
                     // Ceux que CETTE équipe peut engager : le recoupement des
-                    // ligues est fait par l'appelant. Sert au coach à comparer
-                    // sa VEA et à décider avant le coup d'envoi.
+                    // ligues est fait par l'appelant.
+                    //
+                    // Même tableau que les joueurs de l'équipe : le format en
+                    // paragraphes empilait nom, stats, compétences et règle sur
+                    // 4 lignes chacun, soit une bouillie de 66 blocs. En
+                    // colonnes alignées, les caractéristiques se comparent d'un
+                    // coup d'œil, comme sur le roster.
                     if (starPlayers is { Count: > 0 })
                     {
                         col.Item().PaddingTop(14).Column(bloc =>
@@ -463,26 +507,72 @@ public class PdfService
                                 .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
                             bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
 
-                            foreach (var sp in starPlayers)
+                            bloc.Item().PaddingTop(4).Table(t =>
                             {
-                                bloc.Item().PaddingTop(5).Text(t =>
+                                t.ColumnsDefinition(cols =>
                                 {
-                                    t.Span($"{sp.Nom}").Bold().FontSize(8.5f);
-                                    if (sp.Cout > 0)
-                                        t.Span($" — {sp.Cout:N0} po").Bold().FontSize(8.5f);
-                                    t.Span($"   M{sp.Mouvement} F{sp.Force} AG{sp.Agilite} " +
-                                           $"CP{sp.CapacitePasse} AR{sp.Armure}")
-                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken2);
+                                    cols.RelativeColumn(3);    // Nom
+                                    cols.ConstantColumn(22);   // M
+                                    cols.ConstantColumn(22);   // F
+                                    cols.ConstantColumn(22);   // AG
+                                    cols.ConstantColumn(22);   // CP
+                                    cols.ConstantColumn(22);   // AR
+                                    cols.ConstantColumn(38);   // Coût
+                                    cols.RelativeColumn(8);    // Compétences et règle
                                 });
 
-                                if (!string.IsNullOrWhiteSpace(sp.Competences))
-                                    bloc.Item().Text(sp.Competences)
-                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
+                                t.Header(h =>
+                                {
+                                    foreach (var titre in new[]
+                                             { "Star player", "M", "F", "AG", "CP", "AR", "Coût", "Compétences et règle spéciale" })
+                                    {
+                                        h.Cell()
+                                            .Background(Colors.Red.Darken2)
+                                            .BorderBottom(2).BorderColor(Colors.Red.Darken4)
+                                            .PaddingVertical(5).PaddingHorizontal(4)
+                                            .Text(titre).FontColor(Colors.White).Bold().FontSize(8);
+                                    }
+                                });
 
-                                if (!string.IsNullOrWhiteSpace(sp.ReglesSpeciales))
-                                    bloc.Item().Text(sp.ReglesSpeciales)
-                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3).Italic();
-                            }
+                                var pair = false;
+                                foreach (var sp in starPlayers)
+                                {
+                                    var bg = pair ? Colors.Grey.Lighten3 : Colors.White;
+
+                                    Cell(t, bg, sp.Nom);
+                                    Cell(t, bg, sp.Mouvement.ToString(), center: true);
+                                    Cell(t, bg, sp.Force.ToString(), center: true);
+                                    Cell(t, bg, sp.Agilite, center: true);
+                                    Cell(t, bg, sp.CapacitePasse, center: true);
+                                    Cell(t, bg, sp.Armure, center: true);
+                                    Cell(t, bg, sp.Cout > 0 ? $"{sp.Cout / 1000} k" : "—", center: true);
+
+                                    // Compétences et règle dans la MÊME cellule,
+                                    // la règle en italique : deux colonnes
+                                    // auraient divisé la largeur utile alors que
+                                    // les textes vont jusqu'à 450 caractères.
+                                    var cellule = t.Cell()
+                                        .Background(bg)
+                                        .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
+                                        .PaddingVertical(4).PaddingHorizontal(4);
+
+                                    cellule.Text(txt =>
+                                    {
+                                        if (!string.IsNullOrWhiteSpace(sp.Competences))
+                                            txt.Span(sp.Competences).FontSize(7.5f);
+
+                                        if (!string.IsNullOrWhiteSpace(sp.ReglesSpeciales))
+                                        {
+                                            if (!string.IsNullOrWhiteSpace(sp.Competences))
+                                                txt.Span("  ").FontSize(7.5f);
+                                            txt.Span(sp.ReglesSpeciales)
+                                                .FontSize(7).FontColor(Colors.Grey.Darken3).Italic();
+                                        }
+                                    });
+
+                                    pair = !pair;
+                                }
+                            });
                         });
                     }
                 });
