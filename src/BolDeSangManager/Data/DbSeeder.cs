@@ -65,7 +65,8 @@ public static class DbSeeder
         var aBrancher = new Dictionary<string, (string Code, string MotCle)>
         {
             ["Trois-quarts à Vil Prix"] = (SpecialRuleCodes.CoutNulParMotCle, "Trois-quart"),
-            ["Maîtres de la Non-Vie"] = (SpecialRuleCodes.RecrutementGratuitParMotCle, "Trois-quart")
+            ["Maîtres de la Non-Vie"] = (SpecialRuleCodes.RecrutementGratuitParMotCle, "Trois-quart"),
+            ["Capitaine"] = (SpecialRuleCodes.CompetenceAuCapitaine, "Pro")
         };
 
         var regles = await db.SpecialRules

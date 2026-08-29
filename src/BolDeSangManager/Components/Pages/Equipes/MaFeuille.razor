@@ -410,6 +410,19 @@ else
             if (i < skills.Count - 1)
                 builder.AddMarkupContent(4, ", ");
         }
+
+        // Compétence accordée par le titre de capitaine : calculée, jamais
+        // stockée — elle suit donc le titre sans nettoyage.
+        var offerte = CapitaineHelper.CompetenceOfferte(j, _equipeDetail?.TeamType);
+        if (offerte is not null)
+        {
+            if (skills.Count > 0) builder.AddMarkupContent(5, ", ");
+            builder.OpenElement(6, "span");
+            builder.AddAttribute(7, "style", "color:var(--mud-palette-warning)");
+            builder.AddAttribute(8, "title", "Accordée par le titre de capitaine");
+            builder.AddContent(9, offerte + " (capitaine)");
+            builder.CloseElement();
+        }
     };
 
     Skill? _competenceAffichee;

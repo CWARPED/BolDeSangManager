@@ -219,6 +219,12 @@ public class PdfService
                             var competences = string.Join(", ",
                                 (pos?.CompetencesDepart.Select(c => c.Skill?.Nom ?? "") ?? [])
                                 .Concat(joueur.Competences.Where(c => !c.EstCompetenceDepart).Select(c => c.Skill?.Nom ?? ""))
+                                // Compétence accordée par le titre de capitaine :
+                                // calculée, jamais stockée — sans cette ligne elle
+                                // manquerait sur la feuille imprimée alors qu'elle
+                                // s'applique bel et bien en match.
+                                .Concat(CapitaineHelper.CompetenceOfferte(joueur, equipe.TeamType) is { } cap
+                                    ? [$"{cap} (capitaine)"] : Array.Empty<string>())
                                 .Where(s => s != ""));
 
                             bool hasSequel = joueur.Blessures.Any(b =>

@@ -91,6 +91,14 @@ public class TeamPlayer
     public bool EstMort { get; set; } = false;
     public bool EstRetraite { get; set; } = false;
 
+    /// <summary>
+    /// Capitaine de l'équipe (règle spéciale « Capitaine »). Drapeau porté par
+    /// le JOUEUR plutôt qu'une clé sur l'équipe : la suppression d'un joueur
+    /// emporte alors le titre d'elle-même, sans clé orpheline à nettoyer.
+    /// Le service garantit l'unicité au sein d'une équipe.
+    /// </summary>
+    public bool EstCapitaine { get; set; } = false;
+
     public DateTime RecruteLe { get; set; } = DateTime.UtcNow;
 
     public ICollection<TeamPlayerSkill> Competences { get; set; } = [];

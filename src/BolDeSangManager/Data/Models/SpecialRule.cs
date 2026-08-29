@@ -73,6 +73,20 @@ public static class SpecialRuleCodes
     public const string RecrutementGratuitParMotCle = "RecrutementGratuitParMotCle";
 
     /// <summary>
+    /// « Capitaine » (LRB p.93) : le coach désigne un joueur, qui gagne une
+    /// compétence tant qu'il porte le titre.
+    ///
+    /// Le paramètre de la liaison race↔règle porte le NOM de la compétence
+    /// offerte (« Pro »). Générique par construction : une règle d'une future
+    /// édition qui offrirait « Blocage » se règle en admin, sans développement.
+    ///
+    /// La compétence est CALCULÉE à l'affichage, jamais enregistrée dans
+    /// TeamPlayerSkills : elle disparaît donc d'elle-même quand le titre change
+    /// de joueur, et n'entre pas dans la valeur de l'équipe.
+    /// </summary>
+    public const string CompetenceAuCapitaine = "CompetenceAuCapitaine";
+
+    /// <summary>
     /// Découpe un CSV d'options en valeurs propres (vides et espaces retirés).
     /// Utilisé pour les divinités comme pour les mots-clés.
     /// </summary>

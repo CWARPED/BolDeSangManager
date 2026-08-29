@@ -101,6 +101,26 @@
                                                   ValueChanged="@(v => DefinirOptions(lien.SpecialRule, v))"
                                                   Placeholder="Khorne,Nurgle,Tzeentch" />
                                 }
+                                else if (lien.SpecialRule.Code == SpecialRuleCodes.CompetenceAuCapitaine)
+                                {
+                                    @* Champ LIBRE : la compétence offerte est un
+                                       paramètre, pas une valeur en dur. *@
+                                    <MudTextField T="string" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                  Class="mt-2"
+                                                  Label="Compétence offerte au capitaine"
+                                                  HelperText="Nom exact de la compétence, ex. « Pro ». Le coach désigne ensuite son capitaine."
+                                                  Error="@string.IsNullOrWhiteSpace(lien.OptionsChoix)"
+                                                  Value="@lien.OptionsChoix"
+                                                  ValueChanged="@(v => DefinirOptions(lien.SpecialRule, v))"
+                                                  Placeholder="Pro" />
+
+                                    @if (string.IsNullOrWhiteSpace(lien.OptionsChoix))
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block">
+                                            Sans compétence, cette règle n'a aucun effet.
+                                        </MudText>
+                                    }
+                                }
                                 else if (lien.SpecialRule.Code == SpecialRuleCodes.CoutNulParMotCle
                                          || lien.SpecialRule.Code == SpecialRuleCodes.RecrutementGratuitParMotCle)
                                 {

@@ -120,6 +120,37 @@ else
                                 </MudText>
                             }
                         }
+
+                        @* Capitaine : c'est le COACH qui désigne, contrairement
+                           au dieu réservé au commissaire. *@
+                        @if (lien.SpecialRule.Code == SpecialRuleCodes.CompetenceAuCapitaine)
+                        {
+                            @if (_estCoach || _estCommissaire)
+                            {
+                                @* T="string" comme le sélecteur de divinité qui
+                                   fonctionne : avec T="int" ou "int?", MudBlazor
+                                   ne rendait AUCUN item (popover vide, constaté
+                                   à l'écran). "" = aucun capitaine. *@
+                                <MudSelect T="string" Value="@(CapitaineActuelId()?.ToString() ?? "")"
+                                           ValueChanged="DefinirCapitaine"
+                                           Label="Capitaine" Variant="Variant.Outlined"
+                                           Margin="Margin.Dense" Class="mt-3"
+                                           HelperText="@HelperCapitaine()">
+                                    <MudSelectItem Value="@("")">— aucun —</MudSelectItem>
+                                    @foreach (var j in JoueursEligiblesCapitaine())
+                                    {
+                                        <MudSelectItem Value="@j.Id.ToString()">@j.Numero. @j.Nom</MudSelectItem>
+                                    }
+                                </MudSelect>
+                            }
+                            else
+                            {
+                                var cap = _equipe.Joueurs.FirstOrDefault(p => p.EstCapitaine);
+                                <MudText Typo="Typo.caption" Class="mt-2 d-block" Color="Color.Secondary">
+                                    @(cap is null ? "Aucun capitaine désigné." : $"Capitaine : {cap.Nom}")
+                                </MudText>
+                            }
+                        }
                     </ChildContent>
                 </MudExpansionPanel>
             }
@@ -382,6 +413,59 @@ else
     /// <summary>Divinités que la race autorise (« Favori de… »). Vide = non concernée.</summary>
     List<string> _optionsDivinite = [];
 
+    // ── Capitaine ───────────────────────────────────────────────────────────
+
+    /// <summary>Vrai si l'utilisateur courant est le coach de cette équipe.</summary>
+    bool _estCoach;
+
+    int? CapitaineActuelId() =>
+        _equipe?.Joueurs.FirstOrDefault(p => p.EstCapitaine)?.Id;
+
+    /// <summary>Compétence que le titre accorde, telle que paramétrée par race.</summary>
+    string? CompetenceDuCapitaine()
+    {
+        var lien = _equipe?.TeamType?.ReglesSpecialesListe
+            .FirstOrDefault(l => l.SpecialRule?.Code == SpecialRuleCodes.CompetenceAuCapitaine);
+        var valeurs = SpecialRuleCodes.DecouperOptions(lien?.OptionsChoix);
+        return valeurs.Length > 0 ? valeurs[0] : null;
+    }
+
+    /// <summary>
+    /// Morts et retraités exclus : proposer un joueur absent de l'effectif
+    /// n'aurait pas de sens.
+    /// </summary>
+    IEnumerable<TeamPlayer> JoueursEligiblesCapitaine() =>
+        (_equipe?.Joueurs ?? [])
+            .Where(p => !p.EstMort && !p.EstRetraite)
+            .OrderBy(p => p.Numero);
+
+    async Task DefinirCapitaine(string joueurIdTexte)
+    {
+        if (_equipe is null) return;
+        try
+        {
+            // Chaîne vide = « aucun » côté écran, null côté service.
+            int? joueurId = string.IsNullOrEmpty(joueurIdTexte) ? null : int.Parse(joueurIdTexte);
+            await TeamService.DefinirCapitaineAsync(_equipe.Id, joueurId);
+            _equipe = await TeamService.GetEquipeAsync(Id);   // relit l'état réel
+            var nom = _equipe?.Joueurs.FirstOrDefault(p => p.EstCapitaine)?.Nom;
+            Snackbar.Add(nom is null ? "Capitaine retiré" : $"Capitaine : {nom}", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+    }
+
+    /// <summary>Aide du sélecteur : rappelle la compétence effectivement offerte.</summary>
+    string HelperCapitaine()
+    {
+        var c = CompetenceDuCapitaine();
+        return c is null
+            ? "Aucune compétence paramétrée par le commissaire."
+            : $"Le joueur désigné gagne « {c} ».";
+    }
+
     /// <summary>Règles spéciales de la race, dans l'ordre d'affichage.</summary>
     List<TeamTypeSpecialRule> _reglesSpeciales =>
         _equipe?.TeamType?.ReglesSpecialesListe
@@ -437,6 +521,10 @@ else
                        || authState.User.IsInRole("GrandCommissaire")
                        || authState.User.IsInRole("Admin")
                        || (_equipe?.League?.CommissaireId is { } cid && cid == _userId);
+
+        // Le capitaine est désigné par le COACH de l'équipe (choix produit),
+        // contrairement au Dieu du Chaos réservé au commissaire.
+        _estCoach = _equipe?.CoachId == _userId;
 
         // Mode brouillard : masquer la fiche du prochain adversaire.
         if (_equipe?.League is { ModeBrouillard: true } ligue && !_estCommissaire)
@@ -548,6 +636,20 @@ else
             builder.CloseElement();
             if (i < skills.Count - 1)
                 builder.AddMarkupContent(4, ", ");
+        }
+
+        // Compétence du capitaine : calculée, jamais stockée — elle suit donc le
+        // titre sans nettoyage. Signalée comme telle pour que le coach sache
+        // qu'elle disparaîtra s'il change de capitaine.
+        var offerte = CapitaineHelper.CompetenceOfferte(j, _equipe?.TeamType);
+        if (offerte is not null)
+        {
+            if (skills.Count > 0) builder.AddMarkupContent(5, ", ");
+            builder.OpenElement(6, "span");
+            builder.AddAttribute(7, "style", "color:var(--mud-palette-warning)");
+            builder.AddAttribute(8, "title", "Accordée par le titre de capitaine");
+            builder.AddContent(9, offerte + " (capitaine)");
+            builder.CloseElement();
         }
     };
 

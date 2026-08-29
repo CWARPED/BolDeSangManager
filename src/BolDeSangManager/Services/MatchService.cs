@@ -535,6 +535,16 @@ public class MatchService(
                     logger.LogWarning("Joueur {NomJoueur} (id={Id}) est mort au combat !", joueur.Nom, joueur.Id);
                     break;
             }
+
+            // Un capitaine mort ou parti perd son titre : sinon la compétence
+            // qu'il accorde resterait affichée sur un joueur absent de
+            // l'effectif. Le coach en redésigne un librement.
+            if (joueur.EstCapitaine && (joueur.EstMort || joueur.EstRetraite))
+            {
+                joueur.EstCapitaine = false;
+                logger.LogInformation(
+                    "Titre de capitaine retiré au joueur {NomJoueur} (id={Id})", joueur.Nom, joueur.Id);
+            }
         }
         await db.SaveChangesAsync();
     }

@@ -35,12 +35,23 @@
             <MudSelectItem Value="@SpecialRuleCodes.FavoriDe">Favori de… — choix d'un Dieu du Chaos</MudSelectItem>
             <MudSelectItem Value="@SpecialRuleCodes.CoutNulParMotCle">Coût d'embauche nul dans la VEA</MudSelectItem>
             <MudSelectItem Value="@SpecialRuleCodes.RecrutementGratuitParMotCle">Recrutement gratuit en après-match</MudSelectItem>
+            <MudSelectItem Value="@SpecialRuleCodes.CompetenceAuCapitaine">Compétence offerte au capitaine</MudSelectItem>
         </MudSelect>
 
         @* Le paramètre du comportement se règle PAR RACE, pas ici : sans ce
            rappel, on choisit un comportement et on cherche en vain le champ
            qui va avec. *@
-        @if (_code == SpecialRuleCodes.CoutNulParMotCle
+        @if (_code == SpecialRuleCodes.CompetenceAuCapitaine)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                <MudText Typo="Typo.caption">
+                    <b>À compléter sur chaque équipe.</b> Le nom de la compétence
+                    offerte (« Pro »…) se saisit depuis la fiche de l'équipe, onglet
+                    <b>Équipes</b>. Le capitaine, lui, est désigné par le coach.
+                </MudText>
+            </MudAlert>
+        }
+        else if (_code == SpecialRuleCodes.CoutNulParMotCle
              || _code == SpecialRuleCodes.RecrutementGratuitParMotCle)
         {
             <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">

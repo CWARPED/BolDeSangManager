@@ -64,6 +64,10 @@ public static class SpecialRuleSeedData
         {
             RulesVersionId = versionId, Ordre = 7,
             Nom = "Capitaine",
+            // Le paramètre porté par chaque race est le NOM de la compétence
+            // offerte (« Pro ») : rien n'est écrit en dur, une future règle
+            // offrant autre chose se règle depuis l'admin.
+            Code = SpecialRuleCodes.CompetenceAuCapitaine,
             Description = "À la création de la liste, un joueur de la liste de départ (hors Gros Bras) est désigné Capitaine : il gagne immédiatement la Compétence Pro sans augmenter son coût. Si le Capitaine est sur le terrain, chaque Relance d'Équipe utilisée permet de jeter un D6 : sur un 6 naturel, la relance est gratuite. Le Capitaine doit être aligné si possible, et ne peut être renvoyé que s'il a subi une blessure réduisant une caractéristique."
         },
     ];
@@ -123,7 +127,7 @@ public static class SpecialRuleSeedData
         ("Déferlement", "Snotlings", ""),
 
         // ── Capitaine ────────────────────────────────────────────────────────
-        ("Capitaine", "Humains", ""),
-        ("Capitaine", "Orques", ""),
+        ("Capitaine", "Humains", "Pro"),
+        ("Capitaine", "Orques", "Pro"),
     ];
 }

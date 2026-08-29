@@ -388,10 +388,11 @@ public class SpecialRuleTests
             .Where(r => !string.IsNullOrEmpty(r.Code))
             .ToDictionary(r => r.Nom, r => r.Code);
 
-        Assert.Equal(3, codesParRegle.Count);
+        Assert.Equal(4, codesParRegle.Count);
         Assert.Equal(SpecialRuleCodes.FavoriDe, codesParRegle["Favori de…"]);
         Assert.Equal(SpecialRuleCodes.CoutNulParMotCle, codesParRegle["Trois-quarts à Vil Prix"]);
         Assert.Equal(SpecialRuleCodes.RecrutementGratuitParMotCle, codesParRegle["Maîtres de la Non-Vie"]);
+        Assert.Equal(SpecialRuleCodes.CompetenceAuCapitaine, codesParRegle["Capitaine"]);
     }
 
     /// <summary>
