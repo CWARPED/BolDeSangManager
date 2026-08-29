@@ -499,6 +499,142 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             .OrderBy(r => r.Ordre).ThenBy(r => r.Nom)
             .ToListAsync();
 
+    // ── Coups de pouce et star players ───────────────────────────────────────
+    // Deux catalogues INFORMATIFS rattachés à une version de règles. Aucune
+    // mécanique : ils s'affichent pour que les coaches comparent les VEA.
+
+    public async Task<List<Inducement>> GetCoupsDePouceAsync(int versionId) =>
+        await db.Inducements
+            .Where(i => i.RulesVersionId == versionId)
+            .OrderBy(i => i.Ordre).ThenBy(i => i.Nom)
+            .ToListAsync();
+
+    public async Task<Inducement> CreerCoupDePouceAsync(
+        int versionId, string nom, string description, int cout, int ordre = 0)
+    {
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom du coup de pouce est obligatoire.");
+
+        var existe = await db.Inducements
+            .AnyAsync(i => i.RulesVersionId == versionId && i.Nom.ToLower() == nom.ToLower());
+        if (existe)
+            throw new InvalidOperationException($"Un coup de pouce « {nom} » existe déjà dans cette version.");
+
+        var cp = new Inducement
+        {
+            RulesVersionId = versionId,
+            Nom = nom.Trim(),
+            Description = description,
+            Cout = Math.Max(0, cout),
+            Ordre = ordre
+        };
+        db.Inducements.Add(cp);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Coup de pouce créé : {Nom} (id={Id})", cp.Nom, cp.Id);
+        return cp;
+    }
+
+    public async Task ModifierCoupDePouceAsync(
+        int id, string nom, string description, int cout, int ordre)
+    {
+        var cp = await db.Inducements.FindAsync(id)
+            ?? throw new InvalidOperationException("Coup de pouce introuvable.");
+
+        if (string.IsNullOrWhiteSpace(nom))
+            throw new InvalidOperationException("Le nom du coup de pouce est obligatoire.");
+
+        var doublon = await db.Inducements.AnyAsync(i =>
+            i.RulesVersionId == cp.RulesVersionId && i.Id != id && i.Nom.ToLower() == nom.ToLower());
+        if (doublon)
+            throw new InvalidOperationException($"Un coup de pouce « {nom} » existe déjà dans cette version.");
+
+        cp.Nom = nom.Trim();
+        cp.Description = description;
+        cp.Cout = Math.Max(0, cout);
+        cp.Ordre = ordre;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SupprimerCoupDePouceAsync(int id)
+    {
+        var cp = await db.Inducements.FindAsync(id);
+        if (cp is null) return;
+        db.Inducements.Remove(cp);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Coup de pouce supprimé : {Nom} (id={Id})", cp.Nom, id);
+    }
+
+    public async Task<List<StarPlayer>> GetStarPlayersAsync(int versionId) =>
+        await db.StarPlayers
+            .Where(s => s.RulesVersionId == versionId)
+            .OrderBy(s => s.Ordre).ThenBy(s => s.Nom)
+            .ToListAsync();
+
+    public async Task<StarPlayer> CreerStarPlayerAsync(int versionId, StarPlayer modele)
+    {
+        if (string.IsNullOrWhiteSpace(modele.Nom))
+            throw new InvalidOperationException("Le nom du star player est obligatoire.");
+
+        var existe = await db.StarPlayers
+            .AnyAsync(s => s.RulesVersionId == versionId && s.Nom.ToLower() == modele.Nom.ToLower());
+        if (existe)
+            throw new InvalidOperationException($"Un star player « {modele.Nom} » existe déjà dans cette version.");
+
+        var star = new StarPlayer
+        {
+            RulesVersionId = versionId,
+            Nom = modele.Nom.Trim(),
+            Cout = Math.Max(0, modele.Cout),
+            Mouvement = modele.Mouvement,
+            Force = modele.Force,
+            Agilite = modele.Agilite,
+            CapacitePasse = modele.CapacitePasse,
+            Armure = modele.Armure,
+            Competences = NormaliserOptions(modele.Competences),
+            Ligues = NormaliserOptions(modele.Ligues),
+            Ordre = modele.Ordre
+        };
+        db.StarPlayers.Add(star);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Star player créé : {Nom} (id={Id})", star.Nom, star.Id);
+        return star;
+    }
+
+    public async Task ModifierStarPlayerAsync(int id, StarPlayer modele)
+    {
+        var star = await db.StarPlayers.FindAsync(id)
+            ?? throw new InvalidOperationException("Star player introuvable.");
+
+        if (string.IsNullOrWhiteSpace(modele.Nom))
+            throw new InvalidOperationException("Le nom du star player est obligatoire.");
+
+        var doublon = await db.StarPlayers.AnyAsync(s =>
+            s.RulesVersionId == star.RulesVersionId && s.Id != id && s.Nom.ToLower() == modele.Nom.ToLower());
+        if (doublon)
+            throw new InvalidOperationException($"Un star player « {modele.Nom} » existe déjà dans cette version.");
+
+        star.Nom = modele.Nom.Trim();
+        star.Cout = Math.Max(0, modele.Cout);
+        star.Mouvement = modele.Mouvement;
+        star.Force = modele.Force;
+        star.Agilite = modele.Agilite;
+        star.CapacitePasse = modele.CapacitePasse;
+        star.Armure = modele.Armure;
+        star.Competences = NormaliserOptions(modele.Competences);
+        star.Ligues = NormaliserOptions(modele.Ligues);
+        star.Ordre = modele.Ordre;
+        await db.SaveChangesAsync();
+    }
+
+    public async Task SupprimerStarPlayerAsync(int id)
+    {
+        var star = await db.StarPlayers.FindAsync(id);
+        if (star is null) return;
+        db.StarPlayers.Remove(star);
+        await db.SaveChangesAsync();
+        logger.LogInformation("Star player supprimé : {Nom} (id={Id})", star.Nom, id);
+    }
+
     public async Task<SpecialRule> CreerRegleSpecialeAsync(
         int versionId, string nom, string description, string code = "", int ordre = 0)
     {

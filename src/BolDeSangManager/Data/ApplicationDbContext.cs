@@ -39,6 +39,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<LeagueStaffType> LeagueStaffTypes => Set<LeagueStaffType>();
     public DbSet<TeamStaff> TeamStaffs => Set<TeamStaff>();
     public DbSet<SpecialRule> SpecialRules => Set<SpecialRule>();
+    public DbSet<Inducement> Inducements => Set<Inducement>();
+    public DbSet<StarPlayer> StarPlayers => Set<StarPlayer>();
     public DbSet<TeamTypeSpecialRule> TeamTypeSpecialRules => Set<TeamTypeSpecialRule>();
 
     protected override void OnModelCreating(ModelBuilder builder)
@@ -321,6 +323,27 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // seraient indiscernables sur une feuille d'équipe.
         builder.Entity<SpecialRule>()
             .HasIndex(r => new { r.RulesVersionId, r.Nom })
+            .IsUnique();
+
+        // Coups de pouce et star players : catalogues informatifs rattachés à
+        // une version. Suppression en cascade avec la version, comme le reste
+        // des données de jeu.
+        builder.Entity<Inducement>()
+            .HasOne(i => i.RulesVersion).WithMany()
+            .HasForeignKey(i => i.RulesVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<Inducement>()
+            .HasIndex(i => new { i.RulesVersionId, i.Nom })
+            .IsUnique();
+
+        builder.Entity<StarPlayer>()
+            .HasOne(s => s.RulesVersion).WithMany()
+            .HasForeignKey(s => s.RulesVersionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<StarPlayer>()
+            .HasIndex(s => new { s.RulesVersionId, s.Nom })
             .IsUnique();
 
         // TeamTypeSpecialRule : table de liaison, clé composite.
