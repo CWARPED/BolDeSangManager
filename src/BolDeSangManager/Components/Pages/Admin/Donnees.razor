@@ -349,6 +349,7 @@
             <MudTable Items="@_coupsDePouce" Dense="true" Hover="true">
                 <HeaderContent>
                     <MudTh>Coup de pouce</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Max</MudTh>
                     <MudTh Style="width:1%; white-space:nowrap">Coût</MudTh>
                     <MudTh Style="width:1%; white-space:nowrap"></MudTh>
                 </HeaderContent>
@@ -357,8 +358,15 @@
                         <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
                         @if (!string.IsNullOrWhiteSpace(context.Description))
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Description</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.Description</MudText>
                         }
+                        @if (!string.IsNullOrWhiteSpace(context.Restriction))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block">@context.Restriction</MudText>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Max" Style="white-space:nowrap">
+                        @(context.QuantiteMax > 0 ? $"0-{context.QuantiteMax}" : "—")
                     </MudTd>
                     <MudTd DataLabel="Coût" Style="white-space:nowrap">
                         @(context.Cout > 0 ? $"{context.Cout / 1000} k" : "variable")

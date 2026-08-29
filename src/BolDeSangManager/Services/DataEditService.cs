@@ -621,7 +621,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             .ToListAsync();
 
     public async Task<Inducement> CreerCoupDePouceAsync(
-        int versionId, string nom, string description, int cout, int ordre = 0)
+        int versionId, string nom, string description, int cout,
+        int quantiteMax = 0, string restriction = "", int ordre = 0)
     {
         if (string.IsNullOrWhiteSpace(nom))
             throw new InvalidOperationException("Le nom du coup de pouce est obligatoire.");
@@ -637,6 +638,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             Nom = nom.Trim(),
             Description = description,
             Cout = Math.Max(0, cout),
+            QuantiteMax = Math.Max(0, quantiteMax),
+            Restriction = restriction?.Trim() ?? "",
             Ordre = ordre
         };
         db.Inducements.Add(cp);
@@ -646,7 +649,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     }
 
     public async Task ModifierCoupDePouceAsync(
-        int id, string nom, string description, int cout, int ordre)
+        int id, string nom, string description, int cout,
+        int quantiteMax, string restriction, int ordre)
     {
         var cp = await db.Inducements.FindAsync(id)
             ?? throw new InvalidOperationException("Coup de pouce introuvable.");
@@ -662,6 +666,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         cp.Nom = nom.Trim();
         cp.Description = description;
         cp.Cout = Math.Max(0, cout);
+        cp.QuantiteMax = Math.Max(0, quantiteMax);
+        cp.Restriction = restriction?.Trim() ?? "";
         cp.Ordre = ordre;
         await db.SaveChangesAsync();
     }

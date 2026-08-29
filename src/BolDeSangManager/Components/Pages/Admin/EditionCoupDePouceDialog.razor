@@ -19,6 +19,15 @@
                          Margin="Margin.Dense" Class="mt-3" Min="0" Step="10000"
                          HelperText="0 si le coût est variable." />
 
+        @* « 0-3 » du livre : nombre maximal d'exemplaires par match. *@
+        <MudNumericField @bind-Value="_quantiteMax" Label="Quantité max par match" Variant="Variant.Outlined"
+                         Margin="Margin.Dense" Class="mt-3" Min="0" Max="20"
+                         HelperText="0 si non précisé." />
+
+        <MudTextField @bind-Value="_restriction" Label="Restriction" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="mt-3"
+                      HelperText="Équipes concernées ou tarif particulier. Vide = accessible à toutes." />
+
         <MudNumericField @bind-Value="_ordre" Label="Ordre d'affichage" Variant="Variant.Outlined"
                          Margin="Margin.Dense" Class="mt-3" />
     </DialogContent>
@@ -39,6 +48,8 @@
     string _nom = "";
     string _description = "";
     int _cout;
+    int _quantiteMax;
+    string _restriction = "";
     int _ordre;
 
     protected override void OnInitialized()
@@ -48,6 +59,8 @@
         _nom = Existant.Nom;
         _description = Existant.Description;
         _cout = Existant.Cout;
+        _quantiteMax = Existant.QuantiteMax;
+        _restriction = Existant.Restriction;
         _ordre = Existant.Ordre;
     }
 
@@ -56,9 +69,9 @@
         try
         {
             if (Existant is null)
-                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _ordre);
+                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _quantiteMax, _restriction, _ordre);
             else
-                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _ordre);
+                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _quantiteMax, _restriction, _ordre);
 
             Dialog.Close(DialogResult.Ok(true));
         }

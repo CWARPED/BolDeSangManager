@@ -46,6 +46,7 @@ public static class DbSeeder
         // descriptives pour toujours. On les complète ici, une seule fois.
         await ActiverComportementsAutomatiquesAsync(db, logger);
         await SeedLiguesThematiquesAsync(db, logger);
+        await SeedCoupsDePouceEtStarPlayersAsync(db, logger);
 
         await SeedAdminUserAsync(userManager, config);
     }
@@ -178,6 +179,150 @@ public static class DbSeeder
             logger.LogInformation(
                 "Ligues thématiques : {Creees} ligue(s) créée(s), {Rattachees} rattachement(s)",
                 creees, rattachees);
+        }
+    }
+
+    /// <summary>
+    /// Renomme les ligues en français, ajoute celles qui manquent, puis seede
+    /// les coups de pouce et les star players (LRB Saison 3).
+    ///
+    /// ⚠️ Le catalogue de ligues avait été bâti depuis l'ancien champ texte, qui
+    /// portait des identifiants anglais (« OldWorldClassic »). Les star players
+    /// citent les noms français : sans renommage on créerait des doublons et
+    /// aucun star player ne serait rattaché aux races existantes. On renomme
+    /// donc les entrées en place — les rattachements de races pointent sur des
+    /// identifiants, ils survivent au renommage.
+    ///
+    /// Idempotent : ne crée que ce qui manque, ne réécrit jamais une fiche que
+    /// le commissaire aurait modifiée à la main.
+    /// </summary>
+    private static async Task SeedCoupsDePouceEtStarPlayersAsync(
+        ApplicationDbContext db, ILogger logger)
+    {
+        // Versions Blood Bowl ayant déjà des règles spéciales : celles où le
+        // catalogue a du sens.
+        var versions = await db.SpecialRules
+            .Select(r => r.RulesVersionId)
+            .Distinct()
+            .ToListAsync();
+
+        foreach (var versionId in versions)
+        {
+            // ── 1. Ligues : renommage anglais → français ────────────────────
+            var ligues = await db.ThemedLeagues
+                .Where(l => l.RulesVersionId == versionId)
+                .ToListAsync();
+
+            var renommees = 0;
+            foreach (var (anglais, francais) in InducementSeedData.Renommages)
+            {
+                var ligue = ligues.FirstOrDefault(l =>
+                    string.Equals(l.Nom, anglais, StringComparison.OrdinalIgnoreCase));
+
+                // Ne pas écraser si le nom français existe déjà par ailleurs.
+                if (ligue is null) continue;
+                if (ligues.Any(l => string.Equals(l.Nom, francais, StringComparison.OrdinalIgnoreCase))) continue;
+
+                ligue.Nom = francais;
+                renommees++;
+            }
+            if (renommees > 0) await db.SaveChangesAsync();
+
+            // ── 2. Ligues manquantes ────────────────────────────────────────
+            foreach (var nom in InducementSeedData.LiguesAAjouter)
+            {
+                if (ligues.Any(l => string.Equals(l.Nom, nom, StringComparison.OrdinalIgnoreCase))) continue;
+
+                var ligue = new ThemedLeague { RulesVersionId = versionId, Nom = nom };
+                db.ThemedLeagues.Add(ligue);
+                await db.SaveChangesAsync();
+                ligues.Add(ligue);
+            }
+
+            // ── 3. Coups de pouce ───────────────────────────────────────────
+            var cpExistants = await db.Inducements
+                .Where(i => i.RulesVersionId == versionId)
+                .Select(i => i.Nom)
+                .ToListAsync();
+
+            var cpCrees = 0;
+            var ordre = 0;
+            foreach (var (nom, cout, qte, restriction, description) in InducementSeedData.CoupsDePouce)
+            {
+                ordre++;
+                if (cpExistants.Any(n => string.Equals(n, nom, StringComparison.OrdinalIgnoreCase))) continue;
+
+                db.Inducements.Add(new Inducement
+                {
+                    RulesVersionId = versionId,
+                    Nom = nom,
+                    Cout = cout,
+                    QuantiteMax = qte,
+                    Restriction = restriction,
+                    Description = description,
+                    Ordre = ordre
+                });
+                cpCrees++;
+            }
+            if (cpCrees > 0) await db.SaveChangesAsync();
+
+            // ── 4. Star players ─────────────────────────────────────────────
+            var spExistants = await db.StarPlayers
+                .Where(s => s.RulesVersionId == versionId)
+                .Select(s => s.Nom)
+                .ToListAsync();
+
+            var spCrees = 0;
+            ordre = 0;
+            foreach (var star in InducementSeedData.StarPlayers)
+            {
+                ordre++;
+                if (spExistants.Any(n => string.Equals(n, star.Nom, StringComparison.OrdinalIgnoreCase))) continue;
+
+                var entite = new StarPlayer
+                {
+                    RulesVersionId = versionId,
+                    Nom = star.Nom,
+                    Cout = star.Cout,
+                    Mouvement = star.M,
+                    Force = star.F,
+                    Agilite = star.AG,
+                    CapacitePasse = star.CP,
+                    Armure = star.AR,
+                    Competences = star.Competences,
+                    ReglesSpeciales = star.ReglesSpeciales,
+                    Ordre = ordre
+                };
+                db.StarPlayers.Add(entite);
+                await db.SaveChangesAsync();   // besoin de l'Id pour les liaisons
+
+                // Ligues : aucune = accessible à toutes les équipes.
+                foreach (var nomLigue in star.Ligues)
+                {
+                    var ligue = ligues.FirstOrDefault(l =>
+                        string.Equals(l.Nom, nomLigue, StringComparison.OrdinalIgnoreCase));
+
+                    if (ligue is null)
+                    {
+                        logger.LogWarning(
+                            "Star player « {Star} » : ligue « {Ligue} » introuvable au catalogue",
+                            star.Nom, nomLigue);
+                        continue;
+                    }
+
+                    db.Set<StarPlayerThemedLeague>().Add(new StarPlayerThemedLeague
+                    {
+                        StarPlayerId = entite.Id, ThemedLeagueId = ligue.Id
+                    });
+                }
+                spCrees++;
+            }
+            if (spCrees > 0) await db.SaveChangesAsync();
+
+            if (renommees > 0 || cpCrees > 0 || spCrees > 0)
+                logger.LogInformation(
+                    "Version {Version} : {Renom} ligue(s) renommée(s), {Cp} coup(s) de pouce, {Sp} star player(s)",
+                    versionId, renommees, cpCrees, spCrees);
         }
     }
 

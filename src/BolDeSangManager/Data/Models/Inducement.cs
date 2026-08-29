@@ -28,6 +28,19 @@ public class Inducement
     /// <summary>Coût en pièces d'or. 0 = variable ou non chiffré.</summary>
     public int Cout { get; set; }
 
+    /// <summary>
+    /// Nombre maximal d'exemplaires achetables par match (le « 3 » de « 0-3 »).
+    /// 0 = non précisé.
+    /// </summary>
+    public int QuantiteMax { get; set; }
+
+    /// <summary>
+    /// Équipes concernées quand le coup de pouce est restreint
+    /// (« Maîtres de la Non-vie seulement »). Vide = accessible à toutes.
+    /// Informatif : aucune vérification n'est faite.
+    /// </summary>
+    public string Restriction { get; set; } = string.Empty;
+
     /// <summary>Ordre d'affichage, comme pour les règles spéciales.</summary>
     public int Ordre { get; set; }
 }
