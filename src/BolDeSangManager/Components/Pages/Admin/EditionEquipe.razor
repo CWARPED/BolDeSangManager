@@ -25,14 +25,23 @@
     {
         <MudPaper Class="pa-4 mb-3" Elevation="1">
             <MudGrid>
-                <MudItem xs="12" sm="6"><MudTextField @bind-Value="_team.Nom" Label="Nom" Variant="Variant.Outlined" /></MudItem>
+                @* Enregistrement à la volée : chaque champ est écrit en base dès
+                   qu'il change (sortie de champ pour le texte, sélection pour la
+                   liste). Pas de bouton « Sauvegarder » sur une fiche existante.
+                   En création il n'y a pas encore de ligne à modifier, donc on
+                   garde un bouton « Créer » explicite. *@
+                <MudItem xs="12" sm="6">
+                    <MudTextField T="string" Value="@_team.Nom" ValueChanged="DefinirNom"
+                                  Label="Nom" Variant="Variant.Outlined" />
+                </MudItem>
                 <MudItem xs="6" sm="3">
                     @* Catégorie officielle LRB (p.94), purement informative.
                        0 = non renseignée : les commissaires font la passe de saisie.
                        Placeholder : sans lui MudBlazor ne fait pas remonter le
                        libellé quand la valeur vaut le défaut du type (0), et le
                        libellé se superpose au texte affiché. *@
-                    <MudSelect T="int" @bind-Value="_team.Categorie" Label="Catégorie (LRB)"
+                    <MudSelect T="int" Value="@_team.Categorie" ValueChanged="DefinirCategorie"
+                               Label="Catégorie (LRB)"
                                Variant="Variant.Outlined" Placeholder=" ">
                         <MudSelectItem Value="0">Non renseignée</MudSelectItem>
                         <MudSelectItem Value="1">1 — les plus performantes</MudSelectItem>
@@ -41,8 +50,14 @@
                         <MudSelectItem Value="4">4 — les plus faibles</MudSelectItem>
                     </MudSelect>
                 </MudItem>
-                <MudItem xs="6" sm="3"><MudNumericField @bind-Value="_team.CoutRelance" Label="Coût relance" Variant="Variant.Outlined" /></MudItem>
-                <MudItem xs="12"><MudTextField @bind-Value="_team.ReglesSpeciales" Label="Règles spéciales (texte libre)" Variant="Variant.Outlined" Lines="2" /></MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int" Value="@_team.CoutRelance" ValueChanged="DefinirCoutRelance"
+                                     Label="Coût relance" Variant="Variant.Outlined" />
+                </MudItem>
+                <MudItem xs="12">
+                    <MudTextField T="string" Value="@_team.ReglesSpeciales" ValueChanged="DefinirReglesTexte"
+                                  Label="Règles spéciales (texte libre)" Variant="Variant.Outlined" Lines="2" />
+                </MudItem>
                 @* Ligues thématiques : rattachement par CATALOGUE (onglet
                    « Ligues » des données) et non plus en texte libre — une
                    faute de frappe rendait un star player introuvable. *@
@@ -64,11 +79,14 @@
                         </MudText>
                     }
                 </MudItem>
-                <MudItem xs="12">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SauvegarderEquipe">
-                        Sauvegarder
-                    </MudButton>
-                </MudItem>
+                @if (IsNew)
+                {
+                    <MudItem xs="12">
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SauvegarderEquipe">
+                            Créer
+                        </MudButton>
+                    </MudItem>
+                }
             </MudGrid>
         </MudPaper>
 
@@ -436,6 +454,57 @@
         {
             await DataEditService.DefinirLimiteApresMatchAsync(_team.Id, regle.Id, limite);
             await ChargerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    // ── Enregistrement à la volée ───────────────────────────────────────────
+    // La fiche n'a plus de bouton « Sauvegarder » : chaque champ écrit en base
+    // dès qu'il change. En création (IsNew) il n'y a pas encore de ligne à
+    // modifier, on se contente donc de mettre à jour la copie locale ; c'est le
+    // bouton « Créer » qui l'insère.
+
+    async Task DefinirNom(string valeur)
+    {
+        if (_team is null) return;
+        _team.Nom = valeur;
+        await EnregistrerFicheAsync();
+    }
+
+    async Task DefinirCategorie(int valeur)
+    {
+        if (_team is null) return;
+        _team.Categorie = valeur;
+        await EnregistrerFicheAsync();
+    }
+
+    async Task DefinirCoutRelance(int valeur)
+    {
+        if (_team is null) return;
+        _team.CoutRelance = valeur;
+        await EnregistrerFicheAsync();
+    }
+
+    async Task DefinirReglesTexte(string valeur)
+    {
+        if (_team is null) return;
+        _team.ReglesSpeciales = valeur;
+        await EnregistrerFicheAsync();
+    }
+
+    /// <summary>
+    /// Écrit l'état courant de la fiche. Sans effet tant que l'équipe n'existe
+    /// pas encore en base.
+    /// </summary>
+    async Task EnregistrerFicheAsync()
+    {
+        if (_team is null || IsNew) return;
+        try
+        {
+            await DataEditService.ModifierTeamTypeAsync(_team.Id, _team.Nom, _team.Categorie, _team.CoutRelance, _team.ReglesSpeciales, _team.LiguesTexteObsolete);
         }
         catch (Exception ex)
         {
