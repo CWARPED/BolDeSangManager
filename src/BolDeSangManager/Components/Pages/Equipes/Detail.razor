@@ -337,6 +337,31 @@ else
             </MudGrid>
         </MudTabPanel>
     </MudTabs>
+
+    @* Fiche d'une compétence, ouverte au clic sur son nom. Un attribut `title`
+       ne répondrait qu'au survol souris : inaccessible au doigt. *@
+    @if (_competenceAffichee is { } comp)
+    {
+        <div class="skill-overlay-backdrop" @onclick="FermerCompetence">
+            <div @onclick:stopPropagation="true">
+                <MudPaper Class="skill-overlay-card" Elevation="8">
+                    <div class="skill-overlay-head">
+                        <MudText Typo="Typo.h6"><b>@comp.Nom</b></MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       OnClick="FermerCompetence" aria-label="Fermer" />
+                    </div>
+                    @if (comp.EstTrait || comp.EstElite)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2 d-block">
+                            @(comp.EstTrait ? "Trait" : null)@(comp.EstTrait && comp.EstElite ? " · " : null)@(comp.EstElite ? "Élite" : null)
+                        </MudText>
+                    }
+                    <MudText Typo="Typo.body2" Class="skill-overlay-desc">@comp.Description</MudText>
+                    <MudText Typo="Typo.caption" Class="skill-overlay-hint">Touchez à côté pour fermer</MudText>
+                </MudPaper>
+            </div>
+        </div>
+    }
 }
 
 @code {
@@ -498,7 +523,14 @@ else
         return parts.Count > 0 ? $"({string.Join(", ", parts)})" : "";
     }
 
-    static RenderFragment CompetencesJoueur(TeamPlayer j) => builder =>
+    /// <summary>
+    /// Noms de compétences cliquables. On n'utilise PAS l'attribut `title` :
+    /// il ne répond qu'au survol souris, donc l'explication était inaccessible
+    /// sur téléphone — or c'est là que les coaches consultent leur feuille
+    /// pendant un tournoi. Un clic ouvre la fiche, comme sur l'écran de choix
+    /// de race qui règle déjà le problème de cette façon.
+    /// </summary>
+    RenderFragment CompetencesJoueur(TeamPlayer j) => builder =>
     {
         var skills = (j.PlayerPosition?.CompetencesDepart.Select(c => c.Skill) ?? [])
             .Concat(j.Competences.Where(c => !c.EstCompetenceDepart).Select(c => c.Skill))
@@ -507,15 +539,21 @@ else
             .ToList();
         for (int i = 0; i < skills.Count; i++)
         {
+            var sk = skills[i];
             builder.OpenElement(0, "span");
-            builder.AddAttribute(1, "title", skills[i].Description ?? "");
-            builder.AddAttribute(2, "style", "cursor:help; border-bottom:1px dotted #aaa");
-            builder.AddContent(3, skills[i].Nom);
+            builder.AddAttribute(1, "class", "skill-link");
+            builder.AddAttribute(2, "onclick",
+                EventCallback.Factory.Create<MouseEventArgs>(this, () => OuvrirCompetence(sk)));
+            builder.AddContent(3, sk.Nom);
             builder.CloseElement();
             if (i < skills.Count - 1)
                 builder.AddMarkupContent(4, ", ");
         }
     };
+
+    Skill? _competenceAffichee;
+    void OuvrirCompetence(Skill s) => _competenceAffichee = s;
+    void FermerCompetence() => _competenceAffichee = null;
 
     IEnumerable<(string, string)> StaffItems()
     {

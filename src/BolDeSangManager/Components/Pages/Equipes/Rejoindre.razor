@@ -70,9 +70,12 @@ else
                                 <div class="mt-1">
                                     @foreach (var l in tt.ReglesSpecialesListe.OrderBy(x => x.SpecialRule.Ordre))
                                     {
+                                        @* Clic plutôt que `title` : au doigt, un survol
+                                           n'existe pas. Réutilise le panneau de la page. *@
+                                        var regle = l.SpecialRule;
                                         <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
-                                                 Class="ma-0 mr-1"
-                                                 title="@l.SpecialRule.Description">@l.SpecialRule.Nom</MudChip>
+                                                 Class="ma-0 mr-1 skill-link"
+                                                 OnClick="@(() => OuvrirRegle(regle))">@regle.Nom</MudChip>
                                     }
                                 </div>
                             }
@@ -234,7 +237,29 @@ else
                                 @(comp.EstTrait ? "Trait" : null)@(comp.EstTrait && comp.EstElite ? " · " : null)@(comp.EstElite ? "Élite" : null)
                             </MudText>
                         }
-                        <MudText Typo="Typo.body2">@comp.Description</MudText>
+                        <MudText Typo="Typo.body2" Class="skill-overlay-desc">@comp.Description</MudText>
+                        <MudText Typo="Typo.caption" Class="skill-overlay-hint">Touchez à côté pour fermer</MudText>
+                    </MudPaper>
+                </div>
+            </div>
+        }
+
+        @* Même panneau pour une règle spéciale de la race. *@
+        @if (_regleAffichee is { } regleAff)
+        {
+            <div class="skill-overlay-backdrop" @onclick="FermerCompetence">
+                <div class="skill-overlay-stop" @onclick="StopProp" @onclick:stopPropagation="true">
+                    <MudPaper Class="skill-overlay-card" Elevation="8">
+                        <div class="skill-overlay-head">
+                            <MudText Typo="Typo.h6"><b>@regleAff.Nom</b></MudText>
+                            <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                           OnClick="FermerCompetence" aria-label="Fermer" />
+                        </div>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2 d-block">
+                            Règle spéciale d'équipe
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="skill-overlay-desc">@regleAff.Description</MudText>
+                        <MudText Typo="Typo.caption" Class="skill-overlay-hint">Touchez à côté pour fermer</MudText>
                     </MudPaper>
                 </div>
             </div>
@@ -475,8 +500,15 @@ else
 
     Skill? _competenceAffichee;
     void OuvrirCompetence(Skill s) => _competenceAffichee = s;
-    void FermerCompetence() => _competenceAffichee = null;
+    void FermerCompetence() { _competenceAffichee = null; _regleAffichee = null; }
     void StopProp() { }
+
+    /// <summary>
+    /// Règle spéciale affichée dans le même panneau que les compétences : même
+    /// besoin (lire un texte long au doigt), donc même présentation.
+    /// </summary>
+    SpecialRule? _regleAffichee;
+    void OuvrirRegle(SpecialRule r) => _regleAffichee = r;
 
     // Carte d'un poste (réutilisée dans les cadres de mots-clés et la liste classique).
     RenderFragment<PlayerPosition> PosteCard => pos =>
