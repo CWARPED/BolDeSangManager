@@ -45,7 +45,7 @@ public static class DbSeeder
         // existent déjà en base sans Code ni mot-clé : elles resteraient
         // descriptives pour toujours. On les complète ici, une seule fois.
         await ActiverComportementsAutomatiquesAsync(db, logger);
-        await SeedLiguesThematiquesAsync(db, logger);
+        await NettoyerLiguesAnglaisesAsync(db, logger);
         await SeedCoupsDePouceEtStarPlayersAsync(db, logger);
 
         await SeedAdminUserAsync(userManager, config);
@@ -117,69 +117,36 @@ public static class DbSeeder
     }
 
     /// <summary>
-    /// Construit le catalogue de ligues thématiques à partir de l'ancienne
-    /// saisie en texte libre (colonne « ReglesSpecialesLigue »), puis rattache
-    /// chaque race aux ligues correspondantes.
+    /// Supprime les ligues portant encore un identifiant ANGLAIS
+    /// (« OldWorldClassic »), doublons de leur équivalent français.
     ///
-    /// Sans ce backfill, la fonctionnalité arriverait INERTE sur une base en
-    /// service : les 60 races déjà renseignées perdraient leurs ligues et le
-    /// commissaire devrait tout ressaisir.
+    /// ⚠️ Le premier backfill construisait le catalogue depuis l'ancien champ
+    /// texte de la fiche de race. Rejoué à chaque démarrage, il recréait les
+    /// entrées anglaises juste après leur renommage : la version 1 est passée
+    /// de 15 à 25 ligues, chaque race étant rattachée DEUX FOIS à la même
+    /// ligue sous deux noms. Le backfill est donc retiré (l'utilisateur a
+    /// confirmé que l'ancienne saisie ne sert plus) et ce nettoyage rattrape
+    /// les bases déjà polluées.
     ///
-    /// Idempotent : ne crée que ce qui manque, ne touche pas aux rattachements
-    /// faits à la main depuis l'écran d'administration.
+    /// Les rattachements de races partent en cascade avec la ligue supprimée ;
+    /// l'équivalent français porte déjà les mêmes, rien n'est perdu.
     /// </summary>
-    private static async Task SeedLiguesThematiquesAsync(
+    private static async Task NettoyerLiguesAnglaisesAsync(
         ApplicationDbContext db, ILogger logger)
     {
-        var races = await db.TeamTypes
-            .Include(t => t.LiguesListe)
-            .Where(t => t.LiguesTexteObsolete != "")
+        var anglais = InducementSeedData.Renommages.Select(r => r.Anglais).ToList();
+
+        var aSupprimer = await db.ThemedLeagues
+            .Where(l => anglais.Contains(l.Nom))
             .ToListAsync();
 
-        if (races.Count == 0) return;
+        if (aSupprimer.Count == 0) return;
 
-        var catalogue = await db.ThemedLeagues.ToListAsync();
-        var creees = 0;
-        var rattachees = 0;
+        db.ThemedLeagues.RemoveRange(aSupprimer);
+        await db.SaveChangesAsync();
 
-        foreach (var race in races)
-        {
-            var noms = race.LiguesTexteObsolete
-                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-
-            foreach (var nom in noms)
-            {
-                var ligue = catalogue.FirstOrDefault(l =>
-                    l.RulesVersionId == race.RulesVersionId &&
-                    string.Equals(l.Nom, nom, StringComparison.OrdinalIgnoreCase));
-
-                if (ligue is null)
-                {
-                    ligue = new ThemedLeague { RulesVersionId = race.RulesVersionId, Nom = nom };
-                    db.ThemedLeagues.Add(ligue);
-                    await db.SaveChangesAsync();   // besoin de l'Id pour la liaison
-                    catalogue.Add(ligue);
-                    creees++;
-                }
-
-                if (race.LiguesListe.All(x => x.ThemedLeagueId != ligue.Id))
-                {
-                    db.Set<TeamTypeThemedLeague>().Add(new TeamTypeThemedLeague
-                    {
-                        TeamTypeId = race.Id, ThemedLeagueId = ligue.Id
-                    });
-                    rattachees++;
-                }
-            }
-        }
-
-        if (creees > 0 || rattachees > 0)
-        {
-            await db.SaveChangesAsync();
-            logger.LogInformation(
-                "Ligues thématiques : {Creees} ligue(s) créée(s), {Rattachees} rattachement(s)",
-                creees, rattachees);
-        }
+        logger.LogInformation(
+            "{Nb} ligue(s) en doublon anglais supprimée(s)", aSupprimer.Count);
     }
 
     /// <summary>
@@ -302,12 +269,20 @@ public static class DbSeeder
                     var ligue = ligues.FirstOrDefault(l =>
                         string.Equals(l.Nom, nomLigue, StringComparison.OrdinalIgnoreCase));
 
+                    // La ligue peut manquer sur une version dont le catalogue
+                    // n'a pas été bâti depuis l'ancien champ texte (constaté sur
+                    // la version 8 : 5 ligues seulement, d'où 25 liaisons au lieu
+                    // de 82). On la crée plutôt que de laisser le star player
+                    // orphelin — sinon il serait proposé à TOUTES les équipes,
+                    // exactement l'inverse de la restriction voulue.
                     if (ligue is null)
                     {
-                        logger.LogWarning(
-                            "Star player « {Star} » : ligue « {Ligue} » introuvable au catalogue",
-                            star.Nom, nomLigue);
-                        continue;
+                        ligue = new ThemedLeague { RulesVersionId = versionId, Nom = nomLigue };
+                        db.ThemedLeagues.Add(ligue);
+                        await db.SaveChangesAsync();
+                        ligues.Add(ligue);
+                        logger.LogInformation(
+                            "Ligue « {Ligue} » créée pour la version {Version}", nomLigue, versionId);
                     }
 
                     db.Set<StarPlayerThemedLeague>().Add(new StarPlayerThemedLeague

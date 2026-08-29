@@ -298,28 +298,28 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Ligues">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
-                    Ligues thématiques (Old World Classic, Badlands Brawl…). Rattachez-les
-                    aux équipes depuis leur fiche, et aux star players : c'est le
-                    recoupement des deux qui détermine qui peut engager qui.
-                </MudText>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_ligues.Count ligue(s)</b></MudText>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           Size="Size.Small" OnClick="AjouterLigue">Ajouter</MudButton>
+                           OnClick="AjouterLigue">Ajouter une ligue</MudButton>
             </MudStack>
+            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)" Class="mb-3 d-block">
+                Rattachez-les aux équipes depuis leur fiche, et aux star players :
+                c'est le recoupement des deux qui détermine qui peut engager qui.
+            </MudText>
 
             <MudTable Items="@_ligues" Dense="true" Hover="true">
                 <HeaderContent>
-                    <MudTh>Ligue</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<ThemedLeague,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
                     <MudTh Style="width:1%; white-space:nowrap">Équipes</MudTh>
                     <MudTh Style="width:1%; white-space:nowrap">Stars</MudTh>
-                    <MudTh Style="width:1%; white-space:nowrap"></MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Ligue">@context.Nom</MudTd>
+                    <MudTd DataLabel="Nom">@context.Nom</MudTd>
                     <MudTd DataLabel="Équipes" Style="white-space:nowrap">@context.Equipes.Count</MudTd>
                     <MudTd DataLabel="Stars" Style="white-space:nowrap">@context.StarPlayers.Count</MudTd>
-                    <MudTd Style="white-space:nowrap">
+                    <MudTd DataLabel="Actions" Style="white-space:nowrap">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => ModifierLigue(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -336,25 +336,25 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Coups de pouce">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
-                    Options achetées avant un match pour compenser un écart de valeur.
-                    Purement informatif : l'application les imprime sur la feuille, les
-                    coaches s'arrangent à la table.
-                </MudText>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_coupsDePouce.Count coup(s) de pouce</b></MudText>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           Size="Size.Small" OnClick="AjouterCoupDePouce">Ajouter</MudButton>
+                           OnClick="AjouterCoupDePouce">Ajouter un coup de pouce</MudButton>
             </MudStack>
+            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)" Class="mb-3 d-block">
+                Options achetées avant un match pour compenser un écart de valeur.
+                L'application les imprime sur la feuille ; les coaches s'arrangent à la table.
+            </MudText>
 
-            <MudTable Items="@_coupsDePouce" Dense="true" Hover="true">
+            <MudTable Items="@_coupsDePouce" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
                 <HeaderContent>
-                    <MudTh>Coup de pouce</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Inducement,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
                     <MudTh Style="width:1%; white-space:nowrap">Max</MudTh>
-                    <MudTh Style="width:1%; white-space:nowrap">Coût</MudTh>
-                    <MudTh Style="width:1%; white-space:nowrap"></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<Inducement,object>(x => x.Cout)">Coût</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Coup de pouce">
+                    <MudTd DataLabel="Nom">
                         <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
                         @if (!string.IsNullOrWhiteSpace(context.Description))
                         {
@@ -369,9 +369,9 @@
                         @(context.QuantiteMax > 0 ? $"0-{context.QuantiteMax}" : "—")
                     </MudTd>
                     <MudTd DataLabel="Coût" Style="white-space:nowrap">
-                        @(context.Cout > 0 ? $"{context.Cout / 1000} k" : "variable")
+                        @(context.Cout > 0 ? context.Cout.ToString("N0") + " po" : "variable")
                     </MudTd>
-                    <MudTd Style="white-space:nowrap">
+                    <MudTd DataLabel="Actions" Style="white-space:nowrap">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => ModifierCoupDePouce(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -382,58 +382,85 @@
         </MudTabPanel>
 
         <MudTabPanel Text="Star players">
-            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
-                <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)">
-                    Mercenaires que l'on loue pour un match. Ils ne rejoignent jamais un
-                    effectif. Sans ligue renseignée, un star player est proposé à toutes
-                    les équipes.
-                </MudText>
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+                <MudText Typo="Typo.subtitle1"><b>@_starPlayers.Count star player(s)</b></MudText>
                 <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           Size="Size.Small" OnClick="AjouterStarPlayer">Ajouter</MudButton>
+                           OnClick="AjouterStarPlayer">Ajouter un star player</MudButton>
             </MudStack>
+            <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)" Class="mb-3 d-block">
+                Mercenaires loués pour un match : ils ne rejoignent jamais un effectif.
+                Sans ligue, un star player est proposé à toutes les équipes.
+            </MudText>
 
-            <MudTable Items="@_starPlayers" Dense="true" Hover="true">
+            <MudTable Items="@_starPlayers" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
                 <HeaderContent>
-                    <MudTh>Star player</MudTh>
-                    <MudTh Style="width:1%; white-space:nowrap">M F AG CP AR</MudTh>
-                    <MudTh Style="width:1%; white-space:nowrap">Coût</MudTh>
-                    <MudTh Style="width:1%; white-space:nowrap"></MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StarPlayer,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">M</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">F</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">AG</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">CP</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">AR</MudTh>
+                    <MudTh><MudTableSortLabel SortBy="new Func<StarPlayer,object>(x => x.Cout)">Coût</MudTableSortLabel></MudTh>
+                    <MudTh>Ligues</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
-                    <MudTd DataLabel="Star player">
+                    <MudTd DataLabel="Nom">
                         <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
                         @if (!string.IsNullOrWhiteSpace(context.Competences))
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.Competences</MudText>
                         }
-                        @if (!string.IsNullOrWhiteSpace(context.ReglesSpeciales))
+                    </MudTd>
+                    <MudTd DataLabel="M" Style="white-space:nowrap">@context.Mouvement</MudTd>
+                    <MudTd DataLabel="F" Style="white-space:nowrap">@context.Force</MudTd>
+                    <MudTd DataLabel="AG" Style="white-space:nowrap">@context.Agilite</MudTd>
+                    <MudTd DataLabel="CP" Style="white-space:nowrap">@context.CapacitePasse</MudTd>
+                    <MudTd DataLabel="AR" Style="white-space:nowrap">@context.Armure</MudTd>
+                    <MudTd DataLabel="Coût" Style="white-space:nowrap">
+                        @(context.Cout > 0 ? context.Cout.ToString("N0") + " po" : "—")
+                    </MudTd>
+                    <MudTd DataLabel="Ligues">
+                        @* Pastilles plutot qu'une ligne de texte : c'est le critere
+                           qui decide de la disponibilite, il doit se reperer vite. *@
+                        @if (context.Ligues.Count == 0)
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block">@context.ReglesSpeciales</MudText>
+                            <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">Toutes</MudChip>
                         }
-                        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
-                            @if (context.Ligues.Count == 0)
+                        else
+                        {
+                            @foreach (var l in context.Ligues)
                             {
-                                <span>Toutes ligues</span>
+                                var nom = _ligues.FirstOrDefault(x => x.Id == l.ThemedLeagueId)?.Nom;
+                                if (nom is not null)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">@nom</MudChip>
+                                }
                             }
-                            else
-                            {
-                                @string.Join(", ", context.Ligues
-                                    .Select(l => _ligues.FirstOrDefault(x => x.Id == l.ThemedLeagueId)?.Nom)
-                                    .Where(n => n is not null))
-                            }
-                        </MudText>
+                        }
                     </MudTd>
-                    <MudTd DataLabel="Stats" Style="white-space:nowrap">
-                        @context.Mouvement @context.Force @context.Agilite @context.CapacitePasse @context.Armure
-                    </MudTd>
-                    <MudTd DataLabel="Coût" Style="white-space:nowrap">@(context.Cout / 1000) k</MudTd>
-                    <MudTd Style="white-space:nowrap">
+                    <MudTd DataLabel="Actions" Style="white-space:nowrap">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => ModifierStarPlayer(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
                                        OnClick="@(() => SupprimerStarPlayer(context))" />
                     </MudTd>
                 </RowTemplate>
+                <ChildRowContent>
+                    @* Regle speciale sur sa propre ligne : c'est un texte de regles,
+                       il lui faut toute la largeur pour rester lisible. *@
+                    @if (!string.IsNullOrWhiteSpace(context.ReglesSpeciales))
+                    {
+                        <tr class="mud-table-row">
+                            <td colspan="9" style="padding-top:0; padding-bottom:8px">
+                                <MudText Typo="Typo.caption" Color="Color.Warning">@context.ReglesSpeciales</MudText>
+                            </td>
+                        </tr>
+                    }
+                </ChildRowContent>
+                <PagerContent>
+                    <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
+                </PagerContent>
             </MudTable>
         </MudTabPanel>
 
