@@ -234,10 +234,16 @@
 
             <MudTable Items="@_reglesSpeciales" Dense="true" Hover="true">
                 <HeaderContent>
+                    @* Les trois colonnes de droite ne contiennent qu'un badge, un
+                       nombre et deux icônes : on les serre au strict nécessaire
+                       pour laisser toute la largeur restante à la description,
+                       qui est le contenu réellement long de ce tableau.
+                       « Effet » plutôt que « Comportement automatique » : c'est
+                       le TITRE qui fixait la largeur minimale de la colonne. *@
                     <MudTh>Règle</MudTh>
-                    <MudTh Style="width:14%">Comportement</MudTh>
-                    <MudTh Style="width:10%">Équipes</MudTh>
-                    <MudTh Style="width:10%">Actions</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Effet</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Équipes</MudTh>
+                    <MudTh Style="width:1%; white-space:nowrap">Actions</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     @* Nom et effet dans la MÊME cellule : en colonne séparée, la
@@ -248,18 +254,23 @@
                             @context.Description
                         </MudText>
                     </MudTd>
-                    <MudTd DataLabel="Comportement">
+                    <MudTd DataLabel="Effet" Style="white-space:nowrap">
                         @if (string.IsNullOrEmpty(context.Code))
                         {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">descriptive</MudChip>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">aucun</MudChip>
                         }
                         else
                         {
-                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@context.Code</MudChip>
+                            @* Libellé lisible plutôt que le code technique :
+                               « RecrutementGratuitParMotCle » élargissait la
+                               colonne au détriment de la description. *@
+                            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                @LibelleEffet(context.Code)
+                            </MudChip>
                         }
                     </MudTd>
-                    <MudTd DataLabel="Équipes">@(context.TeamTypes?.Count ?? 0)</MudTd>
-                    <MudTd DataLabel="Actions">
+                    <MudTd DataLabel="Équipes" Style="white-space:nowrap">@(context.TeamTypes?.Count ?? 0)</MudTd>
+                    <MudTd DataLabel="Actions" Style="white-space:nowrap">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => EditerRegleSpeciale(context))" />
                         <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small" Color="Color.Error"
@@ -872,6 +883,18 @@
             Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error);
         }
     }
+
+    /// <summary>
+    /// Libellé court d'un comportement automatique. Le code technique est un
+    /// identifiant, pas un texte d'interface.
+    /// </summary>
+    static string LibelleEffet(string code) => code switch
+    {
+        SpecialRuleCodes.FavoriDe => "Dieu du Chaos",
+        SpecialRuleCodes.CoutNulParMotCle => "Coût nul (VEA)",
+        SpecialRuleCodes.RecrutementGratuitParMotCle => "Recrue gratuite",
+        _ => code
+    };
 
     // ── Export / import du catalogue de règles seul ──────────────────────────
     // Sert à porter les règles sur une instance DÉJÀ en service (le VPS) :
