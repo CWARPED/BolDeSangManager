@@ -420,14 +420,19 @@ public class PdfService
                     // d'équipe et décide à la table, l'application ne débite
                     // rien.
                     //
-                    // Tableau plutôt qu'une suite de paragraphes : la
-                    // description occupait une ligne à elle seule sous un titre
-                    // court, laissant la moitié droite de la feuille vide. En
-                    // colonnes, chiffres à gauche et texte à droite, la
-                    // description récupère toute la largeur restante.
+                    // ⚠️ PAS de tableau ici, contrairement aux joueurs et aux
+                    // star players. Un tableau enferme la description dans sa
+                    // colonne : avec les chiffres à gauche elle ne disposait
+                    // que de ~300 pt sur les 553 utiles, soit la moitié de la
+                    // page perdue. Les descriptions font jusqu'à 5 600
+                    // caractères — il leur faut TOUTE la largeur.
+                    //
+                    // D'où l'entête sur sa propre ligne (quantité, nom, coût,
+                    // restriction) puis la description en dessous, sur un item
+                    // pleine largeur.
                     if (coupsDePouce is { Count: > 0 })
                     {
-                        // Titre et tableau dans un SEUL item : sinon QuestPDF
+                        // Titre et contenu dans un SEUL item : sinon QuestPDF
                         // peut laisser le titre orphelin en bas de page.
                         col.Item().PaddingTop(14).Column(bloc =>
                         {
@@ -435,58 +440,33 @@ public class PdfService
                                 .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
                             bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
 
-                            bloc.Item().PaddingTop(4).Table(t =>
+                            foreach (var cp in coupsDePouce)
                             {
-                                t.ColumnsDefinition(cols =>
+                                // Ligne d'entête : tout ce qui est court et
+                                // chiffré, sur une seule ligne.
+                                bloc.Item().PaddingTop(6).Text(t =>
                                 {
-                                    cols.ConstantColumn(28);   // Max (« 0-3 »)
-                                    cols.RelativeColumn(3);    // Nom
-                                    cols.ConstantColumn(52);   // Coût
-                                    cols.RelativeColumn(8);    // Effet — le reste de la largeur
+                                    if (cp.QuantiteMax > 0)
+                                        t.Span($"0-{cp.QuantiteMax}  ")
+                                            .Bold().FontSize(8.5f).FontColor(Colors.Grey.Darken2);
+
+                                    t.Span(cp.Nom).Bold().FontSize(9);
+
+                                    t.Span(cp.Cout > 0 ? $"  —  {cp.Cout:N0} po" : "  —  prix variable")
+                                        .Bold().FontSize(8.5f).FontColor(Colors.Red.Darken2);
+
+                                    if (!string.IsNullOrWhiteSpace(cp.Restriction))
+                                        t.Span($"   ({cp.Restriction})")
+                                            .FontSize(7.5f).FontColor(Colors.Grey.Darken1).Italic();
                                 });
 
-                                t.Header(h =>
-                                {
-                                    foreach (var titre in new[] { "Max", "Coup de pouce", "Coût", "Effet" })
-                                    {
-                                        h.Cell()
-                                            .Background(Colors.Red.Darken2)
-                                            .BorderBottom(2).BorderColor(Colors.Red.Darken4)
-                                            .PaddingVertical(5).PaddingHorizontal(4)
-                                            .Text(titre).FontColor(Colors.White).Bold().FontSize(8);
-                                    }
-                                });
-
-                                var pair = false;
-                                foreach (var cp in coupsDePouce)
-                                {
-                                    var bg = pair ? Colors.Grey.Lighten3 : Colors.White;
-
-                                    Cell(t, bg, cp.QuantiteMax > 0 ? $"0-{cp.QuantiteMax}" : "—", center: true);
-                                    Cell(t, bg, cp.Nom);
-                                    Cell(t, bg, cp.Cout > 0 ? $"{cp.Cout / 1000} k" : "variable", center: true);
-
-                                    // Effet + restriction dans la MÊME cellule :
-                                    // une colonne dédiée à la restriction serait
-                                    // vide pour la majorité des lignes.
-                                    var cellule = t.Cell()
-                                        .Background(bg)
-                                        .BorderBottom(1f).BorderColor(Colors.Grey.Lighten1)
-                                        .PaddingVertical(4).PaddingHorizontal(4);
-
-                                    cellule.Text(txt =>
-                                    {
-                                        if (!string.IsNullOrWhiteSpace(cp.Description))
-                                            txt.Span(cp.Description).FontSize(7.5f);
-
-                                        if (!string.IsNullOrWhiteSpace(cp.Restriction))
-                                            txt.Span($"  ({cp.Restriction})")
-                                                .FontSize(7).FontColor(Colors.Grey.Darken2).Italic();
-                                    });
-
-                                    pair = !pair;
-                                }
-                            });
+                                // Description : item à part, donc pleine
+                                // largeur de la zone de texte.
+                                if (!string.IsNullOrWhiteSpace(cp.Description))
+                                    bloc.Item().PaddingTop(1).Text(cp.Description)
+                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3)
+                                        .LineHeight(1.25f);
+                            }
                         });
                     }
 
