@@ -59,8 +59,6 @@
             }
         </MudSelect>
 
-        <MudNumericField @bind-Value="_ordre" Label="Ordre d'affichage" Variant="Variant.Outlined"
-                         Margin="Margin.Dense" Class="mt-3" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Annuler">Annuler</MudButton>
@@ -88,7 +86,6 @@
     string _armure = "9+";
     string _competences = "";
     string _reglesSpeciales = "";
-    int _ordre;
 
     List<ThemedLeague> _catalogue = [];
     IEnumerable<int> _liguesSelectionnees = new HashSet<int>();
@@ -108,7 +105,6 @@
             _armure = Existant.Armure;
             _competences = Existant.Competences;
             _reglesSpeciales = Existant.ReglesSpeciales;
-            _ordre = Existant.Ordre;
             _liguesSelectionnees =
                 (await DataEditService.GetLiguesDuStarPlayerAsync(Existant.Id)).ToHashSet();
         }
@@ -128,8 +124,7 @@
                 CapacitePasse = _capacitePasse,
                 Armure = _armure,
                 Competences = _competences,
-                ReglesSpeciales = _reglesSpeciales,
-                Ordre = _ordre
+                ReglesSpeciales = _reglesSpeciales
             };
 
             var id = Existant?.Id ?? 0;

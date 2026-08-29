@@ -11,8 +11,6 @@
                               HelperText="Tel qu'il figure dans le livre de règles, ex. « Capitaine »" />
             </MudItem>
             <MudItem xs="12" sm="3">
-                <MudNumericField @bind-Value="_ordre" Label="Ordre" Variant="Variant.Outlined"
-                                 HelperText="Affichage" />
             </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="_description" Label="Description" Variant="Variant.Outlined"
@@ -87,7 +85,6 @@
     string _nom = "";
     string _description = "";
     string _code = "";
-    int _ordre;
 
     protected override void OnInitialized()
     {
@@ -96,7 +93,6 @@
             _nom = Existant.Nom;
             _description = Existant.Description;
             _code = Existant.Code;
-            _ordre = Existant.Ordre;
         }
     }
 
@@ -107,9 +103,9 @@
         try
         {
             if (Existant is null)
-                await DataEditService.CreerRegleSpecialeAsync(VersionId, _nom, _description, _code, _ordre);
+                await DataEditService.CreerRegleSpecialeAsync(VersionId, _nom, _description, _code);
             else
-                await DataEditService.ModifierRegleSpecialeAsync(Existant.Id, _nom, _description, _code, _ordre);
+                await DataEditService.ModifierRegleSpecialeAsync(Existant.Id, _nom, _description, _code, Existant.Ordre);
 
             Snackbar.Add("Règle spéciale sauvegardée", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));

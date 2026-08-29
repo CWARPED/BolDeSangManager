@@ -28,8 +28,6 @@
                       Margin="Margin.Dense" Class="mt-3"
                       HelperText="Équipes concernées ou tarif particulier. Vide = accessible à toutes." />
 
-        <MudNumericField @bind-Value="_ordre" Label="Ordre d'affichage" Variant="Variant.Outlined"
-                         Margin="Margin.Dense" Class="mt-3" />
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Annuler">Annuler</MudButton>
@@ -50,7 +48,6 @@
     int _cout;
     int _quantiteMax;
     string _restriction = "";
-    int _ordre;
 
     protected override void OnInitialized()
     {
@@ -61,7 +58,6 @@
         _cout = Existant.Cout;
         _quantiteMax = Existant.QuantiteMax;
         _restriction = Existant.Restriction;
-        _ordre = Existant.Ordre;
     }
 
     async Task Valider()
@@ -69,9 +65,9 @@
         try
         {
             if (Existant is null)
-                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _quantiteMax, _restriction, _ordre);
+                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _quantiteMax, _restriction);
             else
-                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _quantiteMax, _restriction, _ordre);
+                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _quantiteMax, _restriction, Existant.Ordre);
 
             Dialog.Close(DialogResult.Ok(true));
         }

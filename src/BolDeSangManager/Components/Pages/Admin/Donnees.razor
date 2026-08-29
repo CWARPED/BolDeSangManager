@@ -392,7 +392,7 @@
                 Sans ligue, un star player est proposé à toutes les équipes.
             </MudText>
 
-            <MudTable Items="@_starPlayers" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm">
+            <MudTable Items="@_starPlayers" Dense="true" Hover="true" Breakpoint="Breakpoint.Sm" Class="table-lignes-separees">
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<StarPlayer,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
                     <MudTh Style="width:1%; white-space:nowrap">M</MudTh>
@@ -410,6 +410,20 @@
                         @if (!string.IsNullOrWhiteSpace(context.Competences))
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.Competences</MudText>
+                        }
+                        @* Repliable et rattachee au NOM : le texte fait jusqu'a
+                           450 caracteres, l'afficher en entier noyait la ligne et
+                           on ne voyait plus a quel joueur il appartenait. *@
+                        @if (!string.IsNullOrWhiteSpace(context.ReglesSpeciales))
+                        {
+                            <div class="regle-star">
+                                <details>
+                                    <summary>@TitreRegleStar(context.ReglesSpeciales)</summary>
+                                    <MudText Typo="Typo.caption" Class="regle-star-texte">
+                                        @context.ReglesSpeciales
+                                    </MudText>
+                                </details>
+                            </div>
                         }
                     </MudTd>
                     <MudTd DataLabel="M" Style="white-space:nowrap">@context.Mouvement</MudTd>
@@ -446,18 +460,6 @@
                                        OnClick="@(() => SupprimerStarPlayer(context))" />
                     </MudTd>
                 </RowTemplate>
-                <ChildRowContent>
-                    @* Regle speciale sur sa propre ligne : c'est un texte de regles,
-                       il lui faut toute la largeur pour rester lisible. *@
-                    @if (!string.IsNullOrWhiteSpace(context.ReglesSpeciales))
-                    {
-                        <tr class="mud-table-row">
-                            <td colspan="9" style="padding-top:0; padding-bottom:8px">
-                                <MudText Typo="Typo.caption" Color="Color.Warning">@context.ReglesSpeciales</MudText>
-                            </td>
-                        </tr>
-                    }
-                </ChildRowContent>
                 <PagerContent>
                     <MudTablePager PageSizeOptions="new[] { 25, 50, 100 }" />
                 </PagerContent>
@@ -1310,6 +1312,16 @@
 
         await DataEditService.SupprimerCoupDePouceAsync(cp.Id);
         await ChargerDonneesAsync();
+    }
+
+    /// <summary>
+    /// Titre de la règle spéciale, seul, pour l'en-tête repliable : le texte
+    /// est stocké sous la forme « Titre : contenu ».
+    /// </summary>
+    static string TitreRegleStar(string regle)
+    {
+        var i = regle.IndexOf(" : ", StringComparison.Ordinal);
+        return i > 0 ? regle[..i] : regle;
     }
 
     // ── Star players ────────────────────────────────────────────────────────

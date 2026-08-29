@@ -680,6 +680,62 @@ h1:focus {
 }
 
 /* ------------------------------------------------------------
+   Règles spéciales des star players (page des données)
+   ------------------------------------------------------------
+   Les textes vont de 80 à 450 caractères. Affichés en entier et
+   en orange, ils noyaient la ligne et on ne voyait plus à quel
+   joueur ils appartenaient. Repliés sous le nom, avec un liseré
+   discret plutôt qu'une couleur d'alerte.
+   ------------------------------------------------------------ */
+.regle-star {
+    margin-top: 4px;
+    border-left: 2px solid var(--mud-palette-divider);
+    padding-left: 8px;
+}
+
+.regle-star summary {
+    cursor: pointer;
+    font-size: 0.75rem;
+    /* Gris clair : c'est une information, pas une alerte. */
+    color: var(--mud-palette-text-secondary);
+    list-style: none;
+}
+
+.regle-star summary::before {
+    content: "▸ ";
+    display: inline-block;
+    transition: transform 0.15s;
+}
+
+.regle-star details[open] summary::before {
+    content: "▾ ";
+}
+
+.regle-star summary:hover {
+    color: var(--mud-palette-text-primary);
+}
+
+.regle-star-texte {
+    display: block;
+    margin-top: 4px;
+    color: var(--mud-palette-text-secondary);
+    line-height: 1.45;
+}
+
+/* Séparation nette entre deux star players : les fiches font
+   plusieurs lignes de haut, sans trait on ne sait plus où
+   s'arrête un joueur. */
+.table-lignes-separees tbody tr:not(:last-child) > td {
+    border-bottom: 1px solid var(--mud-palette-divider);
+}
+
+.table-lignes-separees tbody tr > td {
+    padding-top: 10px;
+    padding-bottom: 10px;
+    vertical-align: top;
+}
+
+/* ------------------------------------------------------------
    Après-match — audit R9e (écran enfin auditable après avoir
    fabriqué un match en ValidationCompetences avec des joueurs
    à 6+ PSP).
