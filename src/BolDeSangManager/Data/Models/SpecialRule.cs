@@ -119,4 +119,13 @@ public class TeamTypeSpecialRule
     /// </list>
     /// </summary>
     public string OptionsChoix { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Nombre maximal de recrues offertes par phase d'après-match
+    /// (« Maîtres de la Non-Vie » : 1 dans le LRB). Configurable par race, une
+    /// future règle plus généreuse se réglant alors sans développement.
+    ///
+    /// 0 = pas de limite. Ignoré par les autres comportements.
+    /// </summary>
+    public int LimiteParApresMatch { get; set; } = 1;
 }

@@ -17,13 +17,15 @@ namespace BolDeSangManager.Tests;
 /// </summary>
 public class RecrutementGratuitTests
 {
-    private record Contexte(int EquipeId, int PosteTroisQuartId, int PosteAutreId);
+    private record Contexte(int EquipeId, int PosteTroisQuartId, int PosteAutreId,
+                            int MatchId, int DivisionId, int AdverseId);
 
     /// <summary>
     /// Équipe de Morts-Ambulants avec deux postes : un Trois-quart (éligible)
     /// et un Gros Bras (non éligible).
     /// </summary>
-    private static async Task<Contexte> SeedAsync(TestDbFactory factory, string? motCleVise)
+    private static async Task<Contexte> SeedAsync(TestDbFactory factory, string? motCleVise,
+                                                  int limite = 1, int tresorerie = 0)
     {
         using var db = factory.CreateContext();
 
@@ -66,19 +68,39 @@ public class RecrutementGratuitTests
 
             db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
             {
-                TeamTypeId = tt.Id, SpecialRuleId = regle.Id, OptionsChoix = motCleVise
+                TeamTypeId = tt.Id, SpecialRuleId = regle.Id, OptionsChoix = motCleVise,
+                LimiteParApresMatch = limite
             });
         }
 
         var equipe = new Team
         {
             Nom = "Les Marcheurs", CoachId = coach.Id, LeagueId = ligue.Id,
-            TeamTypeId = tt.Id, Tresorerie = 0   // trésorerie VIDE : c'est tout l'enjeu
+            TeamTypeId = tt.Id, Tresorerie = tresorerie   // vide par défaut : c'est tout l'enjeu
         };
-        db.Teams.Add(equipe);
+        var adverse = new Team
+        {
+            Nom = "Adversaire", CoachId = coach.Id, LeagueId = ligue.Id, TeamTypeId = tt.Id
+        };
+        db.Teams.AddRange(equipe, adverse);
         await db.SaveChangesAsync();
 
-        return new Contexte(equipe.Id, troisQuart.Id, autre.Id);
+        // Un match réel : le droit à la recrue offerte est rattaché AU MATCH,
+        // il se renouvelle donc à chaque après-match.
+        var division = new Division { Nom = "Division Unique", LeagueId = ligue.Id };
+        db.Divisions.Add(division);
+        await db.SaveChangesAsync();
+
+        var match = new Match
+        {
+            DivisionId = division.Id, Ronde = 1,
+            EquipeDomicileId = equipe.Id, EquipeExterieurId = adverse.Id
+        };
+        db.Matches.Add(match);
+        await db.SaveChangesAsync();
+
+        return new Contexte(equipe.Id, troisQuart.Id, autre.Id,
+                            match.Id, division.Id, adverse.Id);
     }
 
     private static TeamService Svc(Data.ApplicationDbContext db) =>
@@ -239,5 +261,149 @@ public class RecrutementGratuitTests
                 () => Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteAutreId, "G5", 5));
             Assert.Contains("Limite", ex.Message);
         }
+    }
+
+    // ── Plafond par phase d'après-match ──────────────────────────────────────
+
+    /// <summary>
+    /// Le LRB accorde UNE recrue offerte par phase d'après-match. Sans plafond,
+    /// un coach remplissait tout son effectif gratuitement d'un coup — constaté
+    /// avant correction : 3 recrutements d'affilée passaient avec 0 po en caisse.
+    /// </summary>
+    [Fact]
+    public async Task LaSecondeRecrueDuMemeMatchEstRefusee()
+    {
+        using var factory = new TestDbFactory();
+        var ctx = await SeedAsync(factory, "Trois-quart", limite: 1);
+
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z1", 1, ctx.MatchId);
+
+        using (var db = factory.CreateContext())
+        {
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z2", 2, ctx.MatchId));
+            Assert.Contains("déjà", ex.Message);
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.Equal(1, await db.TeamPlayers.CountAsync(p => p.TeamId == ctx.EquipeId));
+    }
+
+    /// <summary>Le droit se renouvelle : il est lié au match, pas à l'équipe.</summary>
+    [Fact]
+    public async Task LeDroitSeRenouvelleAuMatchSuivant()
+    {
+        using var factory = new TestDbFactory();
+        var ctx = await SeedAsync(factory, "Trois-quart", limite: 1);
+
+        int match2;
+        using (var db = factory.CreateContext())
+        {
+            var m = new Match
+            {
+                DivisionId = ctx.DivisionId, Ronde = 2,
+                EquipeDomicileId = ctx.EquipeId, EquipeExterieurId = ctx.AdverseId
+            };
+            db.Matches.Add(m);
+            await db.SaveChangesAsync();
+            match2 = m.Id;
+        }
+
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z1", 1, ctx.MatchId);
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z2", 2, match2);
+
+        using (var db = factory.CreateContext())
+            Assert.Equal(2, await db.TeamPlayers.CountAsync(p => p.TeamId == ctx.EquipeId));
+    }
+
+    /// <summary>Le plafond est un paramètre : une race peut en accorder deux.</summary>
+    [Fact]
+    public async Task LaLimiteEstConfigurableParRace()
+    {
+        using var factory = new TestDbFactory();
+        var ctx = await SeedAsync(factory, "Trois-quart", limite: 2);
+
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z1", 1, ctx.MatchId);
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z2", 2, ctx.MatchId);
+
+        using (var db = factory.CreateContext())
+            await Assert.ThrowsAsync<InvalidOperationException>(
+                () => Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z3", 3, ctx.MatchId));
+
+        using (var db = factory.CreateContext())
+            Assert.Equal(2, await db.TeamPlayers.CountAsync(p => p.TeamId == ctx.EquipeId));
+    }
+
+    /// <summary>
+    /// Supprimer une recrue offerte rend le droit : c'est l'intérêt de marquer
+    /// le JOUEUR plutôt que d'incrémenter un compteur qu'il faudrait corriger.
+    /// </summary>
+    [Fact]
+    public async Task SupprimerLaRecrueLibereLeDroit()
+    {
+        using var factory = new TestDbFactory();
+        var ctx = await SeedAsync(factory, "Trois-quart", limite: 1);
+
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z1", 1, ctx.MatchId);
+
+        using (var db = factory.CreateContext())
+        {
+            var j = await db.TeamPlayers.FirstAsync(p => p.TeamId == ctx.EquipeId);
+            db.TeamPlayers.Remove(j);
+            await db.SaveChangesAsync();
+        }
+
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Z2", 2, ctx.MatchId);
+
+        using (var db = factory.CreateContext())
+            Assert.Equal(1, await db.TeamPlayers.CountAsync(p => p.TeamId == ctx.EquipeId));
+    }
+
+    /// <summary>
+    /// Le recrutement PAYANT reste libre : la règle ne s'applique pas toujours,
+    /// et le coach doit pouvoir compléter son effectif normalement.
+    /// </summary>
+    [Fact]
+    public async Task LeRecrutementPayantResteIllimite()
+    {
+        using var factory = new TestDbFactory();
+        var ctx = await SeedAsync(factory, "Trois-quart", limite: 1, tresorerie: 500_000);
+
+        using (var db = factory.CreateContext())
+            await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, "Offert", 1, ctx.MatchId);
+
+        for (var i = 2; i <= 4; i++)
+            using (var db = factory.CreateContext())
+                await Svc(db).RecruterJoueurAsync(ctx.EquipeId, ctx.PosteTroisQuartId, $"Paye{i}", i);
+
+        using (var db = factory.CreateContext())
+        {
+            Assert.Equal(4, await db.TeamPlayers.CountAsync(p => p.TeamId == ctx.EquipeId));
+            var equipe = await db.Teams.FindAsync(ctx.EquipeId);
+            // 3 achats à 40k ; la recrue offerte n'a rien coûté.
+            Assert.Equal(500_000 - 3 * 40_000, equipe!.Tresorerie);
+        }
+    }
+
+    /// <summary>Une limite à 0 signifie « pas de plafond ».</summary>
+    [Fact]
+    public async Task UneLimiteAZeroNePlafonnePas()
+    {
+        using var factory = new TestDbFactory();
+        var ctx = await SeedAsync(factory, "Trois-quart", limite: 0);
+
+        for (var i = 1; i <= 3; i++)
+            using (var db = factory.CreateContext())
+                await Svc(db).RecruterJoueurGratuitAsync(ctx.EquipeId, ctx.PosteTroisQuartId, $"Z{i}", i, ctx.MatchId);
+
+        using (var db = factory.CreateContext())
+            Assert.Equal(3, await db.TeamPlayers.CountAsync(p => p.TeamId == ctx.EquipeId));
     }
 }

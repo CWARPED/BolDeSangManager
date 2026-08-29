@@ -99,6 +99,15 @@ public class TeamPlayer
     /// </summary>
     public bool EstCapitaine { get; set; } = false;
 
+    /// <summary>
+    /// Match dont la phase d'après-match a offert ce joueur (règle
+    /// « Maîtres de la Non-Vie »). <c>null</c> = recrue payée normalement.
+    ///
+    /// Marquer le JOUEUR plutôt que tenir une table de suivi : supprimer une
+    /// recrue libère automatiquement le droit, sans compteur à corriger.
+    /// </summary>
+    public int? RecrueGratuiteMatchId { get; set; }
+
     public DateTime RecruteLe { get; set; } = DateTime.UtcNow;
 
     public ICollection<TeamPlayerSkill> Competences { get; set; } = [];

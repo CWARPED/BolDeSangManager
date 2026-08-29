@@ -109,7 +109,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 tt.LimitesMotsCles.Select(l => new KeywordLimitGdDto(l.MotCle, l.Max)).ToList(),
                 tt.ReglesSpecialesListe
                     .OrderBy(l => l.SpecialRule.Ordre).ThenBy(l => l.SpecialRule.Nom)
-                    .Select(l => new TeamTypeSpecialRuleGdDto(l.SpecialRule.Nom, l.OptionsChoix))
+                    .Select(l => new TeamTypeSpecialRuleGdDto(l.SpecialRule.Nom, l.OptionsChoix, l.LimiteParApresMatch))
                     .ToList()
             )).ToList(),
             Reserve: reserve.Select(p => new PlayerPositionGdDto(
@@ -361,7 +361,8 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     {
                         TeamTypeId = tt.Id,
                         SpecialRuleId = regleId,
-                        OptionsChoix = rDto.OptionsChoix
+                        OptionsChoix = rDto.OptionsChoix,
+                        LimiteParApresMatch = rDto.LimiteParApresMatch ?? 1
                     });
                 }
                 await db.SaveChangesAsync();
@@ -642,7 +643,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 r.TeamTypes
                     .Where(l => l.TeamType is not null)
                     .OrderBy(l => l.TeamType.Nom)
-                    .Select(l => new RattachementPortableDto(l.TeamType.Nom, l.OptionsChoix))
+                    .Select(l => new RattachementPortableDto(l.TeamType.Nom, l.OptionsChoix, l.LimiteParApresMatch))
                     .ToList()
             )).ToList()
         );
@@ -736,12 +737,14 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                         db.TeamTypeSpecialRules.Add(new TeamTypeSpecialRule
                         {
                             TeamTypeId = race.Id, SpecialRuleId = regle.Id,
-                            OptionsChoix = lienDto.OptionsChoix ?? ""
+                            OptionsChoix = lienDto.OptionsChoix ?? "",
+                            LimiteParApresMatch = lienDto.LimiteParApresMatch ?? 1
                         });
                     }
                     else
                     {
                         lien.OptionsChoix = lienDto.OptionsChoix ?? "";
+                        lien.LimiteParApresMatch = lienDto.LimiteParApresMatch ?? lien.LimiteParApresMatch;
                     }
                 }
 
@@ -787,7 +790,11 @@ record SpecialRulePortableDto(
 
 record RattachementPortableDto(
     string EquipeNom,
-    string? OptionsChoix
+    string? OptionsChoix,
+    // Plafond de recrues offertes par apres-match. Nullable : un fichier
+    // exporte AVANT cette version n'a pas le champ, on retombe alors sur 1
+    // (la valeur du livre de regles) plutot que sur 0 = illimite.
+    int? LimiteParApresMatch = null
 );
 
 record GameDataExportDto(
@@ -833,7 +840,10 @@ record SpecialRuleGdDto(
 /// <summary>Rattachement d'une règle à une fiche d'équipe, référencée par nom.</summary>
 record TeamTypeSpecialRuleGdDto(
     string RegleNom,
-    string OptionsChoix
+    string OptionsChoix,
+    // Nullable : un export antérieur à cette version n'a pas le champ, on
+    // retombe alors sur 1 (valeur du livre de règles) et non sur 0 = illimité.
+    int? LimiteParApresMatch = null
 );
 
 /// <summary>Définition de staff exportée. Référencée par NOM, comme le reste.</summary>

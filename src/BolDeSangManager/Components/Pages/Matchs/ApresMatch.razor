@@ -175,13 +175,33 @@ else
             <MudDivider Class="my-3" />
             <MudText Typo="Typo.subtitle2" Class="mb-1">Recrutement gratuit</MudText>
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2 d-block">
-                Accordé par une règle spéciale de l'équipe. Sans coût.
+                @if (_limiteGratuite > 0)
+                {
+                    <text>Accordé par une règle spéciale. @_gratuitesUtilisees/@_limiteGratuite utilisée@(_limiteGratuite > 1 ? "s" : "") pour ce match.</text>
+                }
+                else
+                {
+                    <text>Accordé par une règle spéciale de l'équipe. Sans coût.</text>
+                }
             </MudText>
+
+            @* Droit epuise : on garde la section visible (le coach doit voir
+               qu'il a bien utilise sa recrue) mais les boutons sont eteints. *@
+            @if (_droitGratuitEpuise)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">
+                    <MudText Typo="Typo.caption">
+                        Recrue offerte déjà utilisée pour ce match. Les joueurs
+                        supplémentaires se recrutent normalement, ci-dessus.
+                    </MudText>
+                </MudAlert>
+            }
 
             @foreach (var pos in _postesGratuits)
             {
                 var countG = _equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite && j.PlayerPositionId == pos.Id);
-                var completG = countG >= pos.QuantiteMax;
+                // Bloque si le poste est plein OU si le droit du match est consommé.
+                var completG = countG >= pos.QuantiteMax || _droitGratuitEpuise;
                 <MudPaper Outlined="true" Class="pa-2 mb-2" Style="@($"opacity:{(completG ? "0.5" : "1")}")">
                     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
                         <div style="flex:1; min-width:100px">
@@ -201,7 +221,8 @@ else
                                      Color="@(!completG ? Color.Success : Color.Default)"
                                      Disabled="@completG"
                                      OnClick="@(() => RecruterGratuit(pos))"
-                                     title="@(completG ? "Limite atteinte" : "Recruter gratuitement")" />
+                                     title="@(_droitGratuitEpuise ? "Recrue offerte déjà utilisée pour ce match"
+                                              : completG ? "Limite du poste atteinte" : "Recruter gratuitement")" />
                     </MudStack>
                 </MudPaper>
             }
@@ -281,6 +302,12 @@ else
     // pas mis en attente comme les recrues payantes : il n'y a rien à financer,
     // donc rien à arbitrer au moment de valider.
     List<PlayerPosition> _postesGratuits = [];
+
+    // Plafond de recrues offertes par phase d'apres-match (1 dans le LRB,
+    // reglable par race) et nombre deja consomme POUR CE MATCH.
+    int _limiteGratuite;
+    int _gratuitesUtilisees;
+    bool _droitGratuitEpuise => _limiteGratuite > 0 && _gratuitesUtilisees >= _limiteGratuite;
     Dictionary<int, string> _nomsGratuit = [];
     Dictionary<int, int> _numerosGratuit = [];
     Dictionary<int, string> _nomsRecruté = [];
@@ -337,6 +364,8 @@ else
         // Postes offerts par une règle spéciale de la race. Liste vide dans la
         // très grande majorité des cas : la section n'apparaît alors même pas.
         _postesGratuits = await TeamService.GetPostesRecrutementGratuitAsync(_equipe.Id);
+        _limiteGratuite = await TeamService.LimiteRecruesGratuitesAsync(_equipe.Id);
+        _gratuitesUtilisees = await TeamService.RecruesGratuitesUtiliseesAsync(_equipe.Id, Id);
         foreach (var p in _postesGratuits)
         {
             _nomsGratuit.TryAdd(p.Id, "");
@@ -451,7 +480,8 @@ else
             var numero = _numerosGratuit.GetValueOrDefault(pos.Id, 1);
             var nom = _nomsGratuit.GetValueOrDefault(pos.Id, "");
 
-            await TeamService.RecruterJoueurGratuitAsync(_equipe.Id, pos.Id, nom, numero);
+            // On passe le match : c'est lui qui porte le droit a la recrue.
+            await TeamService.RecruterJoueurGratuitAsync(_equipe.Id, pos.Id, nom, numero, Id);
 
             _nomsGratuit[pos.Id] = "";
             _numerosGratuit[pos.Id] = Math.Min(numero + 1, 99);
@@ -459,6 +489,7 @@ else
             // On relit l'équipe : le compteur du poste et la VEA doivent
             // refléter la base, pas un état devinné côté écran.
             _equipe = await TeamService.GetEquipeAsync(_equipe.Id);
+            _gratuitesUtilisees = await TeamService.RecruesGratuitesUtiliseesAsync(_equipe!.Id, Id);
             Snackbar.Add($"{pos.Nom} recruté gratuitement", Severity.Success);
         }
         catch (InvalidOperationException ex)

@@ -605,6 +605,20 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Règle le plafond de recrues offertes par phase d'après-match pour cette
+    /// race (« Maîtres de la Non-Vie »). 0 = sans limite.
+    /// </summary>
+    public async Task DefinirLimiteApresMatchAsync(int teamTypeId, int regleId, int limite)
+    {
+        var lien = await db.TeamTypeSpecialRules
+            .FirstOrDefaultAsync(l => l.TeamTypeId == teamTypeId && l.SpecialRuleId == regleId)
+            ?? throw new InvalidOperationException("Cette règle n'est pas rattachée à cette équipe.");
+
+        lien.LimiteParApresMatch = Math.Clamp(limite, 0, 9);
+        await db.SaveChangesAsync();
+    }
+
     public async Task DissocierRegleSpecialeAsync(int teamTypeId, int regleId)
     {
         var lien = await db.TeamTypeSpecialRules

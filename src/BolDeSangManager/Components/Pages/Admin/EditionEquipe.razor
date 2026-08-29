@@ -135,6 +135,19 @@
                                                   ValueChanged="@(v => DefinirOptions(lien.SpecialRule, v))"
                                                   Placeholder="Trois-quart" />
 
+                                    @* Plafond par phase d'après-match : sans lui,
+                                       un coach remplissait tout son effectif
+                                       gratuitement d'un coup. *@
+                                    @if (lien.SpecialRule.Code == SpecialRuleCodes.RecrutementGratuitParMotCle)
+                                    {
+                                        <MudNumericField T="int" Variant="Variant.Outlined" Margin="Margin.Dense"
+                                                         Class="mt-2" Min="0" Max="9"
+                                                         Label="Recrues offertes par après-match"
+                                                         HelperText="1 dans le livre de règles. 0 = sans limite."
+                                                         Value="@lien.LimiteParApresMatch"
+                                                         ValueChanged="@(v => DefinirLimite(lien.SpecialRule, v))" />
+                                    }
+
                                     @if (string.IsNullOrWhiteSpace(lien.OptionsChoix))
                                     {
                                         <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block">
@@ -360,6 +373,21 @@
         try
         {
             await DataEditService.AssocierRegleSpecialeAsync(_team.Id, regle.Id, options);
+            await ChargerAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+    }
+
+    /// <summary>Plafond de recrues offertes par après-match pour cette race.</summary>
+    async Task DefinirLimite(SpecialRule regle, int limite)
+    {
+        if (_team is null) return;
+        try
+        {
+            await DataEditService.DefinirLimiteApresMatchAsync(_team.Id, regle.Id, limite);
             await ChargerAsync();
         }
         catch (Exception ex)

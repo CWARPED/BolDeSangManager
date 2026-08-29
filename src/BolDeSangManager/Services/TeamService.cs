@@ -504,17 +504,62 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     ///
     /// Le poste doit porter le mot-clé visé par la règle sur la fiche de race.
     /// Vérifié ICI, côté serveur : l'écran propose, il ne fait pas foi.
+    ///
+    /// Le droit est PLAFONNÉ par phase d'après-match (1 dans le LRB, réglable
+    /// par race). Sans ce plafond, un coach remplissait tout son effectif
+    /// gratuitement d'un coup. Le compte se fait sur les joueurs déjà marqués
+    /// comme offerts pour CE match : supprimer une recrue rend donc le droit,
+    /// sans compteur à corriger.
     /// </summary>
     public async Task<TeamPlayer> RecruterJoueurGratuitAsync(
-        int teamId, int positionId, string nom, int numero)
+        int teamId, int positionId, string nom, int numero, int? matchId = null)
     {
         var eligibles = await GetPostesRecrutementGratuitAsync(teamId);
         if (eligibles.All(p => p.Id != positionId))
             throw new InvalidOperationException(
                 "Ce poste n'est pas éligible au recrutement gratuit de cette équipe.");
 
-        return await RecruterAsync(teamId, positionId, nom, numero, gratuit: true);
+        if (matchId is not null)
+        {
+            var limite = await LimiteRecruesGratuitesAsync(teamId);
+            if (limite > 0)
+            {
+                var dejaOffertes = await db.TeamPlayers
+                    .CountAsync(p => p.TeamId == teamId && p.RecrueGratuiteMatchId == matchId);
+
+                if (dejaOffertes >= limite)
+                    throw new InvalidOperationException(
+                        limite == 1
+                            ? "Cette équipe a déjà utilisé sa recrue offerte pour ce match."
+                            : $"Cette équipe a déjà utilisé ses {limite} recrues offertes pour ce match.");
+            }
+        }
+
+        return await RecruterAsync(teamId, positionId, nom, numero, gratuit: true, matchId: matchId);
     }
+
+    /// <summary>
+    /// Nombre de recrues offertes autorisées par phase d'après-match pour cette
+    /// équipe. 0 = pas de plafond.
+    /// </summary>
+    public async Task<int> LimiteRecruesGratuitesAsync(int teamId)
+    {
+        var equipe = await db.Teams
+            .Include(t => t.TeamType).ThenInclude(tt => tt.ReglesSpecialesListe).ThenInclude(l => l.SpecialRule)
+            .FirstOrDefaultAsync(t => t.Id == teamId);
+
+        var lien = equipe?.TeamType?.ReglesSpecialesListe
+            .FirstOrDefault(l => l.SpecialRule?.Code == SpecialRuleCodes.RecrutementGratuitParMotCle);
+
+        return lien?.LimiteParApresMatch ?? 0;
+    }
+
+    /// <summary>
+    /// Recrues offertes déjà utilisées par cette équipe pour ce match : sert à
+    /// l'écran pour masquer le bouton une fois le droit consommé.
+    /// </summary>
+    public async Task<int> RecruesGratuitesUtiliseesAsync(int teamId, int matchId) =>
+        await db.TeamPlayers.CountAsync(p => p.TeamId == teamId && p.RecrueGratuiteMatchId == matchId);
 
     /// <summary>
     /// Postes que l'équipe peut embaucher gratuitement. Liste vide = la race
@@ -560,7 +605,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     /// opposables : la gratuité ne dispense pas des plafonds.
     /// </param>
     private async Task<TeamPlayer> RecruterAsync(
-        int teamId, int positionId, string nom, int numero, bool gratuit)
+        int teamId, int positionId, string nom, int numero, bool gratuit, int? matchId = null)
     {
         var equipe = await db.Teams.FindAsync(teamId)
             ?? throw new InvalidOperationException("Équipe introuvable");
@@ -616,6 +661,9 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             Nom = string.IsNullOrWhiteSpace(nom) ? $"#{numero}" : nom,
             Numero = numero,
             ValeurActuelle = position.Cout,
+            // Trace la recrue offerte : c'est elle qui plafonne le droit à une
+            // par phase d'après-match, et la supprimer rend ce droit.
+            RecrueGratuiteMatchId = gratuit ? matchId : null,
             RecruteLe = DateTime.UtcNow
         };
         db.TeamPlayers.Add(joueur);

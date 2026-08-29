@@ -69,6 +69,28 @@ public static class DbSeeder
             ["Capitaine"] = (SpecialRuleCodes.CompetenceAuCapitaine, "Pro")
         };
 
+        // ── Plafond de recrues offertes ─────────────────────────────────────
+        // Traité À PART, avant le filtre sur r.Code : une migration AddColumn
+        // pose 0 sur les lignes EXISTANTES, or 0 signifie « sans limite » —
+        // exactement le trou qu'on corrige. Les règles DÉJÀ branchées sont
+        // précisément celles concernées, et le filtre ci-dessous les exclut.
+        var liensSansPlafond = await db.TeamTypeSpecialRules
+            .Include(l => l.SpecialRule)
+            .Where(l => l.SpecialRule.Code == SpecialRuleCodes.RecrutementGratuitParMotCle
+                     && l.LimiteParApresMatch == 0)
+            .ToListAsync();
+
+        foreach (var lien in liensSansPlafond)
+            lien.LimiteParApresMatch = 1;   // valeur du livre de règles
+
+        if (liensSansPlafond.Count > 0)
+        {
+            await db.SaveChangesAsync();
+            logger.LogInformation(
+                "Plafond de recrues offertes initialisé à 1 sur {Nb} rattachement(s)",
+                liensSansPlafond.Count);
+        }
+
         var regles = await db.SpecialRules
             .Where(r => r.Code == "" && aBrancher.Keys.Contains(r.Nom))
             .Include(r => r.TeamTypes)
