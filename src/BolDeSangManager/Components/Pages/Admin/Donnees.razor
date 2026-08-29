@@ -384,8 +384,22 @@
         <MudTabPanel Text="Star players">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_starPlayers.Count star player(s)</b></MudText>
-                <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
-                           OnClick="AjouterStarPlayer">Ajouter un star player</MudButton>
+                <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+                    @* Transport vers une autre instance (le VPS) : l'import
+                       FUSIONNE dans la version choisie sans en creer une
+                       nouvelle. C'est aussi ce qui porte les textes complets,
+                       qui vivent en base et non dans le depot. *@
+                    <MudButton StartIcon="@Icons.Material.Filled.Download" Color="Color.Secondary"
+                               Variant="Variant.Outlined" Size="Size.Small"
+                               OnClick="ExporterCatalogue"
+                               Disabled="@(_starPlayers.Count == 0 && _coupsDePouce.Count == 0)">Exporter</MudButton>
+                    <MudButton StartIcon="@Icons.Material.Filled.Upload" Color="Color.Secondary"
+                               Variant="Variant.Outlined" Size="Size.Small"
+                               OnClick="@(() => JS.InvokeVoidAsync("clickElement", "importCatalogueInput"))">Importer</MudButton>
+                    <InputFile id="importCatalogueInput" OnChange="ImporterCatalogue" accept=".json" style="display:none" />
+                    <MudButton StartIcon="@Icons.Material.Filled.Add" Color="Color.Primary" Variant="Variant.Filled"
+                               OnClick="AjouterStarPlayer">Ajouter un star player</MudButton>
+                </MudStack>
             </MudStack>
             <MudText Typo="Typo.caption" Style="color:var(--mud-palette-text-secondary)" Class="mb-3 d-block">
                 Mercenaires loués pour un match : ils ne rejoignent jamais un effectif.
@@ -1312,6 +1326,57 @@
 
         await DataEditService.SupprimerCoupDePouceAsync(cp.Id);
         await ChargerDonneesAsync();
+    }
+
+    /// <summary>
+    /// Export du catalogue informatif (ligues + coups de pouce + star players).
+    /// Sert à porter la saisie locale sur une instance DÉJÀ en service.
+    /// </summary>
+    async Task ExporterCatalogue()
+    {
+        try
+        {
+            var bytes = await GameDataExportService.ExportCatalogueAsync(_selectedVersionId);
+            var version = _versions.FirstOrDefault(v => v.Id == _selectedVersionId);
+            var nomFichier = $"catalogue_{version?.Nom ?? _selectedVersionId.ToString()}.json"
+                .Replace(" ", "_").Replace("/", "-");
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("blazorDownloadBase64File", nomFichier, "application/json", base64);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur export : {ex.Message}", Severity.Error);
+        }
+    }
+
+    async Task ImporterCatalogue(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            using var ms = new MemoryStream();
+            await e.File.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+            ms.Position = 0;
+
+            var (success, messages) = await GameDataExportService.ImportCatalogueAsync(
+                _selectedVersionId, ms);
+
+            if (success)
+            {
+                Snackbar.Add(
+                    "Catalogue importé." + (messages.Count > 0 ? $" ({messages.Count} avertissement(s))" : ""),
+                    Severity.Success);
+                foreach (var m in messages) Snackbar.Add(m, Severity.Warning);
+                await ChargerDonneesAsync();
+            }
+            else
+            {
+                foreach (var m in messages) Snackbar.Add(m, Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur import : {ex.Message}", Severity.Error);
+        }
     }
 
     /// <summary>

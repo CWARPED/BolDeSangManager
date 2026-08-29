@@ -764,6 +764,204 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             return (false, [$"Import interrompu : {ex.Message}"]);
         }
     }
+
+    // ── Catalogue « coups de pouce + star players + ligues » ─────────────────
+
+    /// <summary>
+    /// Exporte le catalogue informatif d'une version : ligues thématiques,
+    /// coups de pouce et star players avec leurs ligues d'accès.
+    ///
+    /// Tout est référencé par NOM pour rester portable d'une instance à
+    /// l'autre : les identifiants d'une base ne valent rien dans une autre.
+    /// </summary>
+    public async Task<byte[]> ExportCatalogueAsync(int rulesVersionId)
+    {
+        var version = await db.RulesVersions
+            .Include(v => v.Game)
+            .FirstOrDefaultAsync(v => v.Id == rulesVersionId)
+            ?? throw new InvalidOperationException("Version de règles introuvable");
+
+        var ligues = await db.ThemedLeagues
+            .Where(l => l.RulesVersionId == rulesVersionId)
+            .OrderBy(l => l.Nom)
+            .ToListAsync();
+
+        var coupsDePouce = await db.Inducements
+            .Where(i => i.RulesVersionId == rulesVersionId)
+            .OrderBy(i => i.Ordre).ThenBy(i => i.Nom)
+            .ToListAsync();
+
+        var stars = await db.StarPlayers
+            .Where(sp => sp.RulesVersionId == rulesVersionId)
+            .Include(sp => sp.Ligues).ThenInclude(x => x.ThemedLeague)
+            .OrderBy(sp => sp.Ordre).ThenBy(sp => sp.Nom)
+            .ToListAsync();
+
+        var dto = new CataloguePortableDto(
+            Jeu: version.Game?.Nom ?? "",
+            Version: version.Nom,
+            Ligues: ligues.Select(l => new LiguePortableDto(l.Nom)).ToList(),
+            CoupsDePouce: coupsDePouce.Select(i => new CoupDePoucePortableDto(
+                i.Nom, i.Description, i.Cout, i.QuantiteMax, i.Restriction)).ToList(),
+            StarPlayers: stars.Select(sp => new StarPlayerPortableDto(
+                sp.Nom, sp.Cout, sp.Mouvement, sp.Force, sp.Agilite, sp.CapacitePasse,
+                sp.Armure, sp.Competences, sp.ReglesSpeciales,
+                sp.Ligues.Where(x => x.ThemedLeague is not null)
+                         .Select(x => x.ThemedLeague.Nom).OrderBy(n => n).ToList())).ToList()
+        );
+
+        logger.LogInformation(
+            "Export catalogue : version '{V}' ({L} ligues, {C} coups de pouce, {S} star players)",
+            version.Nom, ligues.Count, coupsDePouce.Count, stars.Count);
+
+        return JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
+    }
+
+    /// <summary>
+    /// Fusionne un catalogue dans une version EXISTANTE.
+    ///
+    /// Idempotent et non destructif, comme l'import des règles spéciales :
+    /// une entrée déjà présente (même nom) est MISE À JOUR plutôt que
+    /// dupliquée, et rien n'est supprimé — un catalogue local enrichi n'est
+    /// jamais écrasé.
+    ///
+    /// Une ligue citée par un star player mais absente est CRÉÉE plutôt
+    /// qu'ignorée : la laisser manquante rendrait le joueur accessible à
+    /// toutes les équipes, l'inverse exact de la restriction voulue.
+    /// </summary>
+    public async Task<(bool Success, List<string> Errors)> ImportCatalogueAsync(
+        int rulesVersionId, Stream stream)
+    {
+        var avertissements = new List<string>();
+
+        CataloguePortableDto dto;
+        try
+        {
+            dto = await JsonSerializer.DeserializeAsync<CataloguePortableDto>(stream, JsonOpts)
+                ?? throw new InvalidOperationException("Fichier JSON invalide");
+        }
+        catch (Exception ex)
+        {
+            return (false, [$"Lecture du fichier impossible : {ex.Message}"]);
+        }
+
+        var version = await db.RulesVersions.FindAsync(rulesVersionId);
+        if (version is null) return (false, ["Version de règles cible introuvable."]);
+
+        using var transaction = await db.Database.BeginTransactionAsync();
+        try
+        {
+            // ── Ligues ──────────────────────────────────────────────────────
+            var ligues = await db.ThemedLeagues
+                .Where(l => l.RulesVersionId == rulesVersionId)
+                .ToListAsync();
+
+            async Task<ThemedLeague> LigueOuCreee(string nom)
+            {
+                var existante = ligues.FirstOrDefault(l =>
+                    string.Equals(l.Nom, nom, StringComparison.OrdinalIgnoreCase));
+                if (existante is not null) return existante;
+
+                var nouvelle = new ThemedLeague { RulesVersionId = rulesVersionId, Nom = nom };
+                db.ThemedLeagues.Add(nouvelle);
+                await db.SaveChangesAsync();
+                ligues.Add(nouvelle);
+                return nouvelle;
+            }
+
+            foreach (var l in dto.Ligues ?? [])
+                if (!string.IsNullOrWhiteSpace(l.Nom))
+                    await LigueOuCreee(l.Nom.Trim());
+
+            // ── Coups de pouce ──────────────────────────────────────────────
+            var cpExistants = await db.Inducements
+                .Where(i => i.RulesVersionId == rulesVersionId)
+                .ToListAsync();
+
+            foreach (var c in dto.CoupsDePouce ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(c.Nom)) continue;
+
+                var cible = cpExistants.FirstOrDefault(i =>
+                    string.Equals(i.Nom, c.Nom, StringComparison.OrdinalIgnoreCase));
+
+                if (cible is null)
+                {
+                    cible = new Inducement { RulesVersionId = rulesVersionId, Nom = c.Nom.Trim() };
+                    db.Inducements.Add(cible);
+                    cpExistants.Add(cible);
+                }
+
+                cible.Description = c.Description ?? "";
+                cible.Cout = Math.Max(0, c.Cout);
+                cible.QuantiteMax = Math.Max(0, c.QuantiteMax);
+                cible.Restriction = c.Restriction ?? "";
+            }
+            await db.SaveChangesAsync();
+
+            // ── Star players ────────────────────────────────────────────────
+            var spExistants = await db.StarPlayers
+                .Where(sp => sp.RulesVersionId == rulesVersionId)
+                .Include(sp => sp.Ligues)
+                .ToListAsync();
+
+            foreach (var s in dto.StarPlayers ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(s.Nom)) continue;
+
+                var cible = spExistants.FirstOrDefault(sp =>
+                    string.Equals(sp.Nom, s.Nom, StringComparison.OrdinalIgnoreCase));
+
+                if (cible is null)
+                {
+                    cible = new StarPlayer { RulesVersionId = rulesVersionId, Nom = s.Nom.Trim() };
+                    db.StarPlayers.Add(cible);
+                    spExistants.Add(cible);
+                }
+
+                cible.Cout = Math.Max(0, s.Cout);
+                cible.Mouvement = s.Mouvement;
+                cible.Force = s.Force;
+                cible.Agilite = s.Agilite ?? "3+";
+                cible.CapacitePasse = s.CapacitePasse ?? "-";
+                cible.Armure = s.Armure ?? "9+";
+                cible.Competences = s.Competences ?? "";
+                cible.ReglesSpeciales = s.ReglesSpeciales ?? "";
+                await db.SaveChangesAsync();   // besoin de l'Id pour les liaisons
+
+                // Ligues : on remplace la sélection par celle du fichier.
+                var actuelles = await db.Set<StarPlayerThemedLeague>()
+                    .Where(x => x.StarPlayerId == cible.Id)
+                    .ToListAsync();
+                db.Set<StarPlayerThemedLeague>().RemoveRange(actuelles);
+
+                foreach (var nomLigue in s.Ligues ?? [])
+                {
+                    if (string.IsNullOrWhiteSpace(nomLigue)) continue;
+                    var ligue = await LigueOuCreee(nomLigue.Trim());
+                    db.Set<StarPlayerThemedLeague>().Add(new StarPlayerThemedLeague
+                    {
+                        StarPlayerId = cible.Id, ThemedLeagueId = ligue.Id
+                    });
+                }
+                await db.SaveChangesAsync();
+            }
+
+            await transaction.CommitAsync();
+
+            logger.LogInformation(
+                "Import catalogue dans '{V}' : {L} ligues, {C} coups de pouce, {S} star players",
+                version.Nom, dto.Ligues?.Count ?? 0, dto.CoupsDePouce?.Count ?? 0,
+                dto.StarPlayers?.Count ?? 0);
+
+            return (true, avertissements);
+        }
+        catch (Exception ex)
+        {
+            await transaction.RollbackAsync();
+            return (false, [$"Import interrompu : {ex.Message}"]);
+        }
+    }
 }
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
@@ -795,6 +993,46 @@ record RattachementPortableDto(
     // exporte AVANT cette version n'a pas le champ, on retombe alors sur 1
     // (la valeur du livre de regles) plutot que sur 0 = illimite.
     int? LimiteParApresMatch = null
+);
+
+/// <summary>
+/// Fichier de catalogue « coups de pouce + star players + ligues » SEUL,
+/// destiné à être fusionné dans une version existante — même principe que le
+/// catalogue de règles spéciales.
+///
+/// C'est ce fichier qui porte les textes complets saisis en local vers le VPS :
+/// ils vivent en base et dans ce transport, jamais dans le dépôt.
+/// </summary>
+record CataloguePortableDto(
+    string Jeu,
+    string Version,
+    List<LiguePortableDto> Ligues,
+    List<CoupDePoucePortableDto> CoupsDePouce,
+    List<StarPlayerPortableDto> StarPlayers
+);
+
+record LiguePortableDto(string Nom);
+
+record CoupDePoucePortableDto(
+    string Nom,
+    string Description,
+    int Cout,
+    int QuantiteMax,
+    string? Restriction
+);
+
+/// <summary>Star player + les ligues qui y donnent accès, référencées par NOM.</summary>
+record StarPlayerPortableDto(
+    string Nom,
+    int Cout,
+    int Mouvement,
+    int Force,
+    string Agilite,
+    string CapacitePasse,
+    string Armure,
+    string Competences,
+    string? ReglesSpeciales,
+    List<string>? Ligues
 );
 
 record GameDataExportDto(

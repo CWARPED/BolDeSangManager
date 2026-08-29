@@ -6,6 +6,7 @@
 @inject MatchService MatchService
 @inject PdfService PdfService
 @inject SettingsService SettingsService
+@inject DataEditService DataEditService
 @inject AuthenticationStateProvider AuthProvider
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
@@ -100,28 +101,31 @@ else
     }
     else
     {
-        <!-- Boutons d'export -->
-        <MudStack Row="true" Spacing="2" Class="mb-4" Wrap="Wrap.Wrap">
+        <!-- Export PDF : un seul bouton + des options a cocher. Avant, chaque
+             nouvelle option doublait le nombre de boutons (« Exporter » /
+             « avec descriptions ») et le format vivait a part dans un
+             selecteur. -->
+        <MudPaper Outlined="true" Class="pa-3 mb-4">
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Export PDF</MudText>
+
+            <MudStack Row="true" Wrap="Wrap.Wrap" Spacing="4" Class="mb-2">
+                <MudCheckBox @bind-Value="_pdfDescriptions" Color="Color.Error" Dense="true"
+                             Label="Descriptions des compétences" />
+                <MudCheckBox @bind-Value="_pdfCoupsDePouce" Color="Color.Error" Dense="true"
+                             Label="Coups de pouce" />
+                <MudCheckBox @bind-Value="_pdfStarPlayers" Color="Color.Error" Dense="true"
+                             Label="Star players disponibles" />
+                <MudCheckBox @bind-Value="_pdfPaysage" Color="Color.Error" Dense="true"
+                             Label="Format paysage" />
+            </MudStack>
+
             <MudButton Variant="Variant.Filled" Color="Color.Error"
                       StartIcon="@Icons.Material.Filled.PictureAsPdf"
-                      OnClick="@(() => ExporterPdf(false))"
+                      OnClick="ExporterPdf"
                       Disabled="@_exporting">
-                @(_exporting ? "Génération..." : "Exporter PDF")
+                @(_exporting ? "Génération..." : "Exporter la feuille")
             </MudButton>
-            <MudButton Variant="Variant.Outlined" Color="Color.Error"
-                      StartIcon="@Icons.Material.Filled.PictureAsPdf"
-                      OnClick="@(() => ExporterPdf(true))"
-                      Disabled="@_exporting">
-                PDF avec descriptions des compétences
-            </MudButton>
-            <MudDivider Vertical="true" FlexItem="true" />
-            <MudToggleGroup T="bool" @bind-Value="_pdfPaysage" Color="Color.Error"
-                            Size="Size.Small" CheckMark="true"
-                            SelectionMode="SelectionMode.SingleSelection">
-                <MudToggleItem Value="false" Text="Portrait" />
-                <MudToggleItem Value="true" Text="Paysage" />
-            </MudToggleGroup>
-        </MudStack>
+        </MudPaper>
 
         @if (_matchProchain is not null)
         {
@@ -358,17 +362,38 @@ else
     }
 
     /// <summary>Orientation choisie pour l'export PDF (#4).</summary>
+    // Options d'export, cochees a l'ecran plutot que multipliees en boutons.
     bool _pdfPaysage;
+    bool _pdfDescriptions;
+    bool _pdfCoupsDePouce;
+    bool _pdfStarPlayers;
 
-    async Task ExporterPdf(bool inclureDescriptions)
+    // Catalogues charges seulement si l'option est cochee : inutile de lire
+    // 66 star players pour une feuille qui n'en veut pas.
+    List<Inducement> _coupsDePouce = [];
+    List<StarPlayer> _starPlayers = [];
+
+    async Task ExporterPdf()
     {
         if (_equipeDetail is null) return;
         _exporting = true;
         try
         {
+            // Chargement a la demande : les catalogues ne servent que si
+            // l'option correspondante est cochee.
+            if (_pdfCoupsDePouce && _coupsDePouce.Count == 0)
+                _coupsDePouce = await DataEditService.GetCoupsDePouceAsync(
+                    _equipeDetail.TeamType!.RulesVersionId);
+
+            if (_pdfStarPlayers && _starPlayers.Count == 0)
+                _starPlayers = await DataEditService.GetStarPlayersAccessiblesAsync(
+                    _equipeDetail.TeamTypeId);
+
             var bytes = PdfService.GenererFeuilleEquipe(
-                _equipeDetail, inclureDescriptions,
-                _matchProchain, _urlExterne, _pdfPaysage);
+                _equipeDetail, _pdfDescriptions,
+                _matchProchain, _urlExterne, _pdfPaysage,
+                _pdfCoupsDePouce ? _coupsDePouce : null,
+                _pdfStarPlayers ? _starPlayers : null);
             var suffixe = _pdfPaysage ? "-paysage" : "";
             var nom = $"feuille-{_equipeDetail.Nom.ToLower().Replace(" ", "-")}{suffixe}.pdf";
             var base64 = Convert.ToBase64String(bytes);

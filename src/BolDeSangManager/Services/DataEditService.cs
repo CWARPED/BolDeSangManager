@@ -610,6 +610,36 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         await db.SaveChangesAsync();
     }
 
+    /// <summary>
+    /// Star players qu'une race peut engager : ceux dont au moins une ligue est
+    /// commune avec les siennes, plus ceux qui n'en portent aucune (ouverts à
+    /// toutes les équipes).
+    ///
+    /// Le recoupement se fait sur les identifiants du catalogue, jamais sur des
+    /// noms saisis à la main.
+    /// </summary>
+    public async Task<List<StarPlayer>> GetStarPlayersAccessiblesAsync(int teamTypeId)
+    {
+        var race = await db.TeamTypes
+            .Include(t => t.LiguesListe)
+            .FirstOrDefaultAsync(t => t.Id == teamTypeId);
+
+        if (race is null) return [];
+
+        var liguesDeLaRace = race.LiguesListe.Select(x => x.ThemedLeagueId).ToHashSet();
+
+        var candidats = await db.StarPlayers
+            .Include(s => s.Ligues)
+            .Where(s => s.RulesVersionId == race.RulesVersionId)
+            .OrderBy(s => s.Nom)
+            .ToListAsync();
+
+        return candidats
+            .Where(s => s.Ligues.Count == 0
+                        || s.Ligues.Any(x => liguesDeLaRace.Contains(x.ThemedLeagueId)))
+            .ToList();
+    }
+
     // ── Coups de pouce et star players ───────────────────────────────────────
     // Deux catalogues INFORMATIFS rattachés à une version de règles. Aucune
     // mécanique : ils s'affichent pour que les coaches comparent les VEA.

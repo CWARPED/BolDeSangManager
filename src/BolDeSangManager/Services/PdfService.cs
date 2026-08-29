@@ -77,8 +77,16 @@ public class PdfService
     /// les colonnes à largeur fixe (caractéristiques, PSP, valeur) ne bougent pas,
     /// tout l'espace gagné va aux colonnes relatives — surtout les compétences.
     /// </param>
+    /// <param name="coupsDePouce">
+    /// Coups de pouce à imprimer, ou <c>null</c> pour ne pas les inclure.
+    /// </param>
+    /// <param name="starPlayers">
+    /// Star players accessibles à cette équipe (recoupement déjà fait par
+    /// l'appelant), ou <c>null</c> pour ne pas les inclure.
+    /// </param>
     public byte[] GenererFeuilleEquipe(Team equipe, bool inclureDescriptionsCompetences,
-        Match? matchProchain = null, string? urlExterne = null, bool paysage = false)
+        Match? matchProchain = null, string? urlExterne = null, bool paysage = false,
+        List<Inducement>? coupsDePouce = null, List<StarPlayer>? starPlayers = null)
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
@@ -405,6 +413,77 @@ public class PdfService
                             col.Item().PaddingTop(10).Text("Aucune compétence à décrire.")
                                 .FontSize(8).FontColor(Colors.Grey.Darken1).Italic();
                         }
+                    }
+
+                    // ── Coups de pouce ───────────────────────────────────
+                    // Purement informatif : le coach compare les valeurs
+                    // d'équipe et décide à la table, l'application ne débite
+                    // rien.
+                    if (coupsDePouce is { Count: > 0 })
+                    {
+                        // Titre et contenu dans un SEUL item, comme le rappel
+                        // des compétences : sinon QuestPDF peut laisser le
+                        // titre orphelin en bas de page.
+                        col.Item().PaddingTop(14).Column(bloc =>
+                        {
+                            bloc.Item().Text("Coups de Pouce")
+                                .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
+                            bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
+
+                            foreach (var cp in coupsDePouce)
+                            {
+                                bloc.Item().PaddingTop(5).Text(t =>
+                                {
+                                    var quantite = cp.QuantiteMax > 0 ? $"0-{cp.QuantiteMax} " : "";
+                                    var prix = cp.Cout > 0 ? $" — {cp.Cout:N0} po" : " — prix variable";
+                                    t.Span($"{quantite}{cp.Nom}{prix}")
+                                        .Bold().FontSize(8.5f);
+
+                                    if (!string.IsNullOrWhiteSpace(cp.Restriction))
+                                        t.Span($"  ({cp.Restriction})")
+                                            .FontSize(7.5f).FontColor(Colors.Grey.Darken1).Italic();
+                                });
+
+                                if (!string.IsNullOrWhiteSpace(cp.Description))
+                                    bloc.Item().Text(cp.Description)
+                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
+                            }
+                        });
+                    }
+
+                    // ── Star players ─────────────────────────────────────
+                    // Ceux que CETTE équipe peut engager : le recoupement des
+                    // ligues est fait par l'appelant. Sert au coach à comparer
+                    // sa VEA et à décider avant le coup d'envoi.
+                    if (starPlayers is { Count: > 0 })
+                    {
+                        col.Item().PaddingTop(14).Column(bloc =>
+                        {
+                            bloc.Item().Text("Star Players disponibles")
+                                .Bold().FontSize(11).FontColor(Colors.Red.Darken2);
+                            bloc.Item().PaddingTop(3).LineHorizontal(0.5f).LineColor(Colors.Red.Lighten2);
+
+                            foreach (var sp in starPlayers)
+                            {
+                                bloc.Item().PaddingTop(5).Text(t =>
+                                {
+                                    t.Span($"{sp.Nom}").Bold().FontSize(8.5f);
+                                    if (sp.Cout > 0)
+                                        t.Span($" — {sp.Cout:N0} po").Bold().FontSize(8.5f);
+                                    t.Span($"   M{sp.Mouvement} F{sp.Force} AG{sp.Agilite} " +
+                                           $"CP{sp.CapacitePasse} AR{sp.Armure}")
+                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken2);
+                                });
+
+                                if (!string.IsNullOrWhiteSpace(sp.Competences))
+                                    bloc.Item().Text(sp.Competences)
+                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3);
+
+                                if (!string.IsNullOrWhiteSpace(sp.ReglesSpeciales))
+                                    bloc.Item().Text(sp.ReglesSpeciales)
+                                        .FontSize(7.5f).FontColor(Colors.Grey.Darken3).Italic();
+                            }
+                        });
                     }
                 });
 
