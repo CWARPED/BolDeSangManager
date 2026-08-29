@@ -60,6 +60,7 @@ public class StaffService(ApplicationDbContext db, ILogger<StaffService> logger)
         staff.MinCreation          = modifie.MinCreation;
         staff.MaxCreation          = modifie.MaxCreation;
         staff.MaxLigue             = modifie.MaxLigue;
+        staff.CompteDansVea        = modifie.CompteDansVea;
 
         await db.SaveChangesAsync();
     }
@@ -110,7 +111,8 @@ public class StaffService(ApplicationDbContext db, ILogger<StaffService> logger)
                 CoutDepuisTypeEquipe = s.CoutDepuisTypeEquipe,
                 MinCreation          = s.MinCreation,
                 MaxCreation          = s.MaxCreation,
-                MaxLigue             = s.MaxLigue
+                MaxLigue             = s.MaxLigue,
+                CompteDansVea        = s.CompteDansVea
             });
             ajoutes++;
         }
@@ -139,6 +141,7 @@ public class StaffService(ApplicationDbContext db, ILogger<StaffService> logger)
         staff.MinCreation = modifie.MinCreation;
         staff.MaxCreation = modifie.MaxCreation;
         staff.MaxLigue    = modifie.MaxLigue;
+        staff.CompteDansVea = modifie.CompteDansVea;
 
         // Un plafond abaissé bloque les ACHATS mais ne force aucune revente :
         // les équipes déjà au-dessus conservent leur staff.

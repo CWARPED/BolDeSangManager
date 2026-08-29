@@ -423,6 +423,13 @@ public static class DbSeeder
     }
 
     /// <summary>
+    /// Point d'entrée du seed de staff standard pour les TESTS, qui ont besoin
+    /// d'une version peuplée exactement comme une base neuve.
+    /// </summary>
+    public static Task SeedStaffStandardPourTestsAsync(ApplicationDbContext db, int versionId) =>
+        SeedStaffStandardAsync(db, versionId);
+
+    /// <summary>
     /// Crée les cinq staff standard d'une version de règles. Mêmes valeurs que
     /// le backfill de la migration AddStaffConfigurable, pour qu'une base neuve
     /// et une base migrée partent du même état.
@@ -437,7 +444,10 @@ public static class DbSeeder
             {
                 RulesVersionId = versionId, Nom = "Fans dévoués", Ordre = 1,
                 Description = "Public fidèle de l'équipe. Influence l'affluence et les gains de match.",
-                Cout = 10_000, MinCreation = 1, MaxCreation = 9, MaxLigue = null
+                Cout = 10_000, MinCreation = 1, MaxCreation = 9, MaxLigue = null,
+                // Les fans mesurent le public, pas la puissance de l'équipe :
+                // les compter gonflerait la VEA et fausserait les coups de pouce.
+                CompteDansVea = false
             },
             new StaffDefinition
             {

@@ -27,6 +27,12 @@ public static class VeaCalculator
     /// TOTALE, y compris les unités offertes à la création (<c>MinCreation</c>) :
     /// elles ne sont pas facturées au budget de départ, mais elles ont une
     /// valeur — voir <see cref="StaffService.UnitesFacturees"/>.
+    ///
+    /// En revanche, seuls les staff marqués <c>CompteDansVea</c> entrent dans
+    /// la somme : les <b>Fans dévoués</b> en sont exclus par défaut (ils
+    /// mesurent le public, pas la puissance de l'équipe). Le drapeau est réglé
+    /// en Admin, jamais par un test sur le nom — une édition future ou un staff
+    /// inventé par l'association se règle ainsi sans dev.
     /// </summary>
     public static int Calculer(Team equipe)
     {
@@ -35,7 +41,7 @@ public static class VeaCalculator
             .Sum(j => ValeurComptee(j, equipe.TeamType));
 
         var totalStaff = equipe.Staff
-            .Where(s => s.LeagueStaffType is not null)
+            .Where(s => s.LeagueStaffType is not null && s.LeagueStaffType.CompteDansVea)
             .Sum(s => s.Quantite * StaffService.CoutUnitaire(s.LeagueStaffType, equipe.TeamType));
 
         return totalJoueurs + totalStaff;

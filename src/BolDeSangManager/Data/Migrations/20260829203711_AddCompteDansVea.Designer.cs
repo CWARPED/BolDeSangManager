@@ -3,6 +3,7 @@ using System;
 using BolDeSangManager.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BolDeSangManager.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260829203711_AddCompteDansVea")]
+    partial class AddCompteDansVea
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.10");
@@ -113,7 +116,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("AppConfigs", (string)null);
+                    b.ToTable("AppConfigs");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Division", b =>
@@ -136,7 +139,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("LeagueId");
 
-                    b.ToTable("Divisions", (string)null);
+                    b.ToTable("Divisions");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.EcheanceRonde", b =>
@@ -159,7 +162,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("LeagueId", "Ronde")
                         .IsUnique();
 
-                    b.ToTable("EcheancesRondes", (string)null);
+                    b.ToTable("EcheancesRondes");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Game", b =>
@@ -177,7 +180,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Games", (string)null);
+                    b.ToTable("Games");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Inducement", b =>
@@ -215,7 +218,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("RulesVersionId", "Nom")
                         .IsUnique();
 
-                    b.ToTable("Inducements", (string)null);
+                    b.ToTable("Inducements");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.League", b =>
@@ -287,7 +290,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("RulesVersionId");
 
-                    b.ToTable("Leagues", (string)null);
+                    b.ToTable("Leagues");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.LeagueAward", b =>
@@ -324,7 +327,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamPlayerId");
 
-                    b.ToTable("LeagueAwards", (string)null);
+                    b.ToTable("LeagueAwards");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.LeagueCommissioner", b =>
@@ -353,7 +356,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("LeagueId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("LeagueCommissioners", (string)null);
+                    b.ToTable("LeagueCommissioners");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.LeagueStaffType", b =>
@@ -406,7 +409,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("StaffTypeId");
 
-                    b.ToTable("LeagueStaffTypes", (string)null);
+                    b.ToTable("LeagueStaffTypes");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Match", b =>
@@ -457,7 +460,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("EquipeExterieurId");
 
-                    b.ToTable("Matches", (string)null);
+                    b.ToTable("Matches");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.MatchPlayerRecord", b =>
@@ -508,7 +511,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamPlayerId");
 
-                    b.ToTable("MatchPlayerRecords", (string)null);
+                    b.ToTable("MatchPlayerRecords");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.MatchSheet", b =>
@@ -585,7 +588,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SaisiParId");
 
-                    b.ToTable("MatchSheets", (string)null);
+                    b.ToTable("MatchSheets");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PhaseDeReposValidation", b =>
@@ -610,7 +613,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("LeagueId", "TeamId")
                         .IsUnique();
 
-                    b.ToTable("PhaseDeReposValidations", (string)null);
+                    b.ToTable("PhaseDeReposValidations");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerImprovement", b =>
@@ -657,7 +660,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamPlayerId");
 
-                    b.ToTable("PlayerImprovements", (string)null);
+                    b.ToTable("PlayerImprovements");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerInjury", b =>
@@ -691,7 +694,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamPlayerId");
 
-                    b.ToTable("PlayerInjuries", (string)null);
+                    b.ToTable("PlayerInjuries");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPosition", b =>
@@ -739,7 +742,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamTypeId");
 
-                    b.ToTable("PlayerPositions", (string)null);
+                    b.ToTable("PlayerPositions");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPositionCategoryAccess", b =>
@@ -757,7 +760,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SkillCategoryDefId");
 
-                    b.ToTable("PlayerPositionCategoryAccesses", (string)null);
+                    b.ToTable("PlayerPositionCategoryAccesses");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PlayerPositionSkill", b =>
@@ -772,7 +775,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SkillId");
 
-                    b.ToTable("PlayerPositionSkills", (string)null);
+                    b.ToTable("PlayerPositionSkills");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPosition", b =>
@@ -820,7 +823,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("RulesVersionId");
 
-                    b.ToTable("PoolPositions", (string)null);
+                    b.ToTable("PoolPositions");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPositionCategoryAccess", b =>
@@ -838,7 +841,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SkillCategoryDefId");
 
-                    b.ToTable("PoolPositionCategoryAccesses", (string)null);
+                    b.ToTable("PoolPositionCategoryAccesses");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PoolPositionSkill", b =>
@@ -853,7 +856,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SkillId");
 
-                    b.ToTable("PoolPositionSkills", (string)null);
+                    b.ToTable("PoolPositionSkills");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.RulesVersion", b =>
@@ -900,7 +903,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("GameId");
 
-                    b.ToTable("RulesVersions", (string)null);
+                    b.ToTable("RulesVersions");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Skill", b =>
@@ -938,7 +941,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SkillCategoryDefId");
 
-                    b.ToTable("Skills", (string)null);
+                    b.ToTable("Skills");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.SkillCategoryDef", b =>
@@ -966,7 +969,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("RulesVersionId", "Nom")
                         .IsUnique();
 
-                    b.ToTable("SkillCategories", (string)null);
+                    b.ToTable("SkillCategories");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.SpecialRule", b =>
@@ -998,7 +1001,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("RulesVersionId", "Nom")
                         .IsUnique();
 
-                    b.ToTable("SpecialRules", (string)null);
+                    b.ToTable("SpecialRules");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.StaffDefinition", b =>
@@ -1046,7 +1049,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("RulesVersionId");
 
-                    b.ToTable("StaffTypes", (string)null);
+                    b.ToTable("StaffTypes");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.StarPlayer", b =>
@@ -1099,7 +1102,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("RulesVersionId", "Nom")
                         .IsUnique();
 
-                    b.ToTable("StarPlayers", (string)null);
+                    b.ToTable("StarPlayers");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.StarPlayerThemedLeague", b =>
@@ -1114,7 +1117,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("ThemedLeagueId");
 
-                    b.ToTable("StarPlayerThemedLeague", (string)null);
+                    b.ToTable("StarPlayerThemedLeague");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Team", b =>
@@ -1199,7 +1202,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamTypeId");
 
-                    b.ToTable("Teams", (string)null);
+                    b.ToTable("Teams");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamPlayer", b =>
@@ -1266,7 +1269,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamId");
 
-                    b.ToTable("TeamPlayers", (string)null);
+                    b.ToTable("TeamPlayers");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamPlayerSkill", b =>
@@ -1293,7 +1296,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamPlayerId");
 
-                    b.ToTable("TeamPlayerSkills", (string)null);
+                    b.ToTable("TeamPlayerSkills");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamStaff", b =>
@@ -1318,7 +1321,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("TeamId", "LeagueStaffTypeId")
                         .IsUnique();
 
-                    b.ToTable("TeamStaffs", (string)null);
+                    b.ToTable("TeamStaffs");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamType", b =>
@@ -1363,7 +1366,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("RulesVersionId");
 
-                    b.ToTable("TeamTypes", (string)null);
+                    b.ToTable("TeamTypes");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamTypeKeywordLimit", b =>
@@ -1386,7 +1389,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamTypeId");
 
-                    b.ToTable("TeamTypeKeywordLimits", (string)null);
+                    b.ToTable("TeamTypeKeywordLimits");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamTypeSpecialRule", b =>
@@ -1408,7 +1411,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("SpecialRuleId");
 
-                    b.ToTable("TeamTypeSpecialRules", (string)null);
+                    b.ToTable("TeamTypeSpecialRules");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamTypeThemedLeague", b =>
@@ -1423,7 +1426,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("ThemedLeagueId");
 
-                    b.ToTable("TeamTypeThemedLeague", (string)null);
+                    b.ToTable("TeamTypeThemedLeague");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.ThemedLeague", b =>
@@ -1447,7 +1450,7 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("RulesVersionId", "Nom")
                         .IsUnique();
 
-                    b.ToTable("ThemedLeagues", (string)null);
+                    b.ToTable("ThemedLeagues");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.XpCorrection", b =>
@@ -1481,7 +1484,7 @@ namespace BolDeSangManager.Migrations
 
                     b.HasIndex("TeamPlayerId");
 
-                    b.ToTable("XpCorrections", (string)null);
+                    b.ToTable("XpCorrections");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRole", b =>

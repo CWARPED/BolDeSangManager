@@ -738,7 +738,11 @@
             EstActif = staff.EstActif, Cout = staff.Cout,
             CoutDepuisTypeEquipe = staff.CoutDepuisTypeEquipe,
             MinCreation = staff.MinCreation, MaxCreation = staff.MaxCreation,
-            MaxLigue = staff.MaxLigue
+            MaxLigue = staff.MaxLigue,
+            // À ne pas oublier : sans cette ligne, le défaut C# (true) se
+            // substitue à la valeur réelle et la simple ouverture de la modale
+            // suffit à remettre les fans dans la VEA.
+            CompteDansVea = staff.CompteDansVea
         };
 
         await OuvrirDialogueStaffAsync($"Modifier « {staff.Nom} »", copie, async m =>

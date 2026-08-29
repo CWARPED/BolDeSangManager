@@ -45,6 +45,13 @@
             les résultats de match. Désactivé = aucune limite.
         </MudText>
 
+        <MudSwitch T="bool" @bind-Value="Modele.CompteDansVea" Color="Color.Primary"
+                   Label="Compte dans la valeur d'équipe (VEA)" Class="mb-1" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            Décoché pour les fans dévoués : ils mesurent le public, pas la puissance
+            de l'équipe. Le staff reste payant dans tous les cas.
+        </MudText>
+
         <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
             <MudNumericField @bind-Value="Modele.Ordre" Label="Ordre d'affichage"
                              Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />

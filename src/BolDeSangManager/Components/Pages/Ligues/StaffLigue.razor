@@ -53,6 +53,7 @@ else
                     <MudTh Style="text-align:center">Min créa.</MudTh>
                     <MudTh Style="text-align:center">Max créa.</MudTh>
                     <MudTh Style="text-align:center">Plafond ligue</MudTh>
+                    <MudTh Style="text-align:center">VEA</MudTh>
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Staff">
@@ -112,6 +113,13 @@ else
                                 <span style="font-size:11px; color:#9e9e9e">illimité</span>
                             }
                         </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Compte dans la VEA" Style="text-align:center">
+                        <MudCheckBox T="bool" Dense="true" Color="Color.Primary"
+                                     Value="@context.CompteDansVea"
+                                     ValueChanged="@(v => context.CompteDansVea = v)"
+                                     Disabled="@(!context.EstActif)"
+                                     title="Décoché = n'entre pas dans la valeur d'équipe (reste payant)" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>

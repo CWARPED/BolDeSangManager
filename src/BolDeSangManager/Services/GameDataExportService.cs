@@ -128,7 +128,8 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             XpBonusMvp: version.XpBonusMvp,
             Staff: staffTypes.Select(s => new StaffTypeGdDto(
                 s.Nom, s.Description, s.Ordre, s.EstActif, s.Cout,
-                s.CoutDepuisTypeEquipe, s.MinCreation, s.MaxCreation, s.MaxLigue
+                s.CoutDepuisTypeEquipe, s.MinCreation, s.MaxCreation, s.MaxLigue,
+                s.CompteDansVea
             )).ToList(),
             ReglesSpeciales: reglesSpeciales.Select(r => new SpecialRuleGdDto(
                 r.Nom, r.Description, r.Ordre, r.Code
@@ -419,7 +420,13 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                     CoutDepuisTypeEquipe = s.CoutDepuisTypeEquipe,
                     MinCreation          = s.MinCreation,
                     MaxCreation          = s.MaxCreation,
-                    MaxLigue             = s.MaxLigue
+                    MaxLigue             = s.MaxLigue,
+                    // Absent d'un fichier antérieur : on retombe sur la règle
+                    // métier plutôt que sur « true », qui remettrait les fans
+                    // dans la VEA.
+                    CompteDansVea        = s.CompteDansVea
+                                           ?? !string.Equals(s.Nom, StaffService.NomFans,
+                                                             StringComparison.OrdinalIgnoreCase)
                 });
             await db.SaveChangesAsync();
 
@@ -442,11 +449,11 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
     /// </summary>
     private static List<StaffTypeGdDto> StaffParDefaut() =>
     [
-        new("Fans dévoués", "Public fidèle de l'équipe. Influence l'affluence et les gains de match.", 1, true, 10_000, false, 1, 9, null),
-        new("Relances", "Relances d'équipe disponibles au début de chaque match. Leur prix dépend de la race.", 2, true, 0, true, 0, 8, 8),
-        new("Coachs assistants", "Chaque coach assistant aide à récupérer l'avantage de terrain.", 3, true, 10_000, false, 0, 6, null),
-        new("Cheerleaders", "Chaque cheerleader aide à récupérer l'avantage de terrain.", 4, true, 10_000, false, 0, 6, null),
-        new("Apothicaire", "Permet de relancer un jet de blessure une fois par match.", 5, true, 50_000, false, 0, 1, 1),
+        new("Fans dévoués", "Public fidèle de l'équipe. Influence l'affluence et les gains de match.", 1, true, 10_000, false, 1, 9, null, false),
+        new("Relances", "Relances d'équipe disponibles au début de chaque match. Leur prix dépend de la race.", 2, true, 0, true, 0, 8, 8, true),
+        new("Coachs assistants", "Chaque coach assistant aide à récupérer l'avantage de terrain.", 3, true, 10_000, false, 0, 6, null, true),
+        new("Cheerleaders", "Chaque cheerleader aide à récupérer l'avantage de terrain.", 4, true, 10_000, false, 0, 6, null, true),
+        new("Apothicaire", "Permet de relancer un jet de blessure une fois par match.", 5, true, 50_000, false, 0, 1, 1, true),
     ];
 
     // ── Réserve seule ─────────────────────────────────────────────────────────
@@ -1094,7 +1101,11 @@ record StaffTypeGdDto(
     bool CoutDepuisTypeEquipe,
     int MinCreation,
     int MaxCreation,
-    int? MaxLigue
+    int? MaxLigue,
+    // Nullable : un fichier antérieur à ce champ n'en a pas. Le repli vise la
+    // valeur MÉTIER — les fans hors VEA, tout le reste dedans — sinon
+    // réimporter un ancien export rouvrirait le trou qu'on vient de fermer.
+    bool? CompteDansVea = null
 );
 
 record ReserveExportDto(

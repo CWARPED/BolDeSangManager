@@ -342,7 +342,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                 CoutDepuisTypeEquipe = src.CoutDepuisTypeEquipe,
                 MinCreation          = src.MinCreation,
                 MaxCreation          = src.MaxCreation,
-                MaxLigue             = src.MaxLigue
+                MaxLigue             = src.MaxLigue,
+                CompteDansVea        = src.CompteDansVea
             });
         await db.SaveChangesAsync();
 

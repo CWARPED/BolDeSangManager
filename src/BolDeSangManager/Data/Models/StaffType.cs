@@ -56,6 +56,19 @@ public class StaffDefinition
     /// résultats de match (variation de fans après une rencontre).
     /// </summary>
     public int? MaxLigue { get; set; }
+
+    /// <summary>
+    /// Ce staff entre-t-il dans la Valeur d'Équipe Actuelle (VEA) ?
+    ///
+    /// Faux pour les <b>Fans dévoués</b> : ils représentent le public, pas la
+    /// puissance de l'équipe sur le terrain, et les compter gonflerait la VEA
+    /// — donc fausserait les coups de pouce accordés à l'équipe la plus faible.
+    /// Ils restent PAYANTS : ce drapeau ne concerne que la VEA, jamais le budget.
+    ///
+    /// Réglable en Admin plutôt qu'écrit en dur, pour qu'une édition future ou
+    /// un staff inventé par l'association se règle sans dev (principe #2).
+    /// </summary>
+    public bool CompteDansVea { get; set; } = true;
 }
 
 /// <summary>
@@ -85,6 +98,12 @@ public class LeagueStaffType
     public int MinCreation { get; set; }
     public int MaxCreation { get; set; }
     public int? MaxLigue { get; set; }
+
+    /// <summary>
+    /// Copie du drapeau des règles (<see cref="StaffDefinition.CompteDansVea"/>),
+    /// ajustable par le commissaire pour SA ligue.
+    /// </summary>
+    public bool CompteDansVea { get; set; } = true;
 
     public ICollection<TeamStaff> Achats { get; set; } = [];
 }
