@@ -396,7 +396,11 @@
                         <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
                         @if (!string.IsNullOrWhiteSpace(context.Competences))
                         {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@context.Competences</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.Competences</MudText>
+                        }
+                        @if (!string.IsNullOrWhiteSpace(context.ReglesSpeciales))
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Warning" Class="d-block">@context.ReglesSpeciales</MudText>
                         }
                         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
                             @if (context.Ligues.Count == 0)

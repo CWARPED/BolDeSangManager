@@ -703,6 +703,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             CapacitePasse = modele.CapacitePasse,
             Armure = modele.Armure,
             Competences = NormaliserOptions(modele.Competences),
+            ReglesSpeciales = modele.ReglesSpeciales?.Trim() ?? "",
             Ordre = modele.Ordre
         };
         db.StarPlayers.Add(star);
@@ -732,6 +733,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         star.CapacitePasse = modele.CapacitePasse;
         star.Armure = modele.Armure;
         star.Competences = NormaliserOptions(modele.Competences);
+        star.ReglesSpeciales = modele.ReglesSpeciales?.Trim() ?? "";
         star.Ordre = modele.Ordre;
         await db.SaveChangesAsync();
     }

@@ -69,6 +69,17 @@ public class StarPlayer
     public string Competences { get; set; } = string.Empty;
 
     /// <summary>
+    /// Règles spéciales propres au star player (« Loner (4+) », « Jeu de
+    /// Bagarre », « Ne peut pas être engagé par… »), en TEXTE LIBRE.
+    ///
+    /// Distinct des compétences : ce sont des clauses de mercenaire, souvent
+    /// rédigées en une phrase. Aucun lien avec le catalogue de règles
+    /// spéciales d'équipe, qui porte lui des comportements automatiques —
+    /// ici tout est informatif.
+    /// </summary>
+    public string ReglesSpeciales { get; set; } = string.Empty;
+
+    /// <summary>
     /// Ligues qui donnent accès à ce star player. Rattachement par CATALOGUE
     /// (voir <see cref="ThemedLeague"/>) et non par texte libre : une faute de
     /// frappe rendait auparavant un star player introuvable sans explication.

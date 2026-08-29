@@ -42,6 +42,12 @@
                       Margin="Margin.Dense" Class="mt-3" Lines="2"
                       HelperText="Séparées par des virgules." />
 
+        @* Clauses de mercenaire (« Loner (4+) »…), distinctes des compétences
+           et rédigées en clair : tout est informatif ici. *@
+        <MudTextField @bind-Value="_reglesSpeciales" Label="Règles spéciales" Variant="Variant.Outlined"
+                      Margin="Margin.Dense" Class="mt-3" Lines="2"
+                      HelperText="Clauses propres au joueur (Loner, restrictions d'engagement…)." />
+
         <MudSelect T="int" Label="Ligues" Variant="Variant.Outlined" Margin="Margin.Dense" Class="mt-3"
                    MultiSelection="true" SelectedValues="@_liguesSelectionnees"
                    SelectedValuesChanged="@(v => _liguesSelectionnees = v.ToHashSet())"
@@ -81,6 +87,7 @@
     string _capacitePasse = "-";
     string _armure = "9+";
     string _competences = "";
+    string _reglesSpeciales = "";
     int _ordre;
 
     List<ThemedLeague> _catalogue = [];
@@ -100,6 +107,7 @@
             _capacitePasse = Existant.CapacitePasse;
             _armure = Existant.Armure;
             _competences = Existant.Competences;
+            _reglesSpeciales = Existant.ReglesSpeciales;
             _ordre = Existant.Ordre;
             _liguesSelectionnees =
                 (await DataEditService.GetLiguesDuStarPlayerAsync(Existant.Id)).ToHashSet();
@@ -120,6 +128,7 @@
                 CapacitePasse = _capacitePasse,
                 Armure = _armure,
                 Competences = _competences,
+                ReglesSpeciales = _reglesSpeciales,
                 Ordre = _ordre
             };
 
