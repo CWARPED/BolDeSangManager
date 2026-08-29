@@ -36,6 +36,31 @@
             <MudSelectItem Value="@SpecialRuleCodes.CoutNulParMotCle">Coût d'embauche nul dans la VEA</MudSelectItem>
             <MudSelectItem Value="@SpecialRuleCodes.RecrutementGratuitParMotCle">Recrutement gratuit en après-match</MudSelectItem>
         </MudSelect>
+
+        @* Le paramètre du comportement se règle PAR RACE, pas ici : sans ce
+           rappel, on choisit un comportement et on cherche en vain le champ
+           qui va avec. *@
+        @if (_code == SpecialRuleCodes.CoutNulParMotCle
+             || _code == SpecialRuleCodes.RecrutementGratuitParMotCle)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                <MudText Typo="Typo.caption">
+                    <b>À compléter sur chaque équipe.</b> Le mot-clé des postes visés
+                    (« Trois-quart »…) se saisit depuis la fiche de l'équipe, onglet
+                    <b>Équipes</b> — une race peut viser un poste différent d'une autre.
+                    Sans mot-clé, la règle reste sans effet.
+                </MudText>
+            </MudAlert>
+        }
+        else if (_code == SpecialRuleCodes.FavoriDe)
+        {
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                <MudText Typo="Typo.caption">
+                    <b>À compléter sur chaque équipe.</b> Les dieux autorisés se
+                    saisissent depuis la fiche de l'équipe, onglet <b>Équipes</b>.
+                </MudText>
+            </MudAlert>
+        }
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Annuler">Annuler</MudButton>

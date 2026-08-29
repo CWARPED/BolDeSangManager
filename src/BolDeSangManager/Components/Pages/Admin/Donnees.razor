@@ -269,7 +269,24 @@
                             </MudChip>
                         }
                     </MudTd>
-                    <MudTd DataLabel="Équipes" Style="white-space:nowrap">@(context.TeamTypes?.Count ?? 0)</MudTd>
+                    <MudTd DataLabel="Équipes" Style="white-space:nowrap">
+                        @{
+                            var liens = context.TeamTypes ?? [];
+                            // Une règle à comportement automatique dont le mot-clé
+                            // n'est pas saisi ne fait RIEN : il faut le voir sans
+                            // ouvrir chaque fiche d'équipe.
+                            var sansParametre = !string.IsNullOrEmpty(context.Code)
+                                ? liens.Count(l => string.IsNullOrWhiteSpace(l.OptionsChoix))
+                                : 0;
+                        }
+                        @liens.Count
+                        @if (sansParametre > 0)
+                        {
+                            <MudIcon Icon="@Icons.Material.Filled.WarningAmber" Color="Color.Warning"
+                                     Size="Size.Small" Class="ml-1"
+                                     title="@($"{sansParametre} équipe(s) sans paramètre : la règle y est sans effet.")" />
+                        }
+                    </MudTd>
                     <MudTd DataLabel="Actions" Style="white-space:nowrap">
                         <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                                        OnClick="@(() => EditerRegleSpeciale(context))" />
