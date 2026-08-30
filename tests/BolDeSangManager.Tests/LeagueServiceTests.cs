@@ -1662,6 +1662,49 @@ public class LeagueServiceTests : IDisposable
         Assert.True(await auth.EstCommissaireDeLigueAsync(coach.Id, ligue.Id));
     }
 
+    /// <summary>
+    /// Verrou de régression : `GetLigueAsync` doit charger la FEUILLE des matchs.
+    ///
+    /// Les cartes de match de la fiche de ligue testent `Match.Feuille` pour
+    /// décider d'afficher « Corriger la saisie » (commissaire) et
+    /// « Confirmer / En attente adversaire ». Sans ce Include, la feuille est
+    /// toujours nulle et ces boutons ne s'affichent JAMAIS — panne silencieuse :
+    /// la page se rend normalement, seuls des boutons manquent.
+    /// </summary>
+    [Fact]
+    public async Task GetLigue_ChargeLaFeuilleDesMatchs()
+    {
+        var (commissaire, game, rv) = await SetupAsync();
+
+        await using var db = _factory.CreateContext();
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+        var (teamType, _) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+
+        var div = new Division { LeagueId = ligue.Id, Nom = "D1", Ordre = 1 };
+        db.Divisions.Add(div);
+        await db.SaveChangesAsync();
+
+        var dom = await DataSeeder.SeedTeamAsync(db, ligue.Id, commissaire.Id, teamType.Id, "Dom");
+        var ext = await DataSeeder.SeedTeamAsync(db, ligue.Id, commissaire.Id, teamType.Id, "Ext");
+        var match = await DataSeeder.SeedMatchAsync(db, dom.Id, ext.Id, div.Id);
+
+        db.MatchSheets.Add(new MatchSheet
+        {
+            MatchId = match.Id,
+            SaisiParId = commissaire.Id,
+            TouchdownsDomicile = 2,
+            TouchdownsExterieur = 1,
+        });
+        await db.SaveChangesAsync();
+
+        await using var db2 = _factory.CreateContext();
+        var relue = await CreateService(db2).GetLigueAsync(ligue.Id);
+
+        var matchRelu = relue!.Divisions.Single().Matchs.Single();
+        Assert.NotNull(matchRelu.Feuille);
+        Assert.Equal(2, matchRelu.Feuille!.TouchdownsDomicile);
+    }
+
     private class StubAuthorizationService(
         (string userId, int ligueId)? peutGerer = null) : IAuthorizationService
     {

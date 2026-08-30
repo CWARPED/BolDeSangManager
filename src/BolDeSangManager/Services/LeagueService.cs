@@ -61,6 +61,13 @@ public class LeagueService(
                 .ThenInclude(m => m.EquipeDomicile)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
                 .ThenInclude(m => m.EquipeExterieur)
+            // La feuille est nécessaire à l'affichage des cartes de match :
+            // « Corriger la saisie » (commissaire) et « Confirmer / En attente
+            // adversaire » testent Match.Feuille. Sans ce Include elle est
+            // toujours nulle et ces boutons ne s'affichent JAMAIS sur la fiche
+            // de ligue — panne silencieuse, aucun test de service ne la voit.
+            .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
+                .ThenInclude(m => m.Feuille)
             .FirstOrDefaultAsync(l => l.Id == id);
     }
 
