@@ -31,8 +31,18 @@ else
                 | Commissaire : @DisplayHelpers.NomCoach(_ligue.Commissaire)
             </MudText>
         </div>
-        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
             <MudChip T="string" Color="@LeagueColor(_ligue.Statut)">@LeagueLabel(_ligue.Statut)</MudChip>
+            @* Bascule vue coach / vue commissaire. Visible DANS LES DEUX
+               positions — la masquer en vue coach enfermerait l'utilisateur
+               sans retour possible. Purement cosmétique : le serveur revérifie
+               les droits, et les actions testent _peutGererLigue. *@
+            @if (_peutGererLigue)
+            {
+                <MudSwitch T="bool" Value="_vueCommissaire" ValueChanged="BasculerVue"
+                           Color="Color.Primary" Size="Size.Small"
+                           Label="@(_vueCommissaire ? "Vue commissaire" : "Vue coach")" />
+            }
             @if (_estCommissaire)
             {
                 @if (_ligue.Statut == LeagueStatus.Creation)
@@ -142,7 +152,7 @@ else
         <MudPaper Class="pa-3 mb-3" Elevation="1">
             <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
                 <MudText Typo="Typo.h6">Commissaires de ligue</MudText>
-                @if (_peutGererLigue)
+                @if (_estCommissaire)
                 {
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
                                StartIcon="@Icons.Material.Filled.PersonAdd"
@@ -160,7 +170,7 @@ else
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                 <MudIcon Icon="@Icons.Material.Filled.SupervisorAccount" Size="Size.Small" />
                                 <MudText Typo="Typo.body2">@DisplayHelpers.NomCoach(c.User)</MudText>
-                                @if (_peutGererLigue)
+                                @if (_estCommissaire)
                                 {
                                     <MudIconButton Icon="@Icons.Material.Filled.RemoveCircleOutline"
                                                    Size="Size.Small" Color="Color.Error"
@@ -176,6 +186,22 @@ else
                 <MudText Typo="Typo.caption" Class="mt-2">Aucun commissaire de ligue pour l'instant.</MudText>
             }
         </MudPaper>
+    }
+
+    @* Vue coach active alors que l'utilisateur a les droits : sans ce bandeau,
+       l'écran ment — un commissaire ne comprendrait pas pourquoi ses outils ont
+       disparu, ni pourquoi le calendrier est partiel (le mode brouillard
+       s'applique aussi en vue coach, c'est le but de la prévisualisation). *@
+    @if (_peutGererLigue && !_vueCommissaire)
+    {
+        <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+            <b>Vue coach</b> — vous voyez cette ligue comme un coach.
+            Activez la <b>vue commissaire</b> pour retrouver vos outils de gestion.
+            @if (!_estInscrit)
+            {
+                <text> Vous n'avez pas d'équipe ici : il est normal que peu de matchs s'affichent.</text>
+            }
+        </MudAlert>
     }
 
     <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4">
@@ -568,12 +594,38 @@ else
     [Parameter] public int Id { get; set; }
 
     League? _ligue;
-    // true si l'utilisateur peut gérer la ligue (Admin, GrandCommissaire ou CommissaireDeLigue)
-    bool _estCommissaire;
+
+    /// <summary>
+    /// Droit RÉEL de gérer cette ligue (Admin, GrandCommissaire ou commissaire
+    /// de la ligue). Ne dépend pas de la bascule d'affichage : toute ACTION doit
+    /// tester ce champ, jamais <see cref="_estCommissaire"/>.
+    /// </summary>
+    bool _peutGererLigue;
+
+    /// <summary>
+    /// Position de la bascule « vue commissaire ». Défaut : false — un
+    /// commissaire arrive sur sa ligue comme un coach et n'active ses droits
+    /// qu'au besoin (choix produit).
+    /// </summary>
+    bool _vueCommissaire;
+
+    /// <summary>
+    /// Ce que l'AFFICHAGE doit considérer. Propriété calculée : les nombreux
+    /// endroits qui la lisaient déjà (en-tête, brouillard, règlement, cartes de
+    /// match, MatchsVisibles) suivent la bascule sans modification.
+    ///
+    /// ⚠️ Purement cosmétique. Le serveur revérifie les droits dans tous les
+    /// cas ; masquer un bouton n'a jamais été une sécurité.
+    /// </summary>
+    bool _estCommissaire => _peutGererLigue && _vueCommissaire;
+
     bool _estInscrit;
     List<LeagueCommissioner> _commissaires = [];
-    bool _peutGererLigue;
     string _currentUserId = "";
+
+    /// <summary>Clé de préférence, préfixée par l'utilisateur : deux comptes sur
+    /// le même navigateur ne doivent pas hériter de la position de l'autre.</summary>
+    string CleVue => $"bdsm.vueCommissaire.{_currentUserId}";
 
     protected override async Task OnInitializedAsync()
     {
@@ -582,7 +634,8 @@ else
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         _currentUserId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
 
-        _estCommissaire = _ligue is not null && await Auth.PeutGererLigueAsync(_currentUserId, _ligue.Id);
+        _peutGererLigue = _ligue is not null
+            && await Auth.PeutGererLigueAsync(_currentUserId, _ligue.Id);
         _estInscrit = _ligue?.Equipes.Any(e => e.CoachId == _currentUserId) ?? false;
 
         // Échéances indicatives de fin de ronde (format Libre), affichées dans
@@ -847,6 +900,37 @@ else
         _ligue?.Divisions.SelectMany(d => MatchsVisibles(d)).Count() ?? 0;
 
     /// <summary>
+    /// Bascule vue coach ↔ vue commissaire, et mémorise la position.
+    /// Préférence d'affichage locale : pas de migration, pas de champ en base.
+    /// </summary>
+    async Task BasculerVue(bool actif)
+    {
+        _vueCommissaire = actif;
+        await JS.InvokeVoidAsync("bdsmPrefEcrire", CleVue, actif ? "1" : "0");
+    }
+
+    /// <summary>
+    /// Restaure la position mémorisée de la bascule.
+    ///
+    /// ⚠️ localStorage n'est lisible qu'en interop JS, donc PAS dans
+    /// OnInitializedAsync (prérendu serveur : aucun navigateur au bout). D'où la
+    /// lecture au premier rendu. Conséquence assumée : le premier affichage est
+    /// toujours en vue coach — ce qui est justement le défaut voulu, donc aucun
+    /// clignotement visible pour un coach ni pour un commissaire en vue coach.
+    /// </summary>
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender || !_peutGererLigue) return;
+
+        var valeur = await JS.InvokeAsync<string?>("bdsmPrefLire", CleVue);
+        if (valeur == "1")
+        {
+            _vueCommissaire = true;
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>
     /// Qui peut fixer la date d'un match (#1) : ses deux coaches et les
     /// commissaires. Le service revérifie de toute façon côté serveur.
     /// Délègue à DisplayHelpers pour rester aligné sur CarteMatch.
@@ -958,7 +1042,10 @@ else
 
     async Task EnregistrerReglement()
     {
-        if (_ligue is null || !_estCommissaire) return;
+        // ⚠️ Droit RÉEL, pas la bascule d'affichage : si l'utilisateur repasse en
+        // vue coach pendant l'édition, l'enregistrement doit aboutir. La bascule
+        // masque des boutons, elle ne retire pas des droits.
+        if (_ligue is null || !_peutGererLigue) return;
         _sauvegardeReglement = true;
         try
         {
@@ -995,7 +1082,8 @@ else
     /// <summary>Active/désactive le mode brouillard sur une ligue existante (#2).</summary>
     async Task BasculerBrouillard(bool actif)
     {
-        if (_ligue is null || !_estCommissaire) return;
+        // Droit réel : voir EnregistrerReglement.
+        if (_ligue is null || !_peutGererLigue) return;
         try
         {
             await LeagueService.DefinirModeBrouillardAsync(_ligue.Id, actif, _currentUserId);

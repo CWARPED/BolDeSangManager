@@ -67,6 +67,15 @@
             // que Chrome, qui lit de façon synchrone, ne voyait rien.
             setTimeout(() => URL.revokeObjectURL(url), 60000);
         };
+        // Préférences d'affichage locales (ex. bascule vue coach/commissaire).
+        // Enveloppé dans try/catch : localStorage lève en navigation privée
+        // stricte ou cookies bloqués, et une exception JS casserait le circuit.
+        window.bdsmPrefLire = function (cle) {
+            try { return localStorage.getItem(cle); } catch { return null; }
+        };
+        window.bdsmPrefEcrire = function (cle, valeur) {
+            try { localStorage.setItem(cle, valeur); } catch { }
+        };
     </script>
 </body>
 
