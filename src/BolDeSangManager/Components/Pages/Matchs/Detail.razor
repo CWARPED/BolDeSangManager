@@ -35,14 +35,6 @@ else
                     Saisir la feuille
                 </MudButton>
             }
-            @if (_estCommissaire && _match.Statut == MatchStatus.ValidationCompetences)
-            {
-                <MudButton Variant="Variant.Filled" Color="Color.Warning"
-                           StartIcon="@Icons.Material.Filled.FactCheck"
-                           Href="@($"/matchs/{_match.Id}/validation")">
-                    Valider les XP
-                </MudButton>
-            }
             @if (_estCommissaire && _match.Feuille is not null)
             {
                 <MudButton Variant="@(_modeEdition ? Variant.Filled : Variant.Outlined)"
@@ -325,9 +317,11 @@ else
             </MudPaper>
         }
 
+        @* « ✓ Validée » retiré avec la validation commissaire : le drapeau
+           ValideParCommissaire reste en base (jamais de suppression de colonne)
+           et dans les exports, mais il n'est plus jamais mis à vrai. *@
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-3 d-block">
             Saisie le @_match.Feuille.SaisiLe.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
-            @if (_match.Feuille.ValideParCommissaire) { <span> — ✓ Validée</span> }
         </MudText>
     }
 }

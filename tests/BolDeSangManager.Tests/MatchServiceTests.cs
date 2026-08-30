@@ -448,73 +448,58 @@ public class MatchServiceTests : IDisposable
         Assert.Equal(MatchStatus.FeuilleEnSaisie, m!.Statut);
     }
 
-    // ─── ValiderFeuilleAsync ──────────────────────────────────────────────────
+    // ─── Clôture SANS commissaire ─────────────────────────────────────────────
+    //
+    // La validation d'un match par un commissaire a été retirée
+    // (ValiderFeuilleAsync, GetMatchsEnAttenteValidationAsync et la page
+    // /matchs/{id}/validation). Ce test remplace les trois tests supprimés et
+    // prouve que le cycle complet aboutit tout seul :
+    //   saisie coach A → confirmation coach B → après-match des deux → Termine
+    // Ne pas confondre ConfirmerFeuilleCoachAsync (l'adversaire confirme la
+    // saisie — CONSERVÉ) avec l'ancienne validation commissaire (SUPPRIMÉE).
 
     [Fact]
-    public async Task ValiderFeuille_PasseStatutTermine()
+    public async Task CycleComplet_SeCloutureSansAucuneInterventionCommissaire()
     {
-        var (_, _, _, _, match, saisiPar) = await SetupMatchContextAsync();
+        var (dom, ext, _, _, match, _) = await SetupMatchContextAsync();
         await using var db = _factory.CreateContext();
         var svc = CreateService(db);
 
-        var feuille = new MatchSheet
-        {
-            TouchdownsDomicile = 1, TouchdownsExterieur = 0,
-            GainsDomicile = 0, GainsExterieur = 0
-        };
-        await svc.SaisirFeuilleMatchAsync(match.Id, feuille, [], saisiPar.Id);
-        await svc.ValiderFeuilleAsync(match.Id, "RAS");
+        var coachDom = (await db.Teams.FindAsync(dom.Id))!.CoachId!;
+        var coachExt = (await db.Teams.FindAsync(ext.Id))!.CoachId!;
 
-        await using var db2 = _factory.CreateContext();
-        var m = await db2.Matches.FindAsync(match.Id);
+        // 1. le coach domicile saisit
+        await svc.SaisirFeuilleMatchAsync(match.Id, new MatchSheet
+        {
+            TouchdownsDomicile = 2, TouchdownsExterieur = 1,
+            GainsDomicile = 0, GainsExterieur = 0
+        }, [], coachDom);
+
+        await using (var v1 = _factory.CreateContext())
+            Assert.Equal(MatchStatus.FeuilleEnSaisie, (await v1.Matches.FindAsync(match.Id))!.Statut);
+
+        // 2. l'adversaire confirme (circuit du mail « Feuille à confirmer »)
+        await svc.ConfirmerFeuilleCoachAsync(match.Id, coachExt);
+
+        await using (var v2 = _factory.CreateContext())
+            Assert.Equal(MatchStatus.ValidationCompetences, (await v2.Matches.FindAsync(match.Id))!.Statut);
+
+        // 3. les deux coaches valident leur après-match → clôture automatique
+        var teamSvc = new TeamService(db, NullLogger<TeamService>.Instance);
+        await svc.ValiderApresMatchCoachAsync(match.Id, dom.Id, [], [], 0, teamSvc);
+
+        await using (var v3 = _factory.CreateContext())
+            Assert.Equal(MatchStatus.ValidationCompetences, (await v3.Matches.FindAsync(match.Id))!.Statut);
+
+        await svc.ValiderApresMatchCoachAsync(match.Id, ext.Id, [], [], 0, teamSvc);
+
+        await using var final = _factory.CreateContext();
+        var m = await final.Matches.FindAsync(match.Id);
         Assert.Equal(MatchStatus.Termine, m!.Statut);
-    }
 
-    [Fact]
-    public async Task ValiderFeuille_MarqueFeuilleValide()
-    {
-        var (_, _, _, _, match, saisiPar) = await SetupMatchContextAsync();
-        await using var db = _factory.CreateContext();
-        var svc = CreateService(db);
-
-        var feuille = new MatchSheet
-        {
-            TouchdownsDomicile = 0, TouchdownsExterieur = 1,
-            GainsDomicile = 0, GainsExterieur = 0
-        };
-        await svc.SaisirFeuilleMatchAsync(match.Id, feuille, [], saisiPar.Id);
-        await svc.ValiderFeuilleAsync(match.Id, "OK");
-
-        await using var db2 = _factory.CreateContext();
-        var f = await db2.MatchSheets.FirstAsync(s => s.MatchId == match.Id);
-        Assert.True(f.ValideParCommissaire);
-        Assert.Equal("OK", f.NotesCommissaire);
-    }
-
-    // ─── GetMatchsEnAttenteValidationAsync ────────────────────────────────────
-
-    [Fact]
-    public async Task GetMatchsEnAttenteValidation_FiltreLigueEtStatut()
-    {
-        var (dom, ext, _, _, match, saisiPar) = await SetupMatchContextAsync();
-        await using var db = _factory.CreateContext();
-        var svc = CreateService(db);
-
-        // Saisir la feuille pour passer en ValidationCompetences
-        var feuille = new MatchSheet
-        {
-            TouchdownsDomicile = 1, TouchdownsExterieur = 0,
-            GainsDomicile = 0, GainsExterieur = 0
-        };
-        await svc.SaisirFeuilleMatchAsync(match.Id, feuille, [], saisiPar.Id);
-
-        // Récupérer la ligue via la team
-        await using var db2 = _factory.CreateContext();
-        var t = await db2.Teams.FindAsync(dom.Id);
-        var matchsEnAttente = await svc.GetMatchsEnAttenteValidationAsync(t!.LeagueId);
-
-        Assert.Single(matchsEnAttente);
-        Assert.Equal(match.Id, matchsEnAttente[0].Id);
+        // et personne n'a « validé » quoi que ce soit en tant que commissaire
+        var f = await final.MatchSheets.FirstAsync(s => s.MatchId == match.Id);
+        Assert.False(f.ValideParCommissaire);
     }
 
     // ─── CalculerPSP (méthode statique publique, gameType-aware) ─────────────

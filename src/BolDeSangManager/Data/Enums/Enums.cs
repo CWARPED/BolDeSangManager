@@ -30,7 +30,7 @@ public enum MatchStatus
     Programme,                   // Match planifié, pas encore joué
     AJouer,                      // À jouer maintenant
     FeuilleEnSaisie,             // Feuille de match en cours de saisie
-    ValidationCompetences,       // En attente de validation commissaire (XP)
+    ValidationCompetences,       // Après-match : les deux coaches dépensent l'XP et recrutent
     Termine,                     // Match terminé et validé
     Concede                      // Une équipe a concédé
 }

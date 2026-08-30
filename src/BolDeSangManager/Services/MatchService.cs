@@ -574,22 +574,13 @@ public class MatchService(
         await db.SaveChangesAsync();
     }
 
-    public async Task ValiderFeuilleAsync(int matchId, string notesCommissaire)
-    {
-        var feuille = await db.MatchSheets.FirstOrDefaultAsync(f => f.MatchId == matchId)
-            ?? throw new InvalidOperationException("Feuille introuvable");
-
-        var match = await db.Matches.FindAsync(matchId)
-            ?? throw new InvalidOperationException("Match introuvable");
-
-        feuille.ValideParCommissaire = true;
-        feuille.NotesCommissaire = notesCommissaire;
-        match.Statut = MatchStatus.Termine;
-
-        await db.SaveChangesAsync();
-        logger.LogInformation("Match id={MatchId} validé par le commissaire", matchId);
-        await NotifierMatchAsync(matchId);
-    }
+    // ⚠️ ValiderFeuilleAsync (« forcer la clôture par le commissaire ») a été
+    // retirée : la validation d'un match par un commissaire n'est plus voulue.
+    // Ne pas confondre avec ConfirmerFeuilleCoachAsync, qui est la confirmation
+    // de la saisie par le coach ADVERSE — celle-là reste, c'est le circuit du
+    // mail « Feuille à confirmer » (voir EnvoyerEmailConfirmationFeuilleAsync).
+    // Un match se clôture désormais tout seul quand les deux coaches ont validé
+    // leur après-match (voir ValiderApresMatchCoachAsync).
 
     public async Task ValiderApresMatchCoachAsync(
         int matchId, int teamId,
@@ -835,16 +826,8 @@ public class MatchService(
         await NotifierMatchAsync(matchId);
     }
 
-    public async Task<List<Match>> GetMatchsEnAttenteValidationAsync(int ligueId) =>
-        await db.Matches
-            .Include(m => m.EquipeDomicile)
-            .Include(m => m.EquipeExterieur)
-            .Include(m => m.Division)
-            .Include(m => m.Feuille)
-            .Where(m => m.Division!.LeagueId == ligueId
-                     && (m.Statut == MatchStatus.FeuilleEnSaisie
-                      || m.Statut == MatchStatus.ValidationCompetences))
-            .ToListAsync();
+    // ⚠️ GetMatchsEnAttenteValidationAsync retirée avec la validation commissaire :
+    // elle listait les matchs « en attente du commissaire », notion abandonnée.
 
     // Calcul simplifié des gains d'après-match selon les règles LRB
     public static (int gainsDomicile, int gainsExterieur) CalculerGains(

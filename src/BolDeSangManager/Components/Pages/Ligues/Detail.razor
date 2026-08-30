@@ -114,8 +114,8 @@ else
                 }
             }
             @* Phase de repos : accessible aux COACHES, donc hors du bloc
-               commissaire ci-dessus. Sans ce lien, l'écran de validation serait
-               inatteignable pour ceux à qui il s'adresse. *@
+               commissaire ci-dessus. Sans ce lien, l'écran de phase de repos
+               serait inatteignable pour ceux à qui il s'adresse. *@
             @if (_ligue.Statut == LeagueStatus.PhaseDeRepos)
             {
                 @foreach (var eq in _ligue.Equipes.Where(e => e.CoachId == _currentUserId))
