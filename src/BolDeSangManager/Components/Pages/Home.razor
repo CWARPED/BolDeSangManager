@@ -6,6 +6,7 @@
 @inject MatchService MatchService
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject ISnackbar Snackbar
 
 <PageTitle>BolDeSang Manager</PageTitle>
@@ -51,37 +52,12 @@
                                 @foreach (var match in _mesMatchs)
                                 {
                                     <MudItem xs="12" sm="6" md="4">
-                                        <MudPaper Outlined="true" Class="pa-3"
-                                                  Style="@($"cursor:pointer;{MatchBorderStyle(match.Statut)}")"
-                                                  @onclick="@(() => Nav.NavigateTo($"/matchs/{match.Id}/detail"))">
-                                            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-1">
-                                                @match.Division?.League?.Nom —
-                                                @(match.Ronde >= 100 ? $"Play-off T{match.Ronde - 99}" : $"Ronde {match.Ronde}")
-                                            </MudText>
-                                            <MudStack AlignItems="AlignItems.Center" Spacing="0">
-                                                <MudText Typo="Typo.body2" Align="Align.Center">
-                                                    <b>@match.EquipeDomicile?.Nom</b>
-                                                </MudText>
-                                                <MudText Typo="Typo.caption" Color="Color.Secondary">vs</MudText>
-                                                <MudText Typo="Typo.body2" Align="Align.Center">
-                                                    <b>@match.EquipeExterieur?.Nom</b>
-                                                </MudText>
-                                            </MudStack>
-                                            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mt-2">
-                                                <MudChip T="string" Color="@MatchColor(match.Statut)" Size="Size.Small">
-                                                    @MatchLabel(match.Statut)
-                                                </MudChip>
-                                                @if (match.Statut == MatchStatus.AJouer || match.Statut == MatchStatus.Programme || match.Statut == MatchStatus.FeuilleEnSaisie)
-                                                {
-                                                    <div @onclick:stopPropagation="true">
-                                                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error"
-                                                                   Href="@($"/matchs/{match.Id}/feuille")">
-                                                            Saisir
-                                                        </MudButton>
-                                                    </div>
-                                                }
-                                            </MudStack>
-                                        </MudPaper>
+                                        <CarteMatch Match="match"
+                                                    UserId="_userId"
+                                                    EstCommissaire="@EstCommissaireDe(match)"
+                                                    MesEquipes="_mesEquipeIds"
+                                                    AfficherLigue="true"
+                                                    Change="Recharger" />
                                     </MudItem>
                                 }
                             </MudGrid>
@@ -199,44 +175,101 @@
     List<Team>? _mesEquipes;
     List<League>? _ligues;
     List<Match>? _mesMatchs;
+    HashSet<int> _mesEquipeIds = [];
+    string _userId = "";
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>Ligues que l'utilisateur peut gérer (droits réels, pas un rôle).</summary>
+    HashSet<int> _liguesGerees = [];
+
+    bool EstCommissaireDe(Match m) =>
+        m.Division is not null && _liguesGerees.Contains(m.Division.LeagueId);
+
+    async Task Recharger()
+    {
+        await ChargerAsync();
+        StateHasChanged();
+    }
+
+    protected override Task OnInitializedAsync() => ChargerAsync();
+
+    async Task ChargerAsync()
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var user = authState.User;
 
         _ligues = await LeagueService.GetAllLiguesAsync();
 
-        if (user.Identity?.IsAuthenticated == true)
+        if (user.Identity?.IsAuthenticated != true) return;
+
+        _userId = user.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+        var userId = _userId;
+        _mesEquipes = await TeamService.GetEquipesCoachAsync(userId);
+
+        var statuts = new[] { MatchStatus.Programme, MatchStatus.AJouer, MatchStatus.FeuilleEnSaisie, MatchStatus.ValidationCompetences };
+
+        // Une seule requête pour toutes les équipes du coach : la boucle
+        // précédente déclenchait un aller-retour SQL par équipe (N+1).
+        _mesEquipeIds = _mesEquipes.Select(e => e.Id).ToHashSet();
+        var tousMatchs = (await MatchService.GetMatchsEquipesAsync(_mesEquipeIds))
+            .Where(m => statuts.Contains(m.Statut))
+            .DistinctBy(m => m.Id)
+            .ToList();
+
+        // Mode brouillard : cet écran agrège les matchs de TOUTES les ligues du
+        // coach. Sans ce filtre, le calendrier masqué sur la fiche de ligue
+        // ressortait ici — le coach voyait ses rondes futures sur l'accueil.
+        var brouillardParLigue = (_ligues ?? []).ToDictionary(l => l.Id, l => l.ModeBrouillard);
+        var commissaireDe = (_ligues ?? [])
+            .Where(l => l.CommissaireId == userId
+                        || l.CommissairesDeLigue.Any(c => c.UserId == userId))
+            .Select(l => l.Id)
+            .ToHashSet();
+
+        var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
+            tousMatchs, _mesEquipeIds, brouillardParLigue, commissaireDe);
+
+        // Droits réels ligue par ligue (Admin/GrandCommissaire gèrent tout).
+        _liguesGerees = [];
+        foreach (var l in _ligues ?? [])
         {
-            var userId = user.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
-            _mesEquipes = await TeamService.GetEquipesCoachAsync(userId);
-
-            var statuts = new[] { MatchStatus.Programme, MatchStatus.AJouer, MatchStatus.FeuilleEnSaisie, MatchStatus.ValidationCompetences };
-
-            // Une seule requête pour toutes les équipes du coach : la boucle
-            // précédente déclenchait un aller-retour SQL par équipe (N+1).
-            var mesEquipeIds = _mesEquipes.Select(e => e.Id).ToHashSet();
-            var tousMatchs = (await MatchService.GetMatchsEquipesAsync(mesEquipeIds))
-                .Where(m => statuts.Contains(m.Statut))
-                .DistinctBy(m => m.Id)
-                .ToList();
-
-            // Mode brouillard : cet écran agrège les matchs de TOUTES les ligues du
-            // coach. Sans ce filtre, le calendrier masqué sur la fiche de ligue
-            // ressortait ici — le coach voyait ses rondes futures sur l'accueil.
-            var brouillardParLigue = (_ligues ?? []).ToDictionary(l => l.Id, l => l.ModeBrouillard);
-            var commissaireDe = (_ligues ?? [])
-                .Where(l => l.CommissaireId == userId
-                            || l.CommissairesDeLigue.Any(c => c.UserId == userId))
-                .Select(l => l.Id)
-                .ToHashSet();
-
-            var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
-                tousMatchs, mesEquipeIds, brouillardParLigue, commissaireDe);
-
-            _mesMatchs = [.. visibles.OrderBy(m => m.Division?.LeagueId).ThenBy(m => m.Ronde)];
+            if (await Auth.PeutGererLigueAsync(userId, l.Id))
+                _liguesGerees.Add(l.Id);
         }
+
+        _mesMatchs = SelectionnerPourAccueil(visibles, _userId, _mesEquipeIds);
     }
 
+    /// <summary>
+    /// Ce que l'accueil montre : LE prochain match de chaque ligue, plus tout
+    /// match qui attend encore une action de ce coach.
+    ///
+    /// L'exception « en attente » n'est pas cosmétique : sans elle, une feuille
+    /// à confirmer ou un après-match à remplir sur une rencontre déjà passée
+    /// disparaîtrait de l'accueil, et le coach n'aurait plus aucun rappel de ce
+    /// qu'on attend de lui.
+    ///
+    /// Fonction pure (aucun accès base) pour être testable directement.
+    /// </summary>
+    public static List<Match> SelectionnerPourAccueil(
+        IEnumerable<Match> matchsVisibles, string userId, IReadOnlySet<int> mesEquipes) =>
+        matchsVisibles
+            .GroupBy(m => m.Division?.LeagueId)
+            .SelectMany(groupe =>
+            {
+                var enAttente = groupe
+                    .Where(m => DisplayHelpers.AttendUneActionDe(m, userId, mesEquipes));
+
+                var prochain = groupe
+                    .Where(m => m.Statut is MatchStatus.Programme or MatchStatus.AJouer)
+                    .OrderBy(m => m.Ronde).ThenBy(m => m.Id)
+                    .Take(1);
+
+                return enAttente.Concat(prochain);
+            })
+            .DistinctBy(m => m.Id)
+            // Les actions en attente d'abord : c'est le plus urgent pour le coach.
+            .OrderByDescending(m => DisplayHelpers.AttendUneActionDe(m, userId, mesEquipes))
+            .ThenBy(m => m.Division?.LeagueId)
+            .ThenBy(m => m.Ronde)
+            .ToList();
 }
