@@ -115,6 +115,120 @@ public class LeagueService(
         return ligue;
     }
 
+    /// <summary>
+    /// Modifie les paramètres d'une ligue tant que la saison n'est pas lancée.
+    ///
+    /// Ne touche NI au règlement NI au mode brouillard : ils ont leur propre
+    /// commande sur la fiche de ligue et restent modifiables en cours de saison.
+    ///
+    /// Tout est revalidé ici : le grisage de l'écran d'édition n'est qu'un
+    /// confort d'affichage, jamais une sécurité.
+    /// </summary>
+    /// <param name="staff">
+    /// Staff ajusté pour cette ligue. <c>null</c> = staff inchangé. Refusé dès
+    /// qu'une équipe est inscrite : leur trésorerie a été figée à leur création
+    /// à partir de ces coûts.
+    /// </param>
+    public async Task ModifierLigueAsync(
+        int ligueId,
+        League modifiee,
+        string userId,
+        IEnumerable<LeagueStaffType>? staff = null)
+    {
+        if (!await authService.PeutGererLigueAsync(userId, ligueId))
+            throw new InvalidOperationException("Vous ne gérez pas cette ligue.");
+
+        var ligue = await db.Leagues
+            .Include(l => l.Equipes)
+            .FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        if (!DisplayHelpers.ParametresLigueEditables(ligue.Statut))
+            throw new InvalidOperationException(
+                "La saison est lancée : les paramètres de la ligue ne sont plus modifiables.");
+
+        var structurantsOuverts =
+            DisplayHelpers.ParametresStructurantsEditables(ligue.Statut, ligue.Equipes.Count);
+
+        if (!structurantsOuverts)
+        {
+            if (modifiee.BudgetDepart != ligue.BudgetDepart)
+                throw new InvalidOperationException(
+                    "Des équipes sont déjà inscrites : le budget de départ ne peut plus changer. "
+                    + "Supprimez les équipes, ou créez une nouvelle ligue.");
+            if (modifiee.RulesVersionId != ligue.RulesVersionId || modifiee.GameId != ligue.GameId)
+                throw new InvalidOperationException(
+                    "Des équipes sont déjà inscrites : la version des règles ne peut plus changer. "
+                    + "Supprimez les équipes, ou créez une nouvelle ligue.");
+            if (staff is not null)
+                throw new InvalidOperationException(
+                    "Des équipes sont déjà inscrites : le staff de la ligue ne peut plus changer. "
+                    + "Supprimez les équipes, ou créez une nouvelle ligue.");
+        }
+
+        if (string.IsNullOrWhiteSpace(modifiee.Nom))
+            throw new InvalidOperationException("Le nom de la ligue est obligatoire.");
+        if (modifiee.BudgetDepart < 0 || modifiee.BudgetDepart > 10_000_000)
+            throw new InvalidOperationException($"Budget de départ invalide : {modifiee.BudgetDepart}.");
+
+        if (structurantsOuverts
+            && (modifiee.GameId != ligue.GameId || modifiee.RulesVersionId != ligue.RulesVersionId))
+        {
+            // La version choisie doit appartenir au jeu choisi : la valeur vient
+            // de l'écran, donc elle est falsifiable.
+            var versionValide = await db.RulesVersions.AnyAsync(
+                v => v.Id == modifiee.RulesVersionId && v.GameId == modifiee.GameId);
+            if (!versionValide)
+                throw new InvalidOperationException(
+                    "La version des règles choisie n'appartient pas au jeu sélectionné.");
+        }
+
+        ligue.Nom                  = modifiee.Nom.Trim();
+        ligue.Description          = modifiee.Description?.Trim() ?? string.Empty;
+        ligue.Format               = modifiee.Format;
+        ligue.NombreEquipesPlayoff = modifiee.NombreEquipesPlayoff;
+        ligue.XpParTouchdown       = modifiee.XpParTouchdown;
+        ligue.XpParPasse           = modifiee.XpParPasse;
+        ligue.XpParInterception    = modifiee.XpParInterception;
+        ligue.XpParElimination     = modifiee.XpParElimination;
+        ligue.XpBonusMvp           = modifiee.XpBonusMvp;
+
+        if (structurantsOuverts)
+        {
+            ligue.GameId         = modifiee.GameId;
+            ligue.RulesVersionId = modifiee.RulesVersionId;
+            ligue.BudgetDepart   = modifiee.BudgetDepart;
+        }
+
+        await db.SaveChangesAsync();
+
+        if (structurantsOuverts && staff is not null)
+        {
+            // Mise à jour EN PLACE, jamais supprimer/recréer : TeamStaff pointe
+            // vers LeagueStaffType en cascade. Aucune équipe n'existe sur ce
+            // chemin, mais la règle doit tenir si la garde évolue un jour.
+            // Chaque ligne est revérifiée comme appartenant à CETTE ligue :
+            // l'écran pourrait poster l'id du staff d'une autre ligue.
+            var idsDeLaLigue = await db.LeagueStaffTypes
+                .Where(s => s.LeagueId == ligueId)
+                .Select(s => s.Id)
+                .ToListAsync();
+
+            foreach (var s in staff)
+            {
+                if (!idsDeLaLigue.Contains(s.Id))
+                    throw new InvalidOperationException(
+                        "Un staff modifié n'appartient pas à cette ligue.");
+                await staffService.ModifierStaffLigueAsync(s);
+            }
+        }
+
+        logger.LogInformation("Ligue modifiée : {NomLigue} (id={Id}) par {UserId}",
+            ligue.Nom, ligue.Id, userId);
+
+        await NotifierChangementAsync(ligueId);
+    }
+
     public async Task DemarrerInscriptionsAsync(int ligueId)
     {
         var ligue = await db.Leagues.FindAsync(ligueId)

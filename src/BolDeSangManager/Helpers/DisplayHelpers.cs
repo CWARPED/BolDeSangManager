@@ -124,6 +124,28 @@ public static class DisplayHelpers
         statut == LeagueStatus.EnCours && EstFormatLibre(format);
 
     /// <summary>
+    /// Les paramètres de la ligue sont-ils encore modifiables ? Uniquement avant
+    /// le lancement de la saison : après, le calendrier généré dépend du format
+    /// et les feuilles de match déjà saisies du barème d'XP.
+    /// </summary>
+    public static bool ParametresLigueEditables(LeagueStatus statut) =>
+        statut < LeagueStatus.EnCours;
+
+    /// <summary>
+    /// Les paramètres STRUCTURANTS (jeu, version des règles, budget de départ,
+    /// staff de la ligue) sont-ils encore modifiables ? Ils se verrouillent dès
+    /// la PREMIÈRE équipe inscrite, car des lignes déjà écrites en dépendent :
+    ///  - version des règles : Team.TeamTypeId et TeamPlayer.PlayerPositionId
+    ///    pointent vers des lignes propres à cette version ; en changer rendrait
+    ///    les équipes orphelines (race et postes inexistants) ;
+    ///  - budget et staff : Team.Tresorerie est calculée UNE FOIS à la création
+    ///    de l'équipe puis stockée. La modifier après coup laisserait des
+    ///    trésoreries fausses et autoriserait des équipes hors budget.
+    /// </summary>
+    public static bool ParametresStructurantsEditables(LeagueStatus statut, int nombreEquipes) =>
+        ParametresLigueEditables(statut) && nombreEquipes == 0;
+
+    /// <summary>
     /// Libellé d'une ronde. Centralisé ici plutôt que répété dans chaque
     /// composant : trois conventions cohabitent sur la colonne Ronde.
     /// 0 = hors ronde (format Open, qui n'a pas de calendrier),
