@@ -1,0 +1,220 @@
+@using BolDeSangManager.Components.Pages.Matchs
+@inject NavigationManager Nav
+@inject IDialogService DialogService
+@inject CalendrierService CalendrierService
+@inject IJSRuntime JS
+
+@*
+    Carte d'un match, partagée par les TROIS écrans qui en affichent :
+    l'accueil, « Mes matchs » (/matchs) et l'onglet Matchs d'une ligue.
+
+    Avant extraction, chacun avait sa propre combinaison de boutons : on
+    pouvait fixer une date depuis la fiche de ligue mais pas depuis l'accueil,
+    et tout bouton ajouté devait l'être trois fois. Les prédicats vivent dans
+    DisplayHelpers pour être testés sans rendu Razor.
+
+    ⚠️ Chaque bouton interne porte @onclick:stopPropagation : sans cela, le clic
+    remonte à la carte, qui navigue vers le détail au lieu d'ouvrir le dialogue.
+*@
+
+<MudCard Outlined="true" Class="@Class"
+         Style="@($"{MatchBorderStyle(Match.Statut)}cursor:pointer;height:100%")"
+         @onclick="AllerAuDetail">
+    <MudCardContent Class="py-2">
+        <MudStack AlignItems="AlignItems.Center" Spacing="1">
+
+            @if (AfficherLigue)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    @Match.Division?.League?.Nom — @RondeLabel(Match.Ronde)
+                </MudText>
+            }
+            else
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                    @RondeLabel(Match.Ronde)
+                </MudText>
+            }
+
+            <MudText Typo="Typo.body2" Align="Align.Center">
+                <b>@Match.EquipeDomicile?.Nom</b>
+            </MudText>
+
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                @if (Match.Statut == MatchStatus.Termine || Match.ScoreDomicile.HasValue)
+                {
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">@Match.ScoreDomicile</MudChip>
+                    <MudText>–</MudText>
+                    <MudChip T="string" Color="Color.Error" Size="Size.Small">@Match.ScoreExterieur</MudChip>
+                }
+                else
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">vs</MudText>
+                }
+            </MudStack>
+
+            <MudText Typo="Typo.body2" Align="Align.Center">
+                <b>@Match.EquipeExterieur?.Nom</b>
+            </MudText>
+
+            <MudChip T="string" Color="@MatchColor(Match.Statut)" Size="Size.Small">
+                @MatchLabel(Match.Statut)
+            </MudChip>
+
+            @* Date et lieu *@
+            @if (Match.DateProgrammee.HasValue)
+            {
+                <MudText Typo="Typo.caption" Align="Align.Center">
+                    @DateLocale(Match.DateProgrammee.Value)
+                </MudText>
+                @if (!string.IsNullOrWhiteSpace(Match.Lieu))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Align="Align.Center">
+                        @Match.Lieu
+                    </MudText>
+                }
+            }
+            else if (Match.Statut is MatchStatus.Programme or MatchStatus.AJouer)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Warning" Align="Align.Center">
+                    Date à convenir
+                </MudText>
+            }
+
+            @* ── Actions ─────────────────────────────────────────────────── *@
+            <MudStack Row="true" Justify="Justify.Center" AlignItems="AlignItems.Center"
+                      Spacing="1" Wrap="Wrap.Wrap" Class="mt-1">
+
+                @if (DateModifiable(Match.Statut) && PeutProgrammer(Match, UserId, EstCommissaire))
+                {
+                    <div @onclick:stopPropagation="true">
+                        <MudButton Size="Size.Small" Variant="Variant.Text"
+                                   StartIcon="@Icons.Material.Filled.EditCalendar"
+                                   OnClick="Programmer">
+                            @(Match.DateProgrammee.HasValue ? "Modifier la date" : "Fixer la date")
+                        </MudButton>
+                    </div>
+                }
+
+                @if (Match.DateProgrammee.HasValue)
+                {
+                    <div @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small"
+                                       title="Ajouter à mon agenda (.ics)"
+                                       OnClick="TelechargerIcs" />
+                    </div>
+                }
+
+                @if (SaisiePossible(Match.Statut))
+                {
+                    <div @onclick:stopPropagation="true">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                   Href="@($"/matchs/{Match.Id}/feuille")">
+                            Saisir la feuille
+                        </MudButton>
+                    </div>
+                }
+
+                @if (Match.Statut == MatchStatus.FeuilleEnSaisie)
+                {
+                    var doitConfirmer = Match.Feuille is not null && Match.Feuille.SaisiParId != UserId;
+                    <div @onclick:stopPropagation="true">
+                        <MudButton Size="Size.Small"
+                                   Variant="@(doitConfirmer ? Variant.Outlined : Variant.Text)"
+                                   Color="@(doitConfirmer ? Color.Warning : Color.Default)"
+                                   Href="@($"/matchs/{Match.Id}/feuille")">
+                            @(doitConfirmer ? "Confirmer" : "En attente adversaire")
+                        </MudButton>
+                    </div>
+                }
+
+                @if (Match.Statut == MatchStatus.ValidationCompetences && MesEquipes.Count > 0)
+                {
+                    var estDom = MesEquipes.Contains(Match.EquipeDomicileId);
+                    var dejaValide = estDom
+                        ? (Match.Feuille?.ApresMatchDomicileValide ?? false)
+                        : (Match.Feuille?.ApresMatchExterieurValide ?? false);
+                    <div @onclick:stopPropagation="true">
+                        <MudButton Size="Size.Small"
+                                   Variant="@(dejaValide ? Variant.Text : Variant.Outlined)"
+                                   Color="@(dejaValide ? Color.Success : Color.Warning)"
+                                   Href="@($"/matchs/{Match.Id}/apres-match")">
+                            @(dejaValide ? "Après-match ✓" : "Après-match")
+                        </MudButton>
+                    </div>
+                }
+
+                @* Correction d'une saisie : réservée aux commissaires, et
+                   seulement s'il y a bien une feuille à corriger. *@
+                @if (EstCommissaire && Match.Feuille is not null)
+                {
+                    <div @onclick:stopPropagation="true">
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Edit"
+                                   Href="@($"/matchs/{Match.Id}/detail")">
+                            Corriger la saisie
+                        </MudButton>
+                    </div>
+                }
+            </MudStack>
+        </MudStack>
+    </MudCardContent>
+</MudCard>
+
+@code {
+    [Parameter, EditorRequired] public Match Match { get; set; } = default!;
+
+    /// <summary>Utilisateur courant : décide qui peut programmer et qui doit confirmer.</summary>
+    [Parameter] public string UserId { get; set; } = "";
+
+    /// <summary>
+    /// Droits de gestion EFFECTIFS sur la ligue de ce match. Sur la fiche de
+    /// ligue, c'est la position de la bascule « vue commissaire » qui décide —
+    /// donc un commissaire en vue coach passe false ici, volontairement.
+    /// </summary>
+    [Parameter] public bool EstCommissaire { get; set; }
+
+    /// <summary>Équipes du coach : sert au bouton d'après-match (domicile ou extérieur).</summary>
+    [Parameter] public IReadOnlySet<int> MesEquipes { get; set; } = new HashSet<int>();
+
+    /// <summary>Préfixer le nom de la ligue : vrai sur les écrans transverses.</summary>
+    [Parameter] public bool AfficherLigue { get; set; }
+
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Remonté après une programmation, pour que l'écran se rafraîchisse.</summary>
+    [Parameter] public EventCallback Change { get; set; }
+
+    void AllerAuDetail() => Nav.NavigateTo($"/matchs/{Match.Id}/detail");
+
+    /// <summary>Date UTC stockée → affichage en heure locale du lecteur.</summary>
+    static string DateLocale(DateTime utc) =>
+        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime()
+            .ToString("ddd d MMM 'à' HH'h'mm");
+
+    async Task Programmer()
+    {
+        var parametres = new DialogParameters<ProgrammationDialog>
+        {
+            { x => x.Match, Match },
+            { x => x.UserId, UserId },
+            { x => x.EstCommissaire, EstCommissaire },
+        };
+        var dialog = await DialogService.ShowAsync<ProgrammationDialog>(
+            "Date et lieu du match", parametres,
+            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
+
+        if (await dialog.Result is { Canceled: false })
+        {
+            StateHasChanged();
+            await Change.InvokeAsync();
+        }
+    }
+
+    async Task TelechargerIcs()
+    {
+        var bytes = CalendrierService.GenererIcs(Match);
+        await JS.InvokeVoidAsync("blazorDownloadBase64File",
+            $"match-{Match.Id}.ics", "text/calendar", Convert.ToBase64String(bytes));
+    }
+}

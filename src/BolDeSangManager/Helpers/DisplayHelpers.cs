@@ -1,5 +1,6 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
+using BolDeSangManager.Data.Models;
 using MudBlazor;
 
 namespace BolDeSangManager.Helpers;
@@ -192,6 +193,67 @@ public static class DisplayHelpers
         MatchStatus.FeuilleEnSaisie       => "border-left:4px solid #ff9800;",
         _                                 => ""
     };
+
+    // ── Prédicats de la carte de match (composant CarteMatch) ────────────────
+    //
+    // Extraits ici pour être testables sans rendu Razor, et pour que les trois
+    // écrans qui affichent une carte de match (accueil, « Mes matchs », fiche
+    // de ligue) ne puissent pas diverger. Avant extraction, chaque écran avait
+    // sa propre combinaison de boutons — c'est ainsi qu'on se retrouvait à
+    // pouvoir fixer une date depuis la ligue mais pas depuis l'accueil.
+
+    /// <summary>
+    /// Qui peut fixer la date d'un match : ses deux coaches et les commissaires.
+    /// Le service revérifie de toute façon côté serveur — ceci n'est qu'un
+    /// affichage, jamais une sécurité.
+    /// </summary>
+    public static bool PeutProgrammer(Match m, string userId, bool estCommissaire) =>
+        estCommissaire
+        || m.EquipeDomicile?.CoachId == userId
+        || m.EquipeExterieur?.CoachId == userId;
+
+    /// <summary>
+    /// La date est-elle encore modifiable ? Un match joué (ou concédé) est figé,
+    /// et pendant la phase d'après-match la question ne se pose plus.
+    /// </summary>
+    public static bool DateModifiable(MatchStatus s) =>
+        s is MatchStatus.Programme or MatchStatus.AJouer or MatchStatus.FeuilleEnSaisie;
+
+    /// <summary>La feuille peut-elle encore être saisie (première saisie) ?</summary>
+    public static bool SaisiePossible(MatchStatus s) =>
+        s is MatchStatus.Programme or MatchStatus.AJouer;
+
+    /// <summary>
+    /// Ce match attend-il une action de CE coach ?
+    ///
+    /// Sert à l'accueil, qui ne montre que le prochain match de chaque ligue :
+    /// sans cette exception, un coach perdrait de vue une feuille à confirmer
+    /// ou un après-match à remplir sur une rencontre déjà passée.
+    ///
+    /// • FeuilleEnSaisie : l'adversaire a saisi, j'ai à confirmer (si ce n'est
+    ///   pas moi qui ai saisi — sinon j'attends, aucune action de mon côté).
+    /// • ValidationCompetences : mon après-match n'est pas encore validé.
+    /// </summary>
+    public static bool AttendUneActionDe(Match m, string userId, IReadOnlySet<int> mesEquipes)
+    {
+        if (m.Statut == MatchStatus.FeuilleEnSaisie)
+            return m.Feuille is not null && m.Feuille.SaisiParId != userId;
+
+        if (m.Statut == MatchStatus.ValidationCompetences)
+        {
+            var estDom = mesEquipes.Contains(m.EquipeDomicileId);
+            var estExt = mesEquipes.Contains(m.EquipeExterieurId);
+            if (m.Feuille is null) return estDom || estExt;
+
+            // Un coach engageant DEUX équipes dans le même match doit encore
+            // agir tant que l'un des deux côtés n'est pas validé.
+            if (estDom && !m.Feuille.ApresMatchDomicileValide) return true;
+            if (estExt && !m.Feuille.ApresMatchExterieurValide) return true;
+            return false;
+        }
+
+        return false;
+    }
 
     // ── Catégorie officielle LRB (p.94) ──────────────────────────────────────
     // Purement informative : elle situe la difficulté d'une équipe pour un

@@ -41,143 +41,22 @@ else
     {
         <MudText Typo="Typo.subtitle1" Class="mt-4 mb-2"><b>@groupe.Key</b></MudText>
 
-        @foreach (var match in groupe.OrderBy(m => m.Ronde))
-        {
-            <MudCard Elevation="1" Class="mb-2" Style="@MatchBorderStyle(match.Statut)">
-                <MudCardContent Class="py-2">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
-                        <div>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                @DisplayHelpers.RondeLabel(match.Ronde)
-                            </MudText>
-                            <MudText Typo="Typo.body1">
-                                <b>@match.EquipeDomicile?.Nom</b>
-                                @if (match.ScoreDomicile.HasValue)
-                                {
-                                    <span style="color:#c62828"> &nbsp;@match.ScoreDomicile – @match.ScoreExterieur&nbsp; </span>
-                                }
-                                else
-                                {
-                                    <span style="color:#9e9e9e"> &nbsp;vs&nbsp; </span>
-                                }
-                                <b>@match.EquipeExterieur?.Nom</b>
-                            </MudText>
-                            @if (match.DateProgrammee.HasValue)
-                            {
-                                <MudText Typo="Typo.caption" Class="d-flex align-center gap-1 mt-1">
-                                    <MudIcon Icon="@Icons.Material.Filled.Event" Size="Size.Small" />
-                                    @DateLocale(match.DateProgrammee.Value)
-                                    @if (!string.IsNullOrWhiteSpace(match.Lieu))
-                                    {
-                                        <MudIcon Icon="@Icons.Material.Filled.Place" Size="Size.Small" Class="ms-2" />
-                                        @match.Lieu
-                                    }
-                                </MudText>
-                            }
-                            else if (match.Statut is MatchStatus.Programme or MatchStatus.AJouer)
-                            {
-                                <MudText Typo="Typo.caption" Color="Color.Warning" Class="mt-1">
-                                    Date à convenir
-                                </MudText>
-                            }
-                        </div>
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-                            <MudChip T="string" Color="@MatchColor(match.Statut)" Size="Size.Small">
-                                @MatchLabel(match.Statut)
-                            </MudChip>
-                            @if (match.Statut != MatchStatus.Termine && match.Statut != MatchStatus.Concede
-                                 && match.Statut != MatchStatus.ValidationCompetences
-                                 && match.Statut != MatchStatus.FeuilleEnSaisie)
-                            {
-                                <MudButton Size="Size.Small" Variant="Variant.Text"
-                                           StartIcon="@Icons.Material.Filled.EditCalendar"
-                                           OnClick="@(() => Programmer(match))">
-                                    @(match.DateProgrammee.HasValue ? "Modifier la date" : "Fixer la date")
-                                </MudButton>
-                                @if (match.DateProgrammee.HasValue)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small"
-                                                   title="Ajouter à mon agenda (.ics)"
-                                                   OnClick="@(() => TelechargerIcs(match))" />
-                                }
-                                <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
-                                          Href="@($"/matchs/{match.Id}/feuille")">
-                                    Saisir la feuille
-                                </MudButton>
-                            }
-                            @if (match.Statut == MatchStatus.FeuilleEnSaisie)
-                            {
-                                var doitConfirmer = match.Feuille?.SaisiParId != _userId;
-                                <MudButton Size="Size.Small"
-                                          Variant="@(doitConfirmer ? Variant.Outlined : Variant.Text)"
-                                          Color="@(doitConfirmer ? Color.Warning : Color.Default)"
-                                          Href="@($"/matchs/{match.Id}/feuille")">
-                                    @(doitConfirmer ? "Confirmer" : "En attente adversaire")
-                                </MudButton>
-                            }
-                            @if (match.Statut == MatchStatus.ValidationCompetences)
-                            {
-                                var estDom = _mesEquipeIds.Contains(match.EquipeDomicileId);
-                                var dejaValide = estDom
-                                    ? (match.Feuille?.ApresMatchDomicileValide ?? false)
-                                    : (match.Feuille?.ApresMatchExterieurValide ?? false);
-                                <MudButton Size="Size.Small"
-                                          Variant="@(dejaValide ? Variant.Text : Variant.Outlined)"
-                                          Color="@(dejaValide ? Color.Success : Color.Warning)"
-                                          Href="@($"/matchs/{match.Id}/apres-match")">
-                                    @(dejaValide ? "Après-match ✓" : "Après-match")
-                                </MudButton>
-                            }
-                            @if (match.Statut == MatchStatus.Termine || match.Statut == MatchStatus.FeuilleEnSaisie || match.Statut == MatchStatus.ValidationCompetences)
-                            {
-                                <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Default"
-                                          Href="@($"/matchs/{match.Id}/detail")">
-                                    Détails
-                                </MudButton>
-                            }
-                        </MudStack>
-                    </MudStack>
-                </MudCardContent>
-            </MudCard>
-        }
+        <MudGrid Class="mb-2">
+            @foreach (var match in groupe.OrderBy(m => m.Ronde))
+            {
+                <MudItem xs="12" sm="6" md="4">
+                    <CarteMatch Match="match"
+                                UserId="_userId"
+                                EstCommissaire="@EstCommissaireDe(match)"
+                                MesEquipes="_mesEquipeIds"
+                                Change="Recharger" />
+                </MudItem>
+            }
+        </MudGrid>
     }
 }
 
 @code {
-    // ── Calendrier (#1) ───────────────────────────────────────────────────────
-
-    /// <summary>Date UTC stockée → affichage en heure locale du lecteur.</summary>
-    static string DateLocale(DateTime utc) =>
-        DateTime.SpecifyKind(utc, DateTimeKind.Utc).ToLocalTime()
-            .ToString("ddd d MMM yyyy 'à' HH'h'mm");
-
-    async Task Programmer(Match match)
-    {
-        // On passe le droit RÉEL sur la ligue du match : un « false » en dur
-        // ferait échouer la programmation d'un commissaire non-coach du match.
-        var estCommissaire = match.Division is not null
-            && await Auth.PeutGererLigueAsync(_userId, match.Division.LeagueId);
-
-        var parametres = new DialogParameters<ProgrammationDialog>
-        {
-            { x => x.Match, match },
-            { x => x.UserId, _userId },
-            { x => x.EstCommissaire, estCommissaire },
-        };
-        var dialog = await DialogService.ShowAsync<ProgrammationDialog>(
-            "Date et lieu du match", parametres,
-            new DialogOptions { MaxWidth = MaxWidth.ExtraSmall, FullWidth = true });
-
-        if (await dialog.Result is { Canceled: false }) StateHasChanged();
-    }
-
-    async Task TelechargerIcs(Match match)
-    {
-        var bytes = CalendrierService.GenererIcs(match);
-        await JS.InvokeVoidAsync("blazorDownloadBase64File",
-            $"match-{match.Id}.ics", "text/calendar", Convert.ToBase64String(bytes));
-    }
-
     async Task TelechargerTousIcs()
     {
         if (_matchs is null) return;
@@ -190,7 +69,25 @@ else
     HashSet<int> _mesEquipeIds = [];
     string _userId = "";
 
-    protected override async Task OnInitializedAsync()
+    /// <summary>Ligues que l'utilisateur peut gérer — calculé une fois, lu par carte.</summary>
+    HashSet<int> _liguesGerees = [];
+
+    /// <summary>
+    /// Droits de gestion sur la ligue de CE match. Les cartes affichent le
+    /// bouton de correction de saisie en conséquence.
+    /// </summary>
+    bool EstCommissaireDe(Match m) =>
+        m.Division is not null && _liguesGerees.Contains(m.Division.LeagueId);
+
+    async Task Recharger()
+    {
+        await ChargerAsync();
+        StateHasChanged();
+    }
+
+    protected override Task OnInitializedAsync() => ChargerAsync();
+
+    async Task ChargerAsync()
     {
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         _userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
@@ -213,6 +110,15 @@ else
                         || l.CommissairesDeLigue.Any(c => c.UserId == userId))
             .Select(l => l.Id)
             .ToHashSet();
+
+        // Droits réels ligue par ligue : un Admin ou GrandCommissaire gère TOUTES
+        // les ligues, pas seulement celles où il est nommé commissaire.
+        _liguesGerees = [];
+        foreach (var l in ligues)
+        {
+            if (await Auth.PeutGererLigueAsync(userId, l.Id))
+                _liguesGerees.Add(l.Id);
+        }
 
         var visibles = BrouillardHelpers.FiltrerVisiblesMultiLigues(
             tous.DistinctBy(m => m.Id), _mesEquipeIds, brouillardParLigue, commissaireDe);
