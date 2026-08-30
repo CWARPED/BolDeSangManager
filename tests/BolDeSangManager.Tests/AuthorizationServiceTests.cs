@@ -148,4 +148,27 @@ public class AuthorizationServiceTests : IDisposable
         Assert.True(await svc.PeutEditerDonneesAsync(gc.Id));
         Assert.False(await svc.PeutEditerDonneesAsync(coach.Id));
     }
+
+    /// <summary>
+    /// Verrou de régression : le rôle « Commissaire » N'EXISTE PLUS (DbSeeder le
+    /// migre vers « Admin »). Trois écrans le testaient encore via
+    /// IsInRole("Commissaire"), qui renvoyait donc toujours false — « Éditer la
+    /// feuille » et « Ligues gérées » étaient invisibles pour TOUT LE MONDE,
+    /// admin compris. Ce test fige les deux moitiés du constat : l'ancien test
+    /// est faux même pour un admin, le nouveau est vrai.
+    /// </summary>
+    [Fact]
+    public async Task RoleCommissaire_NexistePlus_PeutGererLigueEstLeBonTest()
+    {
+        var (svc, um, db) = await CreateServiceAsync();
+        var admin = await CreateUserWithRoleAsync(um, "legacy-role", "Admin");
+        var (game, version) = await DataSeeder.SeedGameAsync(db);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, version.Id, admin.Id);
+
+        // L'ANCIEN test : faux même pour un administrateur — c'était le bug.
+        Assert.False(await um.IsInRoleAsync(admin, "Commissaire"));
+
+        // Le NOUVEAU test : vrai, comme attendu.
+        Assert.True(await svc.PeutGererLigueAsync(admin.Id, ligue.Id));
+    }
 }

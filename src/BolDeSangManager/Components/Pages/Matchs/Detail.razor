@@ -1,10 +1,9 @@
 @page "/matchs/{Id:int}/detail"
 @rendermode InteractiveServer
 @attribute [Authorize]
-@using Microsoft.AspNetCore.Identity
 @inject MatchService MatchService
 @inject AuthenticationStateProvider AuthProvider
-@inject UserManager<ApplicationUser> UserManager
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @inject LeagueNotificationService Notifications
@@ -363,9 +362,13 @@ else
 
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
-        var user = await UserManager.FindByIdAsync(userId);
-        if (user is not null)
-            _estCommissaire = await UserManager.IsInRoleAsync(user, "Commissaire");
+
+        // ⚠️ Ne PAS tester le rôle "Commissaire" : DbSeeder l'a supprimé (migré vers
+        // "Admin"). Le test IsInRole("Commissaire") renvoyait donc toujours false et
+        // « Éditer la feuille » n'était visible pour PERSONNE, admin compris.
+        // PeutGererLigueAsync couvre Admin + GrandCommissaire + CommissaireDeLigue.
+        _estCommissaire = _match?.Division is not null
+            && await Auth.PeutGererLigueAsync(userId, _match.Division.LeagueId);
 
         _estCoachDuMatch = _match?.EquipeDomicile?.CoachId == userId
                         || _match?.EquipeExterieur?.CoachId == userId;

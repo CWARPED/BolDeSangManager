@@ -13,6 +13,7 @@
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject UserAccountService UserAccountService
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 
 <PageTitle>Mon Profil — BolDeSang Manager</PageTitle>
 
@@ -423,16 +424,22 @@ else
 
         _verdict = await UserAccountService.EvaluerSuppressionAsync(userId);
 
-        _estCommissaire = await UserManager.IsInRoleAsync(_user, "Commissaire");
+        // ⚠️ Le rôle "Commissaire" n'existe plus (DbSeeder le migre vers "Admin") :
+        // ce test renvoyait toujours false et le bloc « Ligues gérées » n'était
+        // jamais affiché. Ici il n'y a pas de ligue en contexte, on cumule donc
+        // les rôles transverses et l'appartenance effective à une ligue.
         _pseudoEdit = _user.PseudoCoach ?? "";
-
         _equipes = await TeamService.GetEquipesCoachAsync(userId);
 
-        if (_estCommissaire)
-        {
-            var toutes = await LeagueService.GetAllLiguesAsync();
-            _ligues = toutes.Where(l => l.CommissaireId == userId).ToList();
-        }
+        var toutesLigues = await LeagueService.GetAllLiguesAsync();
+        _ligues = toutesLigues
+            .Where(l => l.CommissaireId == userId
+                     || l.CommissairesDeLigue.Any(c => c.UserId == userId))
+            .ToList();
+
+        _estCommissaire = await Auth.EstAdminAsync(userId)
+                       || await Auth.EstGrandCommissaireAsync(userId)
+                       || _ligues.Count > 0;
     }
 
     async Task ChangerPseudo()

@@ -5,6 +5,7 @@
 @inject LeagueService LeagueService
 @inject TeamService TeamService
 @inject AuthenticationStateProvider AuthProvider
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject IDialogService DialogService
 @inject CalendrierService CalendrierService
 @inject IJSRuntime JS
@@ -152,11 +153,16 @@ else
 
     async Task Programmer(Match match)
     {
+        // On passe le droit RÉEL sur la ligue du match : un « false » en dur
+        // ferait échouer la programmation d'un commissaire non-coach du match.
+        var estCommissaire = match.Division is not null
+            && await Auth.PeutGererLigueAsync(_userId, match.Division.LeagueId);
+
         var parametres = new DialogParameters<ProgrammationDialog>
         {
             { x => x.Match, match },
             { x => x.UserId, _userId },
-            { x => x.EstCommissaire, false },
+            { x => x.EstCommissaire, estCommissaire },
         };
         var dialog = await DialogService.ShowAsync<ProgrammationDialog>(
             "Date et lieu du match", parametres,

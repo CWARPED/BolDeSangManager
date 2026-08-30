@@ -5,6 +5,7 @@
 @inject TeamService TeamService
 @inject StaffService StaffService
 @inject AuthenticationStateProvider AuthProvider
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject LeagueNotificationService Notifications
@@ -342,7 +343,11 @@ else
 
         bool estDom = _match.EquipeDomicile?.CoachId == _userId;
         bool estExt = _match.EquipeExterieur?.CoachId == _userId;
-        bool estCommissaire = authState.User.IsInRole("Commissaire");
+        // ⚠️ Le rôle "Commissaire" n'existe plus (DbSeeder le migre vers "Admin") :
+        // IsInRole("Commissaire") renvoyait toujours false, donc aucun commissaire
+        // ne pouvait dépanner un après-match. PeutGererLigueAsync est le vrai test.
+        bool estCommissaire = _match.Division is not null
+            && await Auth.PeutGererLigueAsync(_userId, _match.Division.LeagueId);
 
         if (!estDom && !estExt && !estCommissaire) return;
 
