@@ -303,3 +303,95 @@ public class ModifierLigueAsyncTests : IDisposable
         Assert.Equal(5, await db2.LeagueStaffTypes.CountAsync(s => s.LeagueId == ligue.Id));
     }
 }
+
+/// <summary>
+/// Supprimer une ligue ne doit laisser AUCUN enfant orphelin en base.
+/// Découvert sur la base réelle : 12 LeagueStaffTypes rattachés à des ligues
+/// disparues (pragma foreign_key_check). Ce test couvre chaque table portant
+/// un LeagueId, pas seulement celle qui a été prise en défaut.
+/// </summary>
+public class SuppressionLigueSansOrphelinTests : IDisposable
+{
+    private readonly TestDbFactory _factory = new();
+
+    public void Dispose() => _factory.Dispose();
+
+    private static LeagueService CreateService(ApplicationDbContext db) =>
+        new(db, NullLogger<LeagueService>.Instance, new StubAuthAlwaysTrue(),
+            new StaffService(db, NullLogger<StaffService>.Instance));
+
+    private sealed class StubAuthAlwaysTrue : IAuthorizationService
+    {
+        public Task<bool> EstAdminAsync(string u) => Task.FromResult(true);
+        public Task<bool> EstGrandCommissaireAsync(string u) => Task.FromResult(true);
+        public Task<bool> EstCommissaireDeLigueAsync(string u, int l) => Task.FromResult(true);
+        public Task<bool> PeutGererLigueAsync(string u, int l) => Task.FromResult(true);
+        public Task<bool> PeutEditerDonneesAsync(string u) => Task.FromResult(true);
+        public Task<bool> PeutGererSettingsAsync(string u) => Task.FromResult(true);
+    }
+
+    [Fact]
+    public async Task SupprimerLigue_ne_laisse_aucun_enfant_orphelin()
+    {
+        int ligueId;
+        await using (var db = _factory.CreateContext())
+        {
+            var commissaire = DataSeeder.CreateUser("orph-comm");
+            var coach = DataSeeder.CreateUser("orph-coach");
+            db.Users.AddRange(commissaire, coach);
+            await db.SaveChangesAsync();
+
+            var (game, rv) = await DataSeeder.SeedGameAsync(db);
+            var (teamType, position) = await DataSeeder.SeedTeamTypeAsync(db, game.Id);
+            var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, commissaire.Id);
+            ligueId = ligue.Id;
+
+            var equipe = await DataSeeder.SeedTeamAsync(db, ligueId, coach.Id, teamType.Id);
+            await DataSeeder.SeedPlayerAsync(db, equipe.Id, position.Id);
+
+            // Un enfant de chaque table portant un LeagueId, plus un achat de
+            // staff (TeamStaff → LeagueStaffType) qui doit partir avec.
+            var staff = await db.LeagueStaffTypes.FirstAsync(s => s.LeagueId == ligueId);
+            db.TeamStaffs.Add(new TeamStaff
+            {
+                TeamId = equipe.Id, LeagueStaffTypeId = staff.Id, Quantite = 1
+            });
+            db.EcheancesRondes.Add(new EcheanceRonde
+            {
+                LeagueId = ligueId, Ronde = 1, DateLimite = DateTime.UtcNow
+            });
+            db.LeagueCommissioners.Add(new LeagueCommissioner
+            {
+                LeagueId = ligueId, UserId = coach.Id, AssigneLe = DateTime.UtcNow
+            });
+            db.LeagueAwards.Add(new LeagueAward
+            {
+                LeagueId = ligueId, TeamId = equipe.Id, Type = AwardType.Champion
+            });
+            db.PhaseDeReposValidations.Add(new PhaseDeReposValidation
+            {
+                LeagueId = ligueId, TeamId = equipe.Id, ValideLe = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).SupprimerLigueAsync(ligueId);
+
+        await using var verif = _factory.CreateContext();
+        Assert.False(await verif.Leagues.AnyAsync(l => l.Id == ligueId));
+
+        Assert.Empty(await verif.LeagueStaffTypes.Where(s => s.LeagueId == ligueId).ToListAsync());
+        Assert.Empty(await verif.EcheancesRondes.Where(e => e.LeagueId == ligueId).ToListAsync());
+        Assert.Empty(await verif.LeagueCommissioners.Where(c => c.LeagueId == ligueId).ToListAsync());
+        Assert.Empty(await verif.LeagueAwards.Where(a => a.LeagueId == ligueId).ToListAsync());
+        Assert.Empty(await verif.PhaseDeReposValidations.Where(p => p.LeagueId == ligueId).ToListAsync());
+        Assert.Empty(await verif.Teams.Where(t => t.LeagueId == ligueId).ToListAsync());
+
+        // Contrôle transverse : la vraie question posée par foreign_key_check.
+        var orphelinsStaff = await verif.TeamStaffs
+            .Where(ts => !verif.LeagueStaffTypes.Any(l => l.Id == ts.LeagueStaffTypeId))
+            .CountAsync();
+        Assert.Equal(0, orphelinsStaff);
+    }
+}

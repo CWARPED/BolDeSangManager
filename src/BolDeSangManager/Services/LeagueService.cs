@@ -1029,6 +1029,23 @@ public class LeagueService(
             .OrderBy(a => a.Type)
             .ToListAsync();
 
+    /// <summary>
+    /// Supprime une ligue et TOUTES ses données rattachées.
+    ///
+    /// ⚠️ L'ordre compte, et la liste doit être exhaustive. Deux raisons :
+    ///  - certaines FK sont en <c>Restrict</c> (PhaseDeReposValidation → Team) :
+    ///    supprimer les équipes avant leurs validations lève
+    ///    « FOREIGN KEY constraint failed » et la ligue reste en place ;
+    ///  - <c>ExecuteDeleteAsync</c> émet du SQL direct et ne déclenche PAS les
+    ///    cascades gérées par EF. Quand le pragma foreign_keys de SQLite est
+    ///    inactif, les enfants non listés ici ne sont ni supprimés ni signalés :
+    ///    ils restent **orphelins et silencieux** en base (constaté en
+    ///    production — 12 LeagueStaffTypes rattachés à des ligues disparues).
+    ///
+    /// Toute nouvelle entité portant un <c>LeagueId</c> (ou rattachée à Team /
+    /// LeagueStaffType) doit être ajoutée ici, sous peine de reproduire le bug.
+    /// Vérification : <c>grep -rn "public int LeagueId" Data/Models/*.cs</c>.
+    /// </summary>
     public async Task SupprimerLigueAsync(int ligueId)
     {
         var divIds    = await db.Divisions.Where(d => d.LeagueId == ligueId).Select(d => d.Id).ToListAsync();
@@ -1036,16 +1053,39 @@ public class LeagueService(
         var sheetIds  = await db.MatchSheets.Where(s => matchIds.Contains(s.MatchId)).Select(s => s.Id).ToListAsync();
         var teamIds   = await db.Teams.Where(t => t.LeagueId == ligueId).Select(t => t.Id).ToListAsync();
         var playerIds = await db.TeamPlayers.Where(j => teamIds.Contains(j.TeamId)).Select(j => j.Id).ToListAsync();
+        var staffIds  = await db.LeagueStaffTypes.Where(s => s.LeagueId == ligueId).Select(s => s.Id).ToListAsync();
 
         await using var tx = await db.Database.BeginTransactionAsync();
+
+        // 1. Feuilles de match et leurs enregistrements de joueurs.
         await db.MatchPlayerRecords.Where(r => sheetIds.Contains(r.MatchSheetId)).ExecuteDeleteAsync();
         await db.MatchSheets.Where(s => matchIds.Contains(s.MatchId)).ExecuteDeleteAsync();
+
+        // 2. Ce qui pend aux JOUEURS.
         await db.PlayerInjuries.Where(b => playerIds.Contains(b.TeamPlayerId)).ExecuteDeleteAsync();
         await db.TeamPlayerSkills.Where(s => playerIds.Contains(s.TeamPlayerId)).ExecuteDeleteAsync();
+
+        // 3. Récompenses : elles pointent vers joueur, équipe OU coach.
+        await db.LeagueAwards.Where(a => a.LeagueId == ligueId).ExecuteDeleteAsync();
+
         await db.Matches.Where(m => matchIds.Contains(m.Id)).ExecuteDeleteAsync();
         await db.TeamPlayers.Where(j => playerIds.Contains(j.Id)).ExecuteDeleteAsync();
+
+        // 4. Ce qui pend aux ÉQUIPES — AVANT les équipes elles-mêmes.
+        //    PhaseDeReposValidation → Team est en Restrict : l'oublier fait
+        //    échouer toute la suppression.
+        await db.PhaseDeReposValidations.Where(p => p.LeagueId == ligueId).ExecuteDeleteAsync();
+        await db.TeamStaffs.Where(ts => teamIds.Contains(ts.TeamId)
+                                     || staffIds.Contains(ts.LeagueStaffTypeId)).ExecuteDeleteAsync();
+
         await db.Teams.Where(t => teamIds.Contains(t.Id)).ExecuteDeleteAsync();
         await db.Divisions.Where(d => divIds.Contains(d.Id)).ExecuteDeleteAsync();
+
+        // 5. Ce qui pend à la LIGUE.
+        await db.LeagueStaffTypes.Where(s => s.LeagueId == ligueId).ExecuteDeleteAsync();
+        await db.EcheancesRondes.Where(e => e.LeagueId == ligueId).ExecuteDeleteAsync();
+        await db.LeagueCommissioners.Where(c => c.LeagueId == ligueId).ExecuteDeleteAsync();
+
         await db.Leagues.Where(l => l.Id == ligueId).ExecuteDeleteAsync();
         await tx.CommitAsync();
 
