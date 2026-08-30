@@ -1,18 +1,41 @@
 @page "/ligues/creer"
+@page "/ligues/{Id:int}/modifier"
 @rendermode InteractiveServer
-@attribute [Authorize(Roles = "Admin,GrandCommissaire")]
+@attribute [Authorize]
 @inject LeagueService LeagueService
 @inject StaffService StaffService
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
 
-<PageTitle>Créer une ligue — BolDeSang Manager</PageTitle>
+<PageTitle>@(EstEdition ? "Modifier la ligue" : "Créer une ligue") — BolDeSang Manager</PageTitle>
+
+@if (_chargement)
+{
+    <MudProgressCircular Color="Color.Error" Indeterminate="true" />
+}
+else if (!_autorise)
+{
+    <MudAlert Severity="Severity.Error">
+        Vous n'avez pas accès à cet écran.
+    </MudAlert>
+}
+else
+{
 
 <MudText Typo="Typo.h5" Color="Color.Error" Class="mb-4">
-    <MudIcon Icon="@Icons.Material.Filled.Add" Class="mr-2" />
-    <b>Créer une nouvelle ligue</b>
+    <MudIcon Icon="@(EstEdition ? Icons.Material.Filled.Settings : Icons.Material.Filled.Add)" Class="mr-2" />
+    <b>@(EstEdition ? "Modifier la ligue" : "Créer une nouvelle ligue")</b>
 </MudText>
+
+@if (EstEdition && !_structurantsOuverts)
+{
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+        Des équipes sont déjà inscrites. Le jeu, la version des règles, le budget
+        de départ et le staff ne peuvent plus changer.
+    </MudAlert>
+}
 
 <MudGrid>
     <MudItem xs="12" md="7">
@@ -34,6 +57,7 @@
 
                 <MudSelect T="string" Value="@_selectedGameNom" Label="Jeu"
                            Variant="Variant.Outlined" Class="mb-3"
+                           Disabled="@(!_structurantsOuverts)"
                            ValueChanged="OnGameNameChanged">
                     @foreach (var game in _games)
                     {
@@ -44,7 +68,7 @@
                 <MudSelect T="string" Value="@_selectedVersionNom" Label="Version des règles"
                            Variant="Variant.Outlined" Class="mb-3"
                            ValueChanged="OnVersionChanged"
-                           Disabled="@(_versions.Count == 0)">
+                           Disabled="@(_versions.Count == 0 || !_structurantsOuverts)">
                     @foreach (var v in _versions)
                     {
                         <MudSelectItem T="string" Value="@v.Nom">@v.Nom</MudSelectItem>
@@ -92,6 +116,7 @@
                 <MudNumericField T="int" @bind-Value="_budget" Label="Budget de départ (po)"
                                  Variant="Variant.Outlined" Class="mb-3"
                                  Min="500000" Max="2000000" Step="50000"
+                                 Disabled="@(!_structurantsOuverts)"
                                  HelperText="Standard : 1 000 000 po" />
 
                 @if (DisplayHelpers.AvecPlayoffs(_format))
@@ -105,13 +130,18 @@
                     </MudSelect>
                 }
 
-                <MudCheckBox @bind-Value="_modeBrouillard" Color="Color.Error" Class="mb-1"
-                             Label="Mode brouillard" />
-                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block" Style="margin-left:32px">
-                    Les coaches ne voient que leur prochain match et les matchs déjà joués.
-                    Le reste du calendrier à venir est masqué, pour qu'on ne joue pas une
-                    rencontre en anticipant les suivantes. Les commissaires voient tout.
-                </MudText>
+                @* Le mode brouillard n'est proposé qu'à la création : ensuite il se
+                   bascule depuis la fiche de ligue, y compris en cours de saison. *@
+                @if (!EstEdition)
+                {
+                    <MudCheckBox @bind-Value="_modeBrouillard" Color="Color.Error" Class="mb-1"
+                                 Label="Mode brouillard" />
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block" Style="margin-left:32px">
+                        Les coaches ne voient que leur prochain match et les matchs déjà joués.
+                        Le reste du calendrier à venir est masqué, pour qu'on ne joue pas une
+                        rencontre en anticipant les suivantes. Les commissaires voient tout.
+                    </MudText>
+                }
 
                 <MudDivider Class="my-3" />
 
@@ -172,7 +202,7 @@
                         </HeaderContent>
                         <RowTemplate>
                             <MudTd DataLabel="Staff">
-                                <MudCheckBox T="bool" Value="@context.EstActif" Dense="true"
+                                <MudCheckBox T="bool" Value="@context.EstActif" Dense="true" Disabled="@(!_structurantsOuverts)"
                                              ValueChanged="@(v => context.EstActif = v)"
                                              Color="Color.Primary" Label="@context.Nom" />
                                 @if (!string.IsNullOrWhiteSpace(context.Description))
@@ -195,25 +225,25 @@
                                 {
                                     <MudNumericField T="int" @bind-Value="context.Cout" Min="0" Step="5000"
                                                      Variant="Variant.Text" Margin="Margin.Dense"
-                                                     Disabled="@(!context.EstActif)" Style="max-width:110px" />
+                                                     Disabled="@(!context.EstActif || !_structurantsOuverts)" Style="max-width:110px" />
                                 }
                             </MudTd>
                             <MudTd DataLabel="Min à la création" Style="text-align:center">
                                 <MudNumericField T="int" @bind-Value="context.MinCreation" Min="0" Max="99"
                                                  Variant="Variant.Text" Margin="Margin.Dense"
-                                                 Disabled="@(!context.EstActif)" Style="max-width:70px" />
+                                                 Disabled="@(!context.EstActif || !_structurantsOuverts)" Style="max-width:70px" />
                             </MudTd>
                             <MudTd DataLabel="Max à la création" Style="text-align:center">
                                 <MudNumericField T="int" @bind-Value="context.MaxCreation" Min="0" Max="99"
                                                  Variant="Variant.Text" Margin="Margin.Dense"
-                                                 Disabled="@(!context.EstActif)" Style="max-width:70px" />
+                                                 Disabled="@(!context.EstActif || !_structurantsOuverts)" Style="max-width:70px" />
                             </MudTd>
                             <MudTd DataLabel="Plafond en cours de ligue" Style="text-align:center">
                                 <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0" Justify="Justify.Center">
                                     <MudCheckBox T="bool" Dense="true" Color="Color.Primary"
                                                  Value="@(context.MaxLigue.HasValue)"
                                                  ValueChanged="@(v => BasculerPlafond(context, v))"
-                                                 Disabled="@(!context.EstActif)"
+                                                 Disabled="@(!context.EstActif || !_structurantsOuverts)"
                                                  title="Décoché = aucune limite en cours de ligue" />
                                     @if (context.MaxLigue.HasValue)
                                     {
@@ -221,7 +251,7 @@
                                                          Value="@context.MaxLigue.Value"
                                                          ValueChanged="@(v => context.MaxLigue = v)"
                                                          Variant="Variant.Text" Margin="Margin.Dense"
-                                                         Disabled="@(!context.EstActif)" Style="max-width:70px" />
+                                                         Disabled="@(!context.EstActif || !_structurantsOuverts)" Style="max-width:70px" />
                                     }
                                     else
                                     {
@@ -238,14 +268,17 @@
                 }
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-4" Spacing="2">
-                    <MudButton Href="/ligues" Variant="Variant.Text" Disabled="@_saving">
+                    <MudButton Href="@(EstEdition ? $"/ligues/{Id}" : "/ligues")"
+                               Variant="Variant.Text" Disabled="@_saving">
                         Annuler
                     </MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Error"
                                StartIcon="@Icons.Material.Filled.Save"
                                OnClick="HandleSubmit"
                                Disabled="@_saving">
-                        @(_saving ? "Création..." : "Créer la ligue")
+                        @(_saving
+                            ? (EstEdition ? "Enregistrement..." : "Création...")
+                            : (EstEdition ? "Enregistrer" : "Créer la ligue"))
                     </MudButton>
                 </MudStack>
 
@@ -257,33 +290,63 @@
         <MudCard Elevation="1">
             <MudCardHeader>
                 <CardHeaderContent>
-                    <MudText Typo="Typo.subtitle1"><b>Guide de création</b></MudText>
+                    <MudText Typo="Typo.subtitle1">
+                        <b>@(EstEdition ? "Ce qui reste modifiable" : "Guide de création")</b>
+                    </MudText>
                 </CardHeaderContent>
             </MudCardHeader>
             <MudCardContent>
-                <MudList T="string" Dense="true">
-                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                        Choisissez Blood Bowl ou Dungeon Bowl
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                        Sélectionnez la version des règles (ex : Saison 3)
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                        Le format Round Robin + Play-offs est le plus joué
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
-                        Budget standard : 1 000 000 po par équipe
-                    </MudListItem>
-                    <MudListItem Icon="@Icons.Material.Filled.Info" IconColor="Color.Info">
-                        Après création, passez en "Inscriptions" pour que les coaches rejoignent
-                    </MudListItem>
-                </MudList>
+                @if (EstEdition)
+                {
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Nom, description, format et barème d'XP : jusqu'au lancement de la saison
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Lock" IconColor="Color.Warning">
+                            Jeu, version des règles, budget et staff : jusqu'à la première équipe inscrite
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Info" IconColor="Color.Info">
+                            Règlement et mode brouillard se modifient depuis la fiche de la ligue
+                        </MudListItem>
+                    </MudList>
+                }
+                else
+                {
+                    <MudList T="string" Dense="true">
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Choisissez Blood Bowl ou Dungeon Bowl
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Sélectionnez la version des règles (ex : Saison 3)
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Le format Round Robin + Play-offs est le plus joué
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Check" IconColor="Color.Success">
+                            Budget standard : 1 000 000 po par équipe
+                        </MudListItem>
+                        <MudListItem Icon="@Icons.Material.Filled.Info" IconColor="Color.Info">
+                            Après création, passez en "Inscriptions" pour que les coaches rejoignent
+                        </MudListItem>
+                    </MudList>
+                }
             </MudCardContent>
         </MudCard>
     </MudItem>
 </MudGrid>
 
+}
+
 @code {
+    /// <summary>
+    /// Id de la ligue à modifier. Null sur /ligues/creer : l'écran est alors en
+    /// mode création. Un seul formulaire pour les deux, pour qu'un champ ajouté
+    /// à la création n'échappe jamais à l'édition.
+    /// </summary>
+    [Parameter] public int? Id { get; set; }
+
+    bool EstEdition => Id.HasValue;
+
     const string FormatPlayoffs   = "Round Robin + Play-offs (recommandé)";
     const string FormatRoundRobin = "Round Robin seul (classement final)";
     const string Playoff2 = "2 équipes";
@@ -313,18 +376,105 @@
     bool _saving;
     bool _nomError;
 
+    bool _chargement = true;
+    bool _autorise;
+
+    /// <summary>
+    /// Jeu, version des règles, budget et staff sont-ils encore modifiables ?
+    /// Toujours vrai en création. En édition, faux dès la première équipe
+    /// inscrite. Purement visuel : le service revérifie tout.
+    /// </summary>
+    bool _structurantsOuverts = true;
+
     protected override async Task OnInitializedAsync()
     {
-        _games = await LeagueService.GetGamesAsync();
-        if (_games.Count > 0)
+        try
         {
-            _selectedGameNom = _games[0].Nom;
-            _versions = await LeagueService.GetVersionsAsync(_games[0].Id);
-            var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
-            _selectedVersionNom = active?.Nom ?? "";
-            AppliquerBaremeDeVersion(_games[0].Type);
-            await ChargerStaffAsync();
+            var authState = await AuthProvider.GetAuthenticationStateAsync();
+            var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+            if (EstEdition)
+            {
+                // La route est ouverte à tout compte authentifié : c'est ICI que
+                // l'autorisation se joue, pas dans l'attribut de la page.
+                _autorise = await Auth.PeutGererLigueAsync(userId, Id!.Value);
+                if (!_autorise) return;
+
+                var ligue = await LeagueService.GetLigueAsync(Id.Value);
+                if (ligue is null) { _autorise = false; return; }
+
+                if (!DisplayHelpers.ParametresLigueEditables(ligue.Statut))
+                {
+                    Snackbar.Add(
+                        "La saison est lancée : les paramètres de la ligue ne sont plus modifiables.",
+                        Severity.Warning);
+                    Nav.NavigateTo($"/ligues/{Id.Value}");
+                    return;
+                }
+
+                await ChargerDepuisLigueAsync(ligue);
+                return;
+            }
+
+            // Création : la garde de rôle retirée de l'attribut est rétablie ici.
+            _autorise = await Auth.EstAdminAsync(userId) || await Auth.EstGrandCommissaireAsync(userId);
+            if (!_autorise) return;
+
+            _games = await LeagueService.GetGamesAsync();
+            if (_games.Count > 0)
+            {
+                _selectedGameNom = _games[0].Nom;
+                _versions = await LeagueService.GetVersionsAsync(_games[0].Id);
+                var active = _versions.FirstOrDefault(v => v.EstActive) ?? _versions.FirstOrDefault();
+                _selectedVersionNom = active?.Nom ?? "";
+                AppliquerBaremeDeVersion(_games[0].Type);
+                await ChargerStaffAsync();
+            }
         }
+        finally
+        {
+            _chargement = false;
+        }
+    }
+
+    /// <summary>
+    /// Préremplit le formulaire depuis la ligue existante.
+    ///
+    /// ⚠️ Tout champ ajouté à League ET au formulaire doit être repris ici,
+    /// sinon il repart de son défaut C# à l'enregistrement. Faire la liste
+    /// depuis Data/Models/League.cs, pas de mémoire.
+    /// Exception assumée : Reglement et ModeBrouillard ne sont pas dans ce
+    /// formulaire — la fiche de ligue les gère, et le service n'y touche pas.
+    /// </summary>
+    async Task ChargerDepuisLigueAsync(League ligue)
+    {
+        _structurantsOuverts =
+            DisplayHelpers.ParametresStructurantsEditables(ligue.Statut, ligue.Equipes.Count);
+
+        _nom             = ligue.Nom;
+        _description     = ligue.Description;
+        _format          = ligue.Format;
+        _budget          = ligue.BudgetDepart;
+        _nbEquipesLabel  = ligue.NombreEquipesPlayoff switch
+        {
+            2 => Playoff2,
+            8 => Playoff8,
+            _ => Playoff4
+        };
+        _xpTd            = ligue.XpParTouchdown;
+        _xpPasse         = ligue.XpParPasse;
+        _xpInterception  = ligue.XpParInterception;
+        _xpElimination   = ligue.XpParElimination;
+        _xpMvp           = ligue.XpBonusMvp;
+
+        _games              = await LeagueService.GetGamesAsync();
+        _selectedGameNom    = _games.FirstOrDefault(g => g.Id == ligue.GameId)?.Nom ?? "";
+        _versions           = await LeagueService.GetVersionsAsync(ligue.GameId);
+        _selectedVersionNom = _versions.FirstOrDefault(v => v.Id == ligue.RulesVersionId)?.Nom ?? "";
+
+        // Le staff vient de la LIGUE, pas des règles : il a pu être ajusté à la
+        // création, et le recharger depuis les règles écraserait cet ajustement.
+        _staff = await StaffService.GetStaffLigueAsync(ligue.Id);
     }
 
     /// <summary>
@@ -444,9 +594,21 @@
                 XpBonusMvp             = _xpMvp,
             };
 
-            await LeagueService.CreerLigueAsync(ligue, userId, _staff);
-            Snackbar.Add("Ligue créée avec succès !", Severity.Success);
-            Nav.NavigateTo("/ligues");
+            if (EstEdition)
+            {
+                // Staff transmis seulement s'il est encore modifiable : le
+                // service refuse tout staff dès qu'une équipe est inscrite.
+                await LeagueService.ModifierLigueAsync(
+                    Id!.Value, ligue, userId, _structurantsOuverts ? _staff : null);
+                Snackbar.Add("Ligue modifiée.", Severity.Success);
+                Nav.NavigateTo($"/ligues/{Id.Value}");
+            }
+            else
+            {
+                await LeagueService.CreerLigueAsync(ligue, userId, _staff);
+                Snackbar.Add("Ligue créée avec succès !", Severity.Success);
+                Nav.NavigateTo("/ligues");
+            }
         }
         catch (Exception ex)
         {

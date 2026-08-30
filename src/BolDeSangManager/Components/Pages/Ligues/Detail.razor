@@ -49,14 +49,16 @@ else
                         @(DisplayHelpers.SansCalendrier(_ligue.Format) ? "Ouvrir la ligue" : "Lancer la saison")
                     </MudButton>
                 }
-                @* Le staff reste réglable tant que la ligue n'est pas terminée :
-                   contrairement au calendrier, il vaut aussi en Open. *@
-                @if (_peutGererLigue && _ligue.Statut != LeagueStatus.Termine)
+                @* Paramètres de la ligue : nom, format, barème d'XP, et — tant
+                   qu'aucune équipe n'est inscrite — jeu, version des règles,
+                   budget et staff. Le staff n'a plus d'écran dédié : il est
+                   réglé depuis ce même formulaire. *@
+                @if (_peutGererLigue && DisplayHelpers.ParametresLigueEditables(_ligue.Statut))
                 {
                     <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Small"
-                               StartIcon="@Icons.Material.Filled.Groups"
-                               Href="@($"/ligues/{Id}/staff")">
-                        Staff de la ligue
+                               StartIcon="@Icons.Material.Filled.Settings"
+                               Href="@($"/ligues/{Id}/modifier")">
+                        Modifier la ligue
                     </MudButton>
                 }
                 @if (DisplayHelpers.CalendrierEditable(_ligue.Statut, _ligue.Format))
