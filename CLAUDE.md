@@ -59,7 +59,7 @@ src/BolDeSangManager/
 │   │                       # oublié, confirmation d'e-mail) + SupprimerCompte — SSR
 │   └── Pages/
 │       ├── Admin/                  # Index (Utilisateurs, Paramètres), Donnees (CRUD + Réserve)
-│       ├── Ligues/                 # Index, Creer, Detail, CalendrierLibre, StaffLigue, PhaseRepos
+│       ├── Ligues/                 # Index, Creer (= création ET édition), Detail, CalendrierLibre, PhaseRepos
 │       ├── Equipes/                # MaFeuille, Rejoindre, Detail
 │       ├── Matchs/                 # Index, Feuille, Detail, Validation, ApresMatch
 │       └── Profil/Index.razor      # /profil — pseudo, e-mail, mot de passe, RGPD, suppression
@@ -69,6 +69,35 @@ src/BolDeSangManager/
 ⚠️ **Les pages Identity sont en SSR** : aucun composant MudBlazor *interactif* (`MudTextField`, `MudSelect`, `MudCheckBox`…) n'y fonctionne. Utiliser `InputText` + les classes `.account-*` de `app.css`, comme sur `Login.razor`. Les `MudButton` / `MudAlert` non interactifs passent, eux, sans problème. Ne jamais s'appuyer sur des classes **Bootstrap** (`row`, `col-*`, `btn`, `alert`, `form-floating`) : elles n'existent pas dans ce projet et le HTML tombe sans aucun style.
 
 ## Points clés du domaine
+
+**Édition des paramètres d'une ligue** (`LeagueService.ModifierLigueAsync`, écran
+`Ligues/Creer.razor` servi aussi sur `/ligues/{id}/modifier`) : **deux verrous distincts**,
+centralisés dans `DisplayHelpers.ParametresLigueEditables` / `ParametresStructurantsEditables`.
+
+1. Le **lancement de la saison** (`Statut >= EnCours`) ferme tout : le calendrier généré
+   dépend du format, les feuilles de match déjà saisies du barème d'XP.
+2. La **première équipe inscrite** ferme en plus les paramètres *structurants* — jeu,
+   version des règles, budget de départ, staff de ligue — parce que des lignes déjà
+   écrites en dépendent :
+   - `Team.TeamTypeId` et `TeamPlayer.PlayerPositionId` pointent vers des lignes **propres
+     à une `RulesVersion`** ; changer de version rendrait les équipes orphelines (race et
+     postes inexistants).
+   - `Team.Tresorerie` est calculée **une seule fois** à la création de l'équipe
+     (`BudgetDepart − roster − staff`) puis **stockée** : modifier le budget ou un coût de
+     staff après coup laisserait des trésoreries fausses et autoriserait des équipes
+     hors budget. Le recalcul rétroactif a été explicitement **écarté** (option non retenue).
+
+⚠️ Il n'y a plus d'écran `StaffLigue.razor` : il permettait de changer les coûts de staff
+**à tout moment**, y compris ligue lancée, ce qui faussait exactement de la même façon la
+trésorerie déjà figée. Le staff se règle depuis le formulaire de ligue, sous le même verrou.
+
+⚠️ `Reglement` et `ModeBrouillard` ne passent **pas** par ce formulaire : ils ont leur
+propre commande sur `Ligues/Detail.razor` et restent modifiables en cours de saison.
+`ModifierLigueAsync` n'y touche jamais — un test le verrouille.
+
+⚠️ La route `/ligues/creer` n'a plus l'attribut `[Authorize(Roles = "Admin,GrandCommissaire")]`
+(un commissaire doit pouvoir éditer **sa** ligue). La garde de rôle en création est donc
+**dans le code** d'`OnInitializedAsync` : ne pas la retirer en croyant l'attribut suffisant.
 
 **Suppression de compte** (`UserAccountService`) : quatre FK pointent vers `ApplicationUser` en **Restrict** — `Team.CoachId`, `League.CommissaireId`, `MatchSheet.SaisiParId`, `LeagueCommissioner.UserId`. Supprimer la ligne d'un coach ayant joué échouerait, et passer ces FK en `Cascade` détruirait l'historique sportif **d'autres** coaches (une feuille de match est validée par deux personnes). D'où la règle : **suppression dure seulement si le compte n'a aucune trace, anonymisation sinon**. L'anonymisation garde la ligne mais écrase les données personnelles (email en `@local.invalid`, pseudo « Coach supprimé », `PasswordHash = null`, rôles retirés, `LockoutEnd` au maximum) — conforme au droit à l'effacement, sans casser les classements. L'ancienne adresse redevient libre pour une réinscription, qui repart d'un compte neuf.
 
