@@ -21,6 +21,19 @@ else if (!_autorise)
         Vous n'avez pas accès à cet écran.
     </MudAlert>
 }
+else if (_saisonLancee)
+{
+    @* Message affiché sur place plutôt qu'une redirection : un Snackbar émis
+       depuis OnInitializedAsync est perdu par la navigation qui le suit, et
+       le commissaire se retrouve renvoyé sans aucune explication. *@
+    <MudAlert Severity="Severity.Warning" Class="mb-4">
+        La saison est lancée : les paramètres de cette ligue ne sont plus modifiables.
+    </MudAlert>
+    <MudButton Href="@($"/ligues/{Id}")" Variant="Variant.Filled" Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.ArrowBack">
+        Retour à la ligue
+    </MudButton>
+}
 else
 {
 
@@ -379,6 +392,9 @@ else
     bool _chargement = true;
     bool _autorise;
 
+    /// <summary>Ligue déjà lancée : l'écran affiche un message au lieu du formulaire.</summary>
+    bool _saisonLancee;
+
     /// <summary>
     /// Jeu, version des règles, budget et staff sont-ils encore modifiables ?
     /// Toujours vrai en création. En édition, faux dès la première équipe
@@ -405,10 +421,7 @@ else
 
                 if (!DisplayHelpers.ParametresLigueEditables(ligue.Statut))
                 {
-                    Snackbar.Add(
-                        "La saison est lancée : les paramètres de la ligue ne sont plus modifiables.",
-                        Severity.Warning);
-                    Nav.NavigateTo($"/ligues/{Id.Value}");
+                    _saisonLancee = true;
                     return;
                 }
 
