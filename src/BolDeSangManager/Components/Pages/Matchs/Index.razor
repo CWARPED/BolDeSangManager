@@ -18,14 +18,6 @@
     @if (_matchs?.Count > 0)
     {
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-            @if (_matchs.Any(m => m.DateProgrammee.HasValue))
-            {
-                <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                           StartIcon="@Icons.Material.Filled.CalendarMonth"
-                           OnClick="TelechargerTousIcs">
-                    Ajouter mes matchs à mon agenda
-                </MudButton>
-            }
             @* L'abonnement, lui, ne dépend PAS d'une date déjà fixée : c'est
                justement son intérêt, les dates à venir arrivent toutes seules.
                ⚠️ UserId avec @ : un paramètre string sans @ passerait le TEXTE "_userId". *@
@@ -66,13 +58,9 @@ else
 }
 
 @code {
-    async Task TelechargerTousIcs()
-    {
-        if (_matchs is null) return;
-        var bytes = CalendrierService.GenererIcs(_matchs, "Mes matchs — BolDeSang");
-        await JS.InvokeVoidAsync("blazorDownloadBase64File",
-            "mes-matchs.ics", "text/calendar", Convert.ToBase64String(bytes));
-    }
+    // ⚠️ TelechargerTousIcs retiré : télécharger un fichier puis l'importer à la
+    // main était trop compliqué pour les coaches (impossible sur téléphone).
+    // Remplacé par l'abonnement par URL, qui se met à jour tout seul.
 
     List<Match>? _matchs;
     HashSet<int> _mesEquipeIds = [];

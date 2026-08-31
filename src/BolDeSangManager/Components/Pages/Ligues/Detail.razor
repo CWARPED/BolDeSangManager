@@ -292,14 +292,6 @@ else
                     @NbAvecDate() match(s) sur @NbMatchsVisibles() ont une date fixée
                 </MudText>
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-                    @if (NbAvecDate() > 0)
-                    {
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.CalendarMonth"
-                                   OnClick="TelechargerCalendrierLigue">
-                            Calendrier (.ics)
-                        </MudButton>
-                    }
                     @* Abonnement : reserve a un coach engage ici, le flux ne
                        contenant que SES matchs. Il ne depend PAS d'une date deja
                        fixee : les dates a venir arrivent toutes seules.
@@ -395,14 +387,6 @@ else
                     }
                 </MudStack>
                 <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-                    @if (NbAvecDate() > 0)
-                    {
-                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                   StartIcon="@Icons.Material.Filled.CalendarMonth"
-                                   OnClick="TelechargerCalendrierLigue">
-                            Calendrier (.ics)
-                        </MudButton>
-                    }
                     @* Abonnement : reserve a un coach engage ici, le flux ne
                        contenant que SES matchs. Il ne depend PAS d'une date deja
                        fixee : les dates a venir arrivent toutes seules.
@@ -1003,16 +987,11 @@ else
     int NbAvecDate() =>
         _ligue?.Divisions.SelectMany(d => MatchsVisibles(d)).Count(m => m.DateProgrammee.HasValue) ?? 0;
 
-    async Task TelechargerCalendrierLigue()
-    {
-        if (_ligue is null) return;
-        // on n'exporte que ce que l'utilisateur a le droit de voir (mode brouillard)
-        var matchs = _ligue.Divisions.SelectMany(d => MatchsVisibles(d)).ToList();
-        var bytes = CalendrierService.GenererIcs(matchs, $"{_ligue.Nom} — BolDeSang");
-        await JS.InvokeVoidAsync("blazorDownloadBase64File",
-            $"calendrier-{_ligue.Nom.ToLower().Replace(" ", "-")}.ics",
-            "text/calendar", Convert.ToBase64String(bytes));
-    }
+    // ⚠️ TelechargerCalendrierLigue retiré : le téléchargement d'un fichier .ics
+    // puis son import manuel était trop compliqué (impossible depuis un
+    // téléphone, menu Google enfoui, et l'import ne se met jamais à jour).
+    // Remplacé par l'ABONNEMENT par URL — voir BoutonAbonnementCalendrier.
+    // CalendrierService reste utilisé : c'est lui qui produit le flux servi.
 
     // ── Vue calendrier mensuelle (#1) ─────────────────────────────────────────
 

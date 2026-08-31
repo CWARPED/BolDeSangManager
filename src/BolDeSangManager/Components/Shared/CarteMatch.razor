@@ -98,15 +98,10 @@
 
                 @if (Match.DateProgrammee.HasValue)
                 {
-                    <div @onclick:stopPropagation="true">
-                        <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth" Size="Size.Small"
-                                       title="Ajouter à mon agenda (.ics)"
-                                       OnClick="TelechargerIcs" />
-                    </div>
-
-                    @* Raccourci Google Agenda : copie ponctuelle de CE match.
-                       Lien externe classique (pas d'OnClick) pour que le
-                       navigateur ouvre bien un nouvel onglet. *@
+                    @* Le téléchargement .ics par match a été retiré : trop
+                       compliqué pour les coaches. Reste le raccourci Google
+                       Agenda, en un clic. Lien externe classique (pas d'OnClick)
+                       pour que le navigateur ouvre bien un nouvel onglet. *@
                     var urlGoogle = CalendrierService.UrlGoogleAgenda(Match);
                     if (urlGoogle is not null)
                     {
@@ -224,10 +219,7 @@
         }
     }
 
-    async Task TelechargerIcs()
-    {
-        var bytes = CalendrierService.GenererIcs(Match);
-        await JS.InvokeVoidAsync("blazorDownloadBase64File",
-            $"match-{Match.Id}.ics", "text/calendar", Convert.ToBase64String(bytes));
-    }
+    // ⚠️ TelechargerIcs retiré : le téléchargement d'un fichier par match était
+    // trop compliqué. Le raccourci Google Agenda le remplace en un clic.
+    // CalendrierService reste utilisé ici pour UrlGoogleAgenda.
 }
