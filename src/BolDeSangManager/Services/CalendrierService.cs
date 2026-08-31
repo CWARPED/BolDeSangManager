@@ -67,6 +67,50 @@ public class CalendrierService
         return Encoding.UTF8.GetBytes(sb.ToString());
     }
 
+    /// <summary>
+    /// URL « Ajouter à Google Agenda » pré-remplie pour UN match.
+    ///
+    /// Complément du .ics : le coach clique, Google ouvre le formulaire de
+    /// création d'événement déjà rempli, il valide. Aucune mise à jour ensuite —
+    /// c'est une copie ponctuelle, exactement comme un .ics importé.
+    ///
+    /// Format des dates imposé par Google : <c>YYYYMMDDTHHMMSSZ/YYYYMMDDTHHMMSSZ</c>
+    /// en UTC. Les valeurs sont échappées pour l'URL (<see cref="Uri.EscapeDataString"/>),
+    /// faute de quoi un nom d'équipe contenant « &amp; » tronquerait les paramètres suivants.
+    ///
+    /// Retourne <c>null</c> quand le match n'a pas de date : un événement sans
+    /// date n'a pas de sens, l'appelant n'affiche alors pas le lien.
+    /// </summary>
+    public string? UrlGoogleAgenda(Match m)
+    {
+        if (!m.DateProgrammee.HasValue) return null;
+
+        var debut = DateTime.SpecifyKind(m.DateProgrammee.Value, DateTimeKind.Utc);
+        var fin = debut.Add(DureeMatch);
+
+        var titre = $"{m.EquipeDomicile?.Nom ?? "?"} vs {m.EquipeExterieur?.Nom ?? "?"}";
+
+        var description = new StringBuilder();
+        var ligue = m.Division?.League?.Nom;
+        if (!string.IsNullOrWhiteSpace(ligue)) description.Append($"Ligue : {ligue}\n");
+        description.Append(m.Ronde >= 100
+            ? $"Play-off — Tour {m.Ronde - 99}"
+            : $"Ronde {m.Ronde}");
+
+        var parametres = new List<string>
+        {
+            "action=TEMPLATE",
+            $"text={Uri.EscapeDataString(titre)}",
+            $"dates={debut:yyyyMMdd'T'HHmmss'Z'}/{fin:yyyyMMdd'T'HHmmss'Z'}",
+            $"details={Uri.EscapeDataString(description.ToString())}",
+        };
+
+        if (!string.IsNullOrWhiteSpace(m.Lieu))
+            parametres.Add($"location={Uri.EscapeDataString(m.Lieu)}");
+
+        return "https://calendar.google.com/calendar/render?" + string.Join("&", parametres);
+    }
+
     /// <summary>Écrit une propriété texte : échappement puis repli des lignes longues.</summary>
     private static void Ligne(StringBuilder sb, string propriete, string valeur)
         => sb.Append(Replier($"{propriete}:{Echapper(valeur)}")).Append("\r\n");

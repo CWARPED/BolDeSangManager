@@ -103,6 +103,19 @@
                                        title="Ajouter à mon agenda (.ics)"
                                        OnClick="TelechargerIcs" />
                     </div>
+
+                    @* Raccourci Google Agenda : copie ponctuelle de CE match.
+                       Lien externe classique (pas d'OnClick) pour que le
+                       navigateur ouvre bien un nouvel onglet. *@
+                    var urlGoogle = CalendrierService.UrlGoogleAgenda(Match);
+                    if (urlGoogle is not null)
+                    {
+                        <div @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.Event" Size="Size.Small"
+                                           title="Ajouter ce match à Google Agenda"
+                                           Href="@urlGoogle" Target="_blank" rel="noopener" />
+                        </div>
+                    }
                 }
 
                 @if (SaisiePossible(Match.Statut))

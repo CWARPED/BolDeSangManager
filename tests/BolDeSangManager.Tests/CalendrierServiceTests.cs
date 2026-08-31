@@ -194,4 +194,90 @@ public class CalendrierServiceTests
         Assert.Contains("Play-off", ics);
         Assert.DoesNotContain("Ronde 101", ics);
     }
+
+    // ── Lien « Ajouter à Google Agenda » (option B) ───────────────────────────
+    //
+    // Google impose des dates UTC au format compact YYYYMMDDTHHMMSSZ séparées
+    // par une barre oblique. Tout le reste est du texte libre, qui DOIT être
+    // échappé pour l'URL : un « & » dans un nom d'équipe couperait la chaîne de
+    // paramètres, et Google recevrait un événement tronqué sans rien signaler.
+
+    [Fact]
+    public void Google_PointeVersLeFormulaireDeCreationDEvenement()
+    {
+        var url = _svc.UrlGoogleAgenda(M())!;
+
+        Assert.StartsWith("https://calendar.google.com/calendar/render?", url);
+        Assert.Contains("action=TEMPLATE", url);
+    }
+
+    [Fact]
+    public void Google_UtiliseLesDatesUtcAuFormatCompact_DebutEtFinSeparesParUneBarre()
+    {
+        var url = _svc.UrlGoogleAgenda(M())!;
+
+        // 18h30 UTC + 2 h de durée par défaut
+        Assert.Contains("dates=20260912T183000Z/20260912T203000Z", url);
+    }
+
+    [Fact]
+    public void Google_ReprendLeTitreDuMatch_EchappePourLUrl()
+    {
+        var url = _svc.UrlGoogleAgenda(M())!;
+
+        Assert.Contains("text=Les%20Marteaux%20vs%20Les%20Charognards", url);
+        // L'espace brut casserait l'URL dans un attribut href.
+        Assert.DoesNotContain("text=Les Marteaux", url);
+    }
+
+    [Fact]
+    public void Google_EchappeLesCaracteresQuiCasseraientLaChaineDeParametres()
+    {
+        var url = _svc.UrlGoogleAgenda(M(dom: "Tom & Jerry", ext: "A=B"))!;
+
+        Assert.DoesNotContain("Tom & Jerry", url);
+        Assert.Contains("Tom%20%26%20Jerry", url);
+        Assert.Contains("A%3DB", url);
+
+        // Un seul paramètre « text » : le & du nom n'a pas créé de paramètre fantôme.
+        Assert.Equal(1, url.Split("text=").Length - 1);
+    }
+
+    [Fact]
+    public void Google_TransmetLeLieuQuandIlExiste_EtLOmetSinon()
+    {
+        var avecLieu = _svc.UrlGoogleAgenda(M(lieu: "Taverne du Nain, Lyon"))!;
+        var sansLieu = _svc.UrlGoogleAgenda(M())!;
+
+        Assert.Contains("location=Taverne%20du%20Nain%2C%20Lyon", avecLieu);
+        Assert.DoesNotContain("location=", sansLieu);
+    }
+
+    [Fact]
+    public void Google_DecritLaLigueEtLaRondeDansLesDetails()
+    {
+        var url = _svc.UrlGoogleAgenda(M(ronde: 3))!;
+
+        Assert.Contains("details=", url);
+        Assert.Contains(Uri.EscapeDataString("Ronde 3"), url);
+        Assert.Contains(Uri.EscapeDataString("Ligue de la Saison Sanglante"), url);
+    }
+
+    [Fact]
+    public void Google_NommeCorrectementLesToursDePlayoff()
+    {
+        var url = _svc.UrlGoogleAgenda(M(ronde: 101))!;
+
+        Assert.Contains(Uri.EscapeDataString("Play-off"), url);
+        Assert.DoesNotContain(Uri.EscapeDataString("Ronde 101"), url);
+    }
+
+    [Fact]
+    public void Google_SansDateProgrammee_NeProduitAucunLien()
+    {
+        var sansDate = M();
+        sansDate.DateProgrammee = null;
+
+        Assert.Null(_svc.UrlGoogleAgenda(sansDate));
+    }
 }
