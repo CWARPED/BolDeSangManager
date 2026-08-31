@@ -8,6 +8,7 @@
 @inject NavigationManager Nav
 @inject AuthenticationStateProvider AuthProvider
 @inject ISnackbar Snackbar
+@inject IDialogService DialogService
 
 <PageTitle>@(EstEdition ? "Modifier la ligue" : "Créer une ligue") — BolDeSang Manager</PageTitle>
 
@@ -185,6 +186,25 @@ else
                                          Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
                     </MudItem>
                 </MudGrid>
+
+                @if (!EstEdition)
+                {
+                    <MudDivider Class="my-3" />
+
+                    <MudText Typo="Typo.subtitle2" Class="mb-1"><b>Barème du classement</b></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2 d-block">
+                        Points gagnés au classement. Réglable ensuite en cours de saison,
+                        avec recalcul automatique.
+                    </MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Class="mb-3">
+                        <MudText Typo="Typo.body2">@ResumeBaremePoints()</MudText>
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                   StartIcon="@Icons.Material.Filled.Scoreboard"
+                                   OnClick="OuvrirBaremePoints">
+                            Régler
+                        </MudButton>
+                    </MudStack>
+                }
 
                 <MudDivider Class="my-3" />
 
@@ -371,6 +391,58 @@ else
     // Barème d'XP (R6) — valeurs LRB par défaut, ajustées selon le jeu choisi.
     int _xpTd = 3, _xpPasse = 1, _xpInterception = 2, _xpElimination = 2, _xpMvp = 4;
 
+    /// <summary>
+    /// Barème de classement de la ligue en cours de création. Pré-rempli depuis
+    /// la version de règles choisie ; les paliers, eux, partent toujours vides
+    /// (ils appartiennent au format de la ligue, pas aux règles).
+    /// </summary>
+    BaremePoints _baremePoints = BaremePoints.ParDefaut();
+    List<PalierPointsLigue> _paliersPoints = [];
+
+    string ResumeBaremePoints()
+    {
+        var b = _baremePoints;
+        var txt = $"V {b.Victoire} · N {b.Nul} · D {b.Defaite}";
+        if (_paliersPoints.Count > 0) txt += $" — {_paliersPoints.Count} palier(s)";
+        var bonus = b.ParTouchdown + b.ParElimination + b.ParInterception
+                  + b.ParPasse + b.ParDeviation + b.ParAgression;
+        if (bonus > 0) txt += " — avec bonus";
+        return txt;
+    }
+
+    async Task OuvrirBaremePoints()
+    {
+        // LigueId = 0 : mode détaché, le dialogue rend le barème sans rien écrire.
+        var parameters = new DialogParameters<BaremePointsDialog>
+        {
+            { x => x.LigueId, 0 },
+            { x => x.Bareme, new BaremePoints
+                {
+                    Victoire        = _baremePoints.Victoire,
+                    Nul             = _baremePoints.Nul,
+                    Defaite         = _baremePoints.Defaite,
+                    ParTouchdown    = _baremePoints.ParTouchdown,
+                    ParElimination  = _baremePoints.ParElimination,
+                    ParInterception = _baremePoints.ParInterception,
+                    ParPasse        = _baremePoints.ParPasse,
+                    ParDeviation    = _baremePoints.ParDeviation,
+                    ParAgression    = _baremePoints.ParAgression,
+                    Paliers         = _paliersPoints
+                        .Select(p => new PalierPoints(p.JusquAuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
+                        .ToList()
+                } },
+        };
+
+        var dialog = await DialogService.ShowAsync<BaremePointsDialog>("Barème du classement", parameters);
+        var result = await dialog.Result;
+
+        if (result is { Canceled: false, Data: BaremePointsDialog.BaremeSaisi saisi })
+        {
+            _baremePoints  = saisi.Bareme;
+            _paliersPoints = saisi.Paliers;
+        }
+    }
+
     List<Game> _games = [];
     List<RulesVersion> _versions = [];
 
@@ -534,6 +606,11 @@ else
         _xpInterception = bareme.ParInterception;
         _xpElimination  = bareme.ParElimination;
         _xpMvp          = bareme.BonusMvp;
+
+        // Le barème de CLASSEMENT suit la même règle : défaut porté par les
+        // règles, ajustable pour la ligue. En édition on n'y touche pas — la
+        // ligue a déjà le sien, et il se règle depuis sa fiche.
+        if (!EstEdition) _baremePoints = BaremePoints.DeVersion(version);
     }
 
     async Task OnVersionChanged(string nom)
@@ -618,7 +695,7 @@ else
             }
             else
             {
-                await LeagueService.CreerLigueAsync(ligue, userId, _staff);
+                await LeagueService.CreerLigueAsync(ligue, userId, _staff, _baremePoints, _paliersPoints);
                 Snackbar.Add("Ligue créée avec succès !", Severity.Success);
                 Nav.NavigateTo("/ligues");
             }

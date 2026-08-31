@@ -68,6 +68,10 @@ public class LeagueService(
             // de ligue — panne silencieuse, aucun test de service ne la voit.
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
                 .ThenInclude(m => m.Feuille)
+            // Paliers du barème de points : la fiche de ligue affiche le barème
+            // et la feuille de match conditionne l'affichage du « nombre de
+            // tours » à leur présence.
+            .Include(l => l.PaliersPoints)
             .FirstOrDefaultAsync(l => l.Id == id);
     }
 
@@ -76,10 +80,21 @@ public class LeagueService(
     /// remplace la copie brute des règles : c'est ce qui permet de régler les
     /// bornes de fans, de désactiver un staff, etc. pour CETTE ligue seulement.
     /// </param>
+    /// <param name="baremePoints">
+    /// Barème de classement choisi à la création. <c>null</c> = on reprend celui
+    /// de la version de règles. Les valeurs sont VALIDÉES côté service : elles
+    /// viennent du navigateur.
+    /// </param>
+    /// <param name="paliersPoints">
+    /// Paliers par nombre de tours, propres à cette ligue (jamais hérités des
+    /// règles : c'est un choix de format).
+    /// </param>
     public async Task<League> CreerLigueAsync(
         League ligue,
         string commissaireId,
-        IEnumerable<LeagueStaffType>? staffPersonnalise = null)
+        IEnumerable<LeagueStaffType>? staffPersonnalise = null,
+        BaremePoints? baremePoints = null,
+        IEnumerable<PalierPointsLigue>? paliersPoints = null)
     {
         ligue.CommissaireId = commissaireId;
         ligue.Statut = LeagueStatus.Creation;
@@ -91,13 +106,36 @@ public class LeagueService(
         // propre commande, sans qu'une évolution des règles rétro-modifie une
         // ligue en cours. L'écran de création ne poste donc AUCUNE de ces
         // valeurs : elles ne sont pas falsifiables.
-        var versionBareme = await db.RulesVersions
-            .AsNoTracking()
-            .FirstOrDefaultAsync(v => v.Id == ligue.RulesVersionId);
-        BaremePoints.DeVersion(versionBareme).AppliquerA(ligue);
+        var listePaliers = paliersPoints?.ToList() ?? [];
+
+        if (baremePoints is not null)
+        {
+            ValiderBaremePoints(baremePoints, listePaliers);
+            baremePoints.AppliquerA(ligue);
+        }
+        else
+        {
+            var versionBareme = await db.RulesVersions
+                .AsNoTracking()
+                .FirstOrDefaultAsync(v => v.Id == ligue.RulesVersionId);
+            BaremePoints.DeVersion(versionBareme).AppliquerA(ligue);
+        }
 
         db.Leagues.Add(ligue);
         await db.SaveChangesAsync();
+
+        foreach (var p in listePaliers)
+        {
+            db.PaliersPointsLigue.Add(new PalierPointsLigue
+            {
+                LeagueId       = ligue.Id,
+                JusquAuTour    = p.JusquAuTour,
+                PointsVictoire = p.PointsVictoire,
+                PointsNul      = p.PointsNul,
+                PointsDefaite  = p.PointsDefaite
+            });
+        }
+        if (listePaliers.Count > 0) await db.SaveChangesAsync();
 
         // Le staff des règles est COPIÉ dans la ligue : le commissaire pourra
         // l'ajuster pour son format sans toucher aux règles, et une évolution
@@ -1025,31 +1063,7 @@ public class LeagueService(
             ?? throw new InvalidOperationException("Ligue introuvable");
 
         var listePaliers = paliers.ToList();
-
-        // Validation côté SERVICE, pas seulement côté écran : ces valeurs
-        // arrivent du navigateur.
-        foreach (var valeur in new[]
-                 {
-                     bareme.Victoire, bareme.Nul, bareme.Defaite,
-                     bareme.ParTouchdown, bareme.ParElimination, bareme.ParInterception,
-                     bareme.ParPasse, bareme.ParDeviation, bareme.ParAgression
-                 })
-        {
-            if (valeur < 0 || valeur > 1_000_000)
-                throw new InvalidOperationException($"Valeur de barème invalide : {valeur}.");
-        }
-
-        foreach (var p in listePaliers)
-        {
-            if (p.JusquAuTour < 1 || p.JusquAuTour > 50)
-                throw new InvalidOperationException(
-                    $"Palier invalide : le nombre de tours doit être compris entre 1 et 50 (reçu {p.JusquAuTour}).");
-            if (p.PointsVictoire < 0 || p.PointsNul < 0 || p.PointsDefaite < 0)
-                throw new InvalidOperationException("Les points d'un palier ne peuvent pas être négatifs.");
-        }
-
-        if (listePaliers.Select(p => p.JusquAuTour).Distinct().Count() != listePaliers.Count)
-            throw new InvalidOperationException("Deux paliers ne peuvent pas viser le même nombre de tours.");
+        ValiderBaremePoints(bareme, listePaliers);
 
         bareme.AppliquerA(ligue);
 
@@ -1078,6 +1092,37 @@ public class LeagueService(
 
         await NotifierChangementAsync(ligueId);
         return matchsRejoues;
+    }
+
+    /// <summary>
+    /// Validation d'un barème posté par un écran. Centralisée parce que DEUX
+    /// chemins y mènent — création de ligue et édition en cours de saison — et
+    /// qu'un garde-fou présent d'un seul côté ne protège rien.
+    /// </summary>
+    private static void ValiderBaremePoints(BaremePoints bareme, List<PalierPointsLigue> paliers)
+    {
+        foreach (var valeur in new[]
+                 {
+                     bareme.Victoire, bareme.Nul, bareme.Defaite,
+                     bareme.ParTouchdown, bareme.ParElimination, bareme.ParInterception,
+                     bareme.ParPasse, bareme.ParDeviation, bareme.ParAgression
+                 })
+        {
+            if (valeur < 0 || valeur > 1_000_000)
+                throw new InvalidOperationException($"Valeur de barème invalide : {valeur}.");
+        }
+
+        foreach (var p in paliers)
+        {
+            if (p.JusquAuTour < 1 || p.JusquAuTour > 50)
+                throw new InvalidOperationException(
+                    $"Palier invalide : le nombre de tours doit être compris entre 1 et 50 (reçu {p.JusquAuTour}).");
+            if (p.PointsVictoire < 0 || p.PointsNul < 0 || p.PointsDefaite < 0)
+                throw new InvalidOperationException("Les points d'un palier ne peuvent pas être négatifs.");
+        }
+
+        if (paliers.Select(p => p.JusquAuTour).Distinct().Count() != paliers.Count)
+            throw new InvalidOperationException("Deux paliers ne peuvent pas viser le même nombre de tours.");
     }
 
     /// <summary>

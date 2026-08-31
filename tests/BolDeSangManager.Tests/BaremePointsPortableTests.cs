@@ -356,6 +356,37 @@ public class BaremePointsPortableTests : IDisposable
             Assert.Empty(await db.PaliersPointsLigue.Where(p => p.LeagueId == ligueId).ToListAsync());
     }
 
+    // ── Édition admin de la version ───────────────────────────────────────────
+
+    [Fact]
+    public async Task ModifierBaremePointsDeVersion_NeTouchePasAuBaremeXp()
+    {
+        // Les deux barèmes vivent sur la même entité et sont édités par la même
+        // modale : un champ oublié dans la copie de travail repartirait à son
+        // défaut C# et écraserait la valeur en base.
+        int versionId;
+        await using (var db = _factory.CreateContext())
+        {
+            var (_, version) = await DataSeeder.SeedGameAsync(db);
+            version.XpParTouchdown = 7;
+            version.XpBonusMvp = 11;
+            await db.SaveChangesAsync();
+            versionId = version.Id;
+        }
+
+        await using (var db = _factory.CreateContext())
+            await new DataEditService(db, NullLogger<DataEditService>.Instance)
+                .ModifierBaremePointsAsync(versionId, BaremeReference());
+
+        await using (var db = _factory.CreateContext())
+        {
+            var v = await db.RulesVersions.FindAsync(versionId);
+            Assert.Equal(2000, v!.PointsVictoire);
+            Assert.Equal(7, v.XpParTouchdown);
+            Assert.Equal(11, v.XpBonusMvp);
+        }
+    }
+
     private class StubAuth : IAuthorizationService
     {
         public Task<bool> EstAdminAsync(string userId) => Task.FromResult(true);

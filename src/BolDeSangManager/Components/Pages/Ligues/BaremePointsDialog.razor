@@ -1,0 +1,217 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject LeagueService LeagueService
+@inject AuthenticationStateProvider AuthProvider
+@inject ISnackbar Snackbar
+
+@*
+    Réglage du barème de points du classement d'une ligue.
+
+    Volontairement séparé du formulaire de ligue (`Creer.razor`), qui se verrouille
+    dès que la saison est lancée : le barème doit rester modifiable en cours de
+    route. C'est sans danger parce que chaque enregistrement RECALCULE le
+    classement depuis les feuilles de match — rien n'est figé.
+*@
+
+<MudDialog>
+    <DialogContent>
+        @if (LigueId > 0)
+        {
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mb-4">
+                Enregistrer recalcule le classement de tous les matchs déjà joués.
+            </MudAlert>
+        }
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Points de match</b></MudText>
+        <MudGrid Spacing="2" Class="mb-4">
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_victoire" Label="Victoire" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_nul" Label="Nul" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_defaite" Label="Défaite" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+        </MudGrid>
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1"><b>Paliers par nombre de tours</b></MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+            Facultatif. Un palier donne d'autres points quand le match s'est décidé
+            tôt — par exemple « jusqu'au tour 12 : victoire 3000 ». Au-delà du plus
+            grand palier, ce sont les points de match ci-dessus qui s'appliquent.
+        </MudText>
+
+        @foreach (var p in _paliers)
+        {
+            <MudGrid Spacing="1" Class="mb-1" Justify="Justify.FlexStart">
+                <MudItem xs="3">
+                    <MudNumericField @bind-Value="p.JusquAuTour" Label="Jusqu'au tour" Min="1" Max="50"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="3">
+                    <MudNumericField @bind-Value="p.PointsVictoire" Label="Victoire" Min="0"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="2">
+                    <MudNumericField @bind-Value="p.PointsNul" Label="Nul" Min="0"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="2">
+                    <MudNumericField @bind-Value="p.PointsDefaite" Label="Défaite" Min="0"
+                                     Variant="Variant.Outlined" Margin="Margin.Dense" />
+                </MudItem>
+                <MudItem xs="2" Class="d-flex align-center">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete" Size="Size.Small"
+                                   Color="Color.Error" title="Retirer ce palier"
+                                   OnClick="@(() => _paliers.Remove(p))" />
+                </MudItem>
+            </MudGrid>
+        }
+
+        <MudButton Variant="Variant.Text" Size="Size.Small" Class="mb-4"
+                   StartIcon="@Icons.Material.Filled.Add" OnClick="AjouterPalier">
+            Ajouter un palier
+        </MudButton>
+
+        <MudText Typo="Typo.subtitle2" Class="mb-2"><b>Points bonus par action</b></MudText>
+        <MudGrid Spacing="2">
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_parTouchdown" Label="Touchdown" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_parElimination" Label="Élimination" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_parInterception" Label="Interception" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_parPasse" Label="Passe" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_parDeviation" Label="Déviation" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField @bind-Value="_parAgression" Label="Agression" Min="0"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => MudDialog.Cancel())">Annuler</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   OnClick="Enregistrer" Disabled="@_enregistrement">
+            @(LigueId > 0
+                ? (_enregistrement ? "Recalcul en cours…" : "Enregistrer et recalculer")
+                : "Valider")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = default!;
+
+    /// <summary>
+    /// Ligue à modifier. <b>Zéro = mode détaché</b> : la ligue n'existe pas
+    /// encore (formulaire de création), le dialogue se contente alors de
+    /// RENVOYER le barème saisi sans rien écrire ni recalculer. Le même écran
+    /// sert donc aux deux moments, plutôt que d'entretenir deux formulaires.
+    /// </summary>
+    [Parameter] public int LigueId { get; set; }
+
+    /// <summary>Barème actuel de la ligue, paliers compris.</summary>
+    [Parameter] public BaremePoints Bareme { get; set; } = BaremePoints.ParDefaut();
+
+    int _victoire, _nul, _defaite;
+    int _parTouchdown, _parElimination, _parInterception, _parPasse, _parDeviation, _parAgression;
+    readonly List<PalierPointsLigue> _paliers = [];
+    bool _enregistrement;
+
+    protected override void OnInitialized()
+    {
+        _victoire        = Bareme.Victoire;
+        _nul             = Bareme.Nul;
+        _defaite         = Bareme.Defaite;
+        _parTouchdown    = Bareme.ParTouchdown;
+        _parElimination  = Bareme.ParElimination;
+        _parInterception = Bareme.ParInterception;
+        _parPasse        = Bareme.ParPasse;
+        _parDeviation    = Bareme.ParDeviation;
+        _parAgression    = Bareme.ParAgression;
+
+        foreach (var p in Bareme.Paliers)
+            _paliers.Add(new PalierPointsLigue
+            {
+                JusquAuTour    = p.JusquAuTour,
+                PointsVictoire = p.Victoire,
+                PointsNul      = p.Nul,
+                PointsDefaite  = p.Defaite
+            });
+    }
+
+    void AjouterPalier() => _paliers.Add(new PalierPointsLigue
+    {
+        JusquAuTour    = _paliers.Count == 0 ? 12 : _paliers.Max(p => p.JusquAuTour) + 1,
+        PointsVictoire = _victoire,
+        PointsNul      = _nul,
+        PointsDefaite  = _defaite
+    });
+
+    async Task Enregistrer()
+    {
+        _enregistrement = true;
+        try
+        {
+            var bareme = new BaremePoints
+            {
+                Victoire        = _victoire,
+                Nul             = _nul,
+                Defaite         = _defaite,
+                ParTouchdown    = _parTouchdown,
+                ParElimination  = _parElimination,
+                ParInterception = _parInterception,
+                ParPasse        = _parPasse,
+                ParDeviation    = _parDeviation,
+                ParAgression    = _parAgression
+            };
+
+            if (LigueId == 0)
+            {
+                // Mode détaché : la ligue n'existe pas encore, on rend le barème
+                // à l'appelant qui l'enregistrera avec elle.
+                MudDialog.Close(DialogResult.Ok(new BaremeSaisi(bareme, _paliers)));
+                return;
+            }
+
+            var auth = await AuthProvider.GetAuthenticationStateAsync();
+            var userId = auth.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+
+            var rejoues = await LeagueService.ModifierBaremePointsAsync(LigueId, bareme, _paliers, userId);
+
+            // Le Snackbar est posté AVANT la fermeture et sans redirection : une
+            // navigation l'avalerait et le commissaire ne saurait pas si le
+            // recalcul a eu lieu.
+            Snackbar.Add($"Barème enregistré — classement recalculé ({rejoues} match(s)).", Severity.Success);
+            MudDialog.Close(DialogResult.Ok<BaremeSaisi?>(null));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _enregistrement = false;
+        }
+    }
+
+    /// <summary>Résultat du mode détaché : barème + paliers, non persistés.</summary>
+    public sealed record BaremeSaisi(BaremePoints Bareme, List<PalierPointsLigue> Paliers);
+}

@@ -585,7 +585,7 @@
                 <HeaderContent>
                     <MudTh><MudTableSortLabel SortBy="new Func<RulesVersion,object>(x => x.Nom)">Nom</MudTableSortLabel></MudTh>
                     <MudTh>Active</MudTh>
-                    <MudTh>Barème d'XP</MudTh>
+                    <MudTh>Barèmes</MudTh>
                     <MudTh>Révision</MudTh>
                     <MudTh Style="width:16%; white-space:nowrap">Actions</MudTh>
                 </HeaderContent>
@@ -601,11 +601,14 @@
                             <MudText Typo="Typo.caption" Color="Color.Secondary">Non</MudText>
                         }
                     </MudTd>
-                    <MudTd DataLabel="Barème d'XP">
+                    <MudTd DataLabel="Barèmes">
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            TD @context.XpParTouchdown · Passe @context.XpParPasse ·
+                            XP : TD @context.XpParTouchdown · Passe @context.XpParPasse ·
                             Int @context.XpParInterception · Élim @context.XpParElimination ·
                             MVP @context.XpBonusMvp
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Pts : V @context.PointsVictoire · N @context.PointsNul · D @context.PointsDefaite
                         </MudText>
                     </MudTd>
                     <MudTd DataLabel="Révision">
@@ -813,7 +816,7 @@
     {
         var parameters = new DialogParameters<EditionBaremeDialog> { { x => x.Version, version } };
         var dialog = await DialogService.ShowAsync<EditionBaremeDialog>(
-            "Barème d'XP", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+            "Barèmes de la version", parameters, new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
         var result = await dialog.Result;
         if (result is { Canceled: false })
             await ChargerVersionsAsync();

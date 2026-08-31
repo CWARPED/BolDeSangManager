@@ -1272,6 +1272,23 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             bareme.ParElimination, bareme.BonusMvp);
     }
 
+    /// <summary>
+    /// Barème de points de CLASSEMENT de référence d'une version de règles.
+    /// Les ligues déjà créées gardent le leur : elles en ont pris une copie.
+    /// </summary>
+    public async Task ModifierBaremePointsAsync(int versionId, BaremePoints bareme)
+    {
+        var version = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == versionId)
+            ?? throw new InvalidOperationException("Version de règles introuvable");
+
+        bareme.AppliquerA(version);
+        await db.SaveChangesAsync();
+
+        logger.LogInformation(
+            "Barème de points de la version '{Version}' : V={V}, N={N}, D={D}",
+            version.Nom, bareme.Victoire, bareme.Nul, bareme.Defaite);
+    }
+
     // ═══════════════════ Catégories de compétence ═══════════════════
 
     /// <summary>Longueur maximale du code d'affichage d'une catégorie.</summary>

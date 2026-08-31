@@ -115,6 +115,11 @@ else
                         Clôturer la ligue
                     </MudButton>
                 }
+                <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.Scoreboard"
+                           OnClick="OuvrirBaremePoints">
+                    Barème du classement
+                </MudButton>
                 @if (!DisplayHelpers.SansCalendrier(_ligue.Format))
                 {
                     <MudTooltip Text="Les coaches ne voient que leur prochain match et les matchs déjà joués.">
@@ -207,6 +212,19 @@ else
     <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4">
         <!-- Classement -->
         <MudTabPanel Text="Classement" Icon="@Icons.Material.Filled.Leaderboard">
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3" Style="display:block">
+                Barème : @ResumeBareme()
+            </MudText>
+
+            @if (_matchsSansTours > 0 && _peutGererLigue)
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mb-3">
+                    @_matchsSansTours match(s) joué(s) sans nombre de tours : ils comptent
+                    avec les points de base. Ouvrez leur feuille pour compléter, puis
+                    réenregistrez le barème.
+                </MudAlert>
+            }
+
             @foreach (var division in _ligue.Divisions.OrderBy(d => d.Ordre))
             {
                 <MudText Typo="Typo.subtitle1" Class="mb-2"><b>@division.Nom</b></MudText>
@@ -677,6 +695,8 @@ else
 
         await ChargerCommissairesAsync();
 
+        _matchsSansTours = await LeagueService.CompterMatchsSansNombreDeToursAsync(Id);
+
         // Temps réel : la page ne lisait la base qu'ICI, une seule fois. Un coach
         // qui laissait l'écran ouvert pendant que le commissaire lançait la
         // saison continuait de voir « Inscriptions », sans le bloc « Proposer
@@ -724,6 +744,57 @@ else
         if (_ligue is null) return;
         _commissaires = await LeagueService.GetCommissairesDeLigueAsync(_ligue.Id);
         _peutGererLigue = await Auth.PeutGererLigueAsync(_currentUserId, _ligue.Id);
+    }
+
+    /// <summary>
+    /// Matchs joués dont le nombre de tours manque, alors que la ligue a des
+    /// paliers. Vaut 0 sans palier : l'information ne servirait à rien.
+    /// </summary>
+    int _matchsSansTours;
+
+    string ResumeBareme()
+    {
+        if (_ligue is null) return "";
+        var b = BaremePoints.DeLigue(_ligue);
+
+        var parts = new List<string>();
+        foreach (var p in b.Paliers)
+            parts.Add($"jusqu'au tour {p.JusquAuTour} : V {p.Victoire} · N {p.Nul} · D {p.Defaite}");
+        parts.Add(b.Paliers.Count > 0
+            ? $"au-delà : V {b.Victoire} · N {b.Nul} · D {b.Defaite}"
+            : $"V {b.Victoire} · N {b.Nul} · D {b.Defaite}");
+
+        var bonus = new List<string>();
+        if (b.ParTouchdown > 0)    bonus.Add($"TD {b.ParTouchdown}");
+        if (b.ParElimination > 0)  bonus.Add($"Élim {b.ParElimination}");
+        if (b.ParInterception > 0) bonus.Add($"Int {b.ParInterception}");
+        if (b.ParPasse > 0)        bonus.Add($"Passe {b.ParPasse}");
+        if (b.ParDeviation > 0)    bonus.Add($"Dév {b.ParDeviation}");
+        if (b.ParAgression > 0)    bonus.Add($"Agr {b.ParAgression}");
+        if (bonus.Count > 0) parts.Add("bonus " + string.Join(" · ", bonus));
+
+        return string.Join(" — ", parts);
+    }
+
+    async Task OuvrirBaremePoints()
+    {
+        if (_ligue is null) return;
+
+        var parameters = new DialogParameters<BaremePointsDialog>
+        {
+            { x => x.LigueId, _ligue.Id },
+            { x => x.Bareme, BaremePoints.DeLigue(_ligue) },
+        };
+        var dialog = await DialogService.ShowAsync<BaremePointsDialog>("Barème du classement", parameters);
+        var result = await dialog.Result;
+
+        if (result is not null && !result.Canceled)
+        {
+            // Relire en vidant le cache EF : le DbContext est lié au circuit, il
+            // rendrait sinon les anciennes valeurs et les anciens totaux.
+            _ligue = await LeagueService.GetLigueAsync(Id, ignorerCache: true);
+            _matchsSansTours = await LeagueService.CompterMatchsSansNombreDeToursAsync(Id);
+        }
     }
 
     async Task OuvrirModalePromotion()

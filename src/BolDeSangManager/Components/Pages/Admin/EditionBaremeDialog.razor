@@ -6,10 +6,10 @@
 <MudDialog>
     <DialogContent>
         <MudText Typo="Typo.subtitle1" Class="mb-1"><b>@Version.Nom</b></MudText>
+        <MudText Typo="Typo.subtitle2" Class="mt-3 mb-1"><b>Points d'expérience</b></MudText>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
-            XP gagnée par les joueurs selon leurs actions. Ces valeurs servent de
-            référence : une nouvelle ligue les reprend à sa création et peut ensuite
-            les ajuster pour son propre format.
+            Valeurs de référence de cette version : une nouvelle ligue les reprend
+            à sa création et peut ensuite les ajuster pour son propre format.
         </MudText>
 
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
@@ -38,6 +38,61 @@
                 <MudNumericField T="int" @bind-Value="_mvp" Label="@($"Bonus {DisplayHelpers.LabelMvp}")"
                                  Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
             </MudItem>
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_xpDeviation" Label="Déviation"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+            <MudItem xs="6">
+                <MudNumericField T="int" @bind-Value="_xpAgression" Label="Agression"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" Max="99" />
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-4" />
+
+        <MudText Typo="Typo.subtitle2" Class="mb-1"><b>Points de classement</b></MudText>
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block">
+            Valeurs de départ des nouvelles ligues. Les paliers par nombre de tours,
+            eux, se règlent ligue par ligue : ils relèvent du format, pas des règles.
+        </MudText>
+
+        <MudGrid Spacing="2">
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptVictoire" Label="Victoire"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptNul" Label="Nul"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptDefaite" Label="Défaite"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptTd" Label="Bonus touchdown"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptElim" Label="Bonus élimination"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptInt" Label="Bonus interception"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptPasse" Label="Bonus passe"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptDev" Label="Bonus déviation"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
+            <MudItem xs="4">
+                <MudNumericField T="int" @bind-Value="_ptAgr" Label="Bonus agression"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense" Min="0" />
+            </MudItem>
         </MudGrid>
     </DialogContent>
     <DialogActions>
@@ -54,7 +109,8 @@
 
     [Parameter] public RulesVersion Version { get; set; } = default!;
 
-    int _td, _passe, _interception, _elimination, _mvp;
+    int _td, _passe, _interception, _elimination, _mvp, _xpDeviation, _xpAgression;
+    int _ptVictoire, _ptNul, _ptDefaite, _ptTd, _ptElim, _ptInt, _ptPasse, _ptDev, _ptAgr;
     bool _enCours;
 
     protected override void OnInitialized()
@@ -64,6 +120,22 @@
         _interception = Version.XpParInterception;
         _elimination  = Version.XpParElimination;
         _mvp          = Version.XpBonusMvp;
+        _xpDeviation  = Version.XpParDeviation;
+        _xpAgression  = Version.XpParAgression;
+
+        // ⚠️ Une copie de travail construite champ par champ oublie tout champ
+        // neuf, qui repart alors à son défaut C# et écrase la valeur en base à
+        // la simple ouverture de la modale. D'où la reprise exhaustive ici.
+        var pts = BaremePoints.DeVersion(Version);
+        _ptVictoire = pts.Victoire;
+        _ptNul      = pts.Nul;
+        _ptDefaite  = pts.Defaite;
+        _ptTd       = pts.ParTouchdown;
+        _ptElim     = pts.ParElimination;
+        _ptInt      = pts.ParInterception;
+        _ptPasse    = pts.ParPasse;
+        _ptDev      = pts.ParDeviation;
+        _ptAgr      = pts.ParAgression;
     }
 
     void Annuler() => MudDialog.Cancel();
@@ -79,9 +151,25 @@
                 ParPasse        = _passe,
                 ParInterception = _interception,
                 ParElimination  = _elimination,
-                BonusMvp        = _mvp
+                BonusMvp        = _mvp,
+                ParDeviation    = _xpDeviation,
+                ParAgression    = _xpAgression
             });
-            Snackbar.Add($"Barème d'XP de « {Version.Nom} » mis à jour.", Severity.Success);
+
+            await DataEditService.ModifierBaremePointsAsync(Version.Id, new BaremePoints
+            {
+                Victoire        = _ptVictoire,
+                Nul             = _ptNul,
+                Defaite         = _ptDefaite,
+                ParTouchdown    = _ptTd,
+                ParElimination  = _ptElim,
+                ParInterception = _ptInt,
+                ParPasse        = _ptPasse,
+                ParDeviation    = _ptDev,
+                ParAgression    = _ptAgr
+            });
+
+            Snackbar.Add($"Barèmes de « {Version.Nom} » mis à jour.", Severity.Success);
             MudDialog.Close(DialogResult.Ok(true));
         }
         catch (Exception ex)
