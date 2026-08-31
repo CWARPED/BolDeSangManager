@@ -107,6 +107,8 @@ else
                     <MudTh Style="text-align:center">Passes</MudTh>
                     <MudTh Style="text-align:center">Int</MudTh>
                     <MudTh Style="text-align:center">Élim</MudTh>
+                    <MudTh Style="text-align:center">Dév</MudTh>
+                    <MudTh Style="text-align:center">Agr</MudTh>
                     <MudTh Style="text-align:center">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="text-align:center">PSP</MudTh>
                 </HeaderContent>
@@ -116,6 +118,8 @@ else
                     <MudTd DataLabel="Passes" Style="text-align:center">@r.Passes</MudTd>
                     <MudTd DataLabel="Interceptions" Style="text-align:center">@r.Interceptions</MudTd>
                     <MudTd DataLabel="Éliminations" Style="text-align:center">@r.EliminationsInfligees</MudTd>
+                    <MudTd DataLabel="Déviations" Style="text-align:center">@r.Deviations</MudTd>
+                    <MudTd DataLabel="Agressions" Style="text-align:center">@r.Agressions</MudTd>
                     <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">@(r.EstMVP ? "★" : "")</MudTd>
                     <MudTd DataLabel="PSP" Style="text-align:center"><b>@r.PspGagnes</b></MudTd>
                 </RowTemplate>
@@ -138,8 +142,18 @@ else
     else if (_equipeDomicile is not null && _equipeExterieur is not null)
     {
         <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3" Icon="@Icons.Material.Filled.Info">
-            TD=@_bareme.ParTouchdown pts · Comp=@_bareme.ParPasse · Int=@_bareme.ParInterception · Élim=@_bareme.ParElimination · @DisplayHelpers.LabelMvp=@_bareme.BonusMvp — n'ajoutez que les joueurs ayant marqué des stats.
+            TD=@_bareme.ParTouchdown pts · Comp=@_bareme.ParPasse · Int=@_bareme.ParInterception · Élim=@_bareme.ParElimination@(_bareme.ParDeviation > 0 ? $" · Dév={_bareme.ParDeviation}" : "")@(_bareme.ParAgression > 0 ? $" · Agr={_bareme.ParAgression}" : "") · @DisplayHelpers.LabelMvp=@_bareme.BonusMvp — n'ajoutez que les joueurs ayant marqué des stats.
         </MudAlert>
+
+        @if (_ligueAvecPaliers)
+        {
+            <MudPaper Class="pa-3 mb-3" Elevation="1">
+                <MudNumericField T="int?" @bind-Value="_nombreDeTours"
+                                 Label="Nombre de tours joués" Min="1" Max="50"
+                                 Variant="Variant.Outlined" Margin="Margin.Dense"
+                                 HelperText="Le barème de cette ligue accorde des points différents selon le tour atteint." />
+            </MudPaper>
+        }
 
         <!-- Score en direct — sticky -->
         <div style="position:sticky;top:0;z-index:5;background:var(--mud-palette-background-dark,#1e1e1e);padding:8px 4px;margin:0 -4px 16px;border-bottom:1px solid rgba(255,255,255,0.08)">
@@ -216,6 +230,8 @@ else
                                 @StatBlock("PASSES", r.Passes, v => r.Passes = Math.Max(0, r.Passes + v))
                                 @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
                                 @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
+                                @StatBlock("DÉVIATIONS", r.Deviations, v => r.Deviations = Math.Max(0, r.Deviations + v))
+                                @StatBlock("AGRESSIONS", r.Agressions, v => r.Agressions = Math.Max(0, r.Agressions + v))
                             </div>
                             @XpSection(r)
                             @InjurySection(r)
@@ -286,6 +302,8 @@ else
                                 @StatBlock("PASSES", r.Passes, v => r.Passes = Math.Max(0, r.Passes + v))
                                 @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
                                 @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
+                                @StatBlock("DÉVIATIONS", r.Deviations, v => r.Deviations = Math.Max(0, r.Deviations + v))
+                                @StatBlock("AGRESSIONS", r.Agressions, v => r.Agressions = Math.Max(0, r.Agressions + v))
                             </div>
                             @XpSection(r)
                             @InjurySection(r)
@@ -447,9 +465,18 @@ else
     /// <summary>Barème du match — sert à pré-remplir l'XP (R4).</summary>
     XpBareme _bareme = XpBareme.ParDefaut(GameType.BloodBowl);
 
+    /// <summary>
+    /// La ligue accorde-t-elle des points différents selon le tour atteint ?
+    /// Si non, le champ « nombre de tours » n'est même pas affiché : inutile de
+    /// charger l'écran d'une saisie qui ne servirait à rien.
+    /// </summary>
+    bool _ligueAvecPaliers;
+    int? _nombreDeTours;
+
     /// <summary>XP proposée par le barème pour ce joueur.</summary>
     int XpCalculee(PlayerMatchData r) =>
-        _bareme.Calculer(r.Touchdowns, r.Passes, r.Interceptions, r.EliminationsInfligees, r.EstMVP);
+        _bareme.Calculer(r.Touchdowns, r.Passes, r.Interceptions, r.EliminationsInfligees, r.EstMVP,
+                         r.Deviations, r.Agressions);
 
     /// <summary>XP retenue : la saisie du coach si elle existe, sinon le calcul.</summary>
     int XpDe(PlayerMatchData r) => r.XpSaisie ?? XpCalculee(r);
@@ -550,6 +577,8 @@ else
         _bareme = XpBareme.DeLigue(_match.Division?.League,
             _match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
 
+        _ligueAvecPaliers = _match.Division?.League?.PaliersPoints.Count > 0;
+
         var estCoach = _match.EquipeDomicile?.CoachId == _userId || _match.EquipeExterieur?.CoachId == _userId;
         if (!estCoach)
         {
@@ -625,7 +654,8 @@ else
                 GainsDomicile         = _gainsDomicileSaisis,
                 GainsExterieur        = _gainsExterieurSaisis,
                 VariationFansDomicile  = _varFansDom,
-                VariationFansExterieur = _varFansExt
+                VariationFansExterieur = _varFansExt,
+                NombreDeTours          = _ligueAvecPaliers ? _nombreDeTours : null
             };
 
             var records = _recordsDomicile.Concat(_recordsExterieur)
@@ -637,6 +667,8 @@ else
                     Passes                = r.Passes,
                     Interceptions         = r.Interceptions,
                     EliminationsInfligees = r.EliminationsInfligees,
+                    Deviations            = r.Deviations,
+                    Agressions            = r.Agressions,
                     EstMVP                = r.EstMVP,
                     Blessure              = r.Blessure,
                     StatAffectee          = r.Blessure == InjuryType.BlessurePersistante ? r.StatAffectee : null,
@@ -693,6 +725,8 @@ else
         public int           Passes                { get; set; }
         public int           Interceptions         { get; set; }
         public int           EliminationsInfligees { get; set; }
+        public int           Deviations            { get; set; }
+        public int           Agressions            { get; set; }
         public InjuryType?   Blessure              { get; set; }
         public AffectedStat? StatAffectee          { get; set; }
 
