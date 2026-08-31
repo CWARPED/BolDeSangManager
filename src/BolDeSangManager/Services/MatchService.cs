@@ -48,7 +48,7 @@ public class MatchService(
             // R7 : accès de catégorie du poste, pour filtrer les compétences à l'après-match
             .Include(m => m.Feuille).ThenInclude(f => f!.RecordsJoueurs).ThenInclude(r => r.TeamPlayer)
                 .ThenInclude(p => p!.PlayerPosition).ThenInclude(pp => pp!.AccesCategories)
-            .Include(m => m.Division).ThenInclude(d => d!.League)
+            .Include(m => m.Division).ThenInclude(d => d!.League).ThenInclude(l => l!.PaliersPoints)
             .FirstOrDefaultAsync(m => m.Id == matchId);
 
     public async Task<List<Match>> GetMatchsEquipeAsync(int teamId) =>
@@ -177,7 +177,7 @@ public class MatchService(
         var match = await db.Matches
             .Include(m => m.EquipeDomicile)
             .Include(m => m.EquipeExterieur)
-            .Include(m => m.Division).ThenInclude(d => d!.League)
+            .Include(m => m.Division).ThenInclude(d => d!.League).ThenInclude(l => l!.PaliersPoints)
             .FirstOrDefaultAsync(m => m.Id == matchId)
             ?? throw new InvalidOperationException("Match introuvable");
 
@@ -203,7 +203,7 @@ public class MatchService(
         await db.SaveChangesAsync();
 
         // Mettre à jour les stats des équipes
-        await MettreAJourStatsEquipesAsync(match, feuille);
+        await MettreAJourStatsEquipesAsync(match, feuille, records);
 
         // Purger les « rate le prochain match » : ce match EST le prochain match
         // des deux équipes. À faire impérativement AVANT TraiterBlessuresAsync,
@@ -380,7 +380,22 @@ public class MatchService(
             match.Id, joueurs.Count);
     }
 
-    private async Task MettreAJourStatsEquipesAsync(Match match, MatchSheet feuille)
+    /// <summary>
+    /// Applique le résultat d'une feuille aux compteurs des deux équipes.
+    ///
+    /// Les points de classement passent par <see cref="BaremePoints"/> : c'est la
+    /// MÊME fonction pure que le recalcul complet
+    /// (<c>LeagueService.RecalculerClassementAsync</c>). Un test prouve que les
+    /// deux chemins donnent le même total — c'est ce qui autorise l'édition du
+    /// barème en cours de saison.
+    /// </summary>
+    /// <param name="records">
+    /// Lignes joueurs de CETTE feuille. Passées explicitement : au moment de
+    /// l'appel, <c>feuille.RecordsJoueurs</c> n'est pas forcément peuplé côté
+    /// entité, alors que les bonus par action en dépendent.
+    /// </param>
+    private async Task MettreAJourStatsEquipesAsync(
+        Match match, MatchSheet feuille, IEnumerable<MatchPlayerRecord> records)
     {
         var domicile = match.EquipeDomicile;
         var exterieur = match.EquipeExterieur;
@@ -394,23 +409,32 @@ public class MatchService(
         domicile.EliminationsInfligees += feuille.EliminationsDomicile;
         exterieur.EliminationsInfligees += feuille.EliminationsExterieur;
 
-        // Points de ligue (victoire = 3, nul = 1, défaite = 0)
+        // Points de ligue : barème de la ligue (défaut 3 / 1 / 0 sans bonus, soit
+        // le calcul historique). Les paliers dépendent du nombre de tours joués ;
+        // s'il n'est pas renseigné, ce sont les points de base qui s'appliquent.
+        var baremePoints = BaremePoints.DeLigue(match.Division?.League);
+        var listeRecords = records as IList<MatchPlayerRecord> ?? records.ToList();
+
+        domicile.PointsLigue += baremePoints.PointsEquipe(
+            feuille.TouchdownsDomicile, feuille.TouchdownsExterieur, feuille.NombreDeTours,
+            BaremePoints.ActionsDe(listeRecords, coteDomicile: true));
+
+        exterieur.PointsLigue += baremePoints.PointsEquipe(
+            feuille.TouchdownsExterieur, feuille.TouchdownsDomicile, feuille.NombreDeTours,
+            BaremePoints.ActionsDe(listeRecords, coteDomicile: false));
+
         if (feuille.TouchdownsDomicile > feuille.TouchdownsExterieur)
         {
-            domicile.PointsLigue += 3;
             domicile.NombreVictoires++;
             exterieur.NombreDefaites++;
         }
         else if (feuille.TouchdownsDomicile < feuille.TouchdownsExterieur)
         {
-            exterieur.PointsLigue += 3;
             exterieur.NombreVictoires++;
             domicile.NombreDefaites++;
         }
         else
         {
-            domicile.PointsLigue += 1;
-            exterieur.PointsLigue += 1;
             domicile.NombreNuls++;
             exterieur.NombreNuls++;
         }
@@ -667,6 +691,7 @@ public class MatchService(
             .Include(m => m.EquipeDomicile)
             .Include(m => m.EquipeExterieur)
             .Include(m => m.Division).ThenInclude(d => d!.League).ThenInclude(l => l!.Game)
+            .Include(m => m.Division).ThenInclude(d => d!.League).ThenInclude(l => l!.PaliersPoints)
             .Include(m => m.Feuille).ThenInclude(f => f!.RecordsJoueurs)
             .FirstOrDefaultAsync(m => m.Id == matchId)
             ?? throw new InvalidOperationException("Match introuvable");
@@ -687,12 +712,28 @@ public class MatchService(
         dom.EliminationsInfligees -= feuille.EliminationsDomicile;
         ext.EliminationsInfligees -= feuille.EliminationsExterieur;
 
+        // Inversion des points de classement : on soustrait ce que l'ANCIENNE
+        // feuille rapportait, avec l'ancien nombre de tours et les anciennes
+        // lignes joueurs — exactement comme pour VariationFansAppliquee.
+        // Le barème utilisé est le barème COURANT de la ligue, ce qui est
+        // correct : toute modification du barème a déjà déclenché un recalcul
+        // complet, donc PointsLigue est à jour vis-à-vis de lui.
+        var baremeAvant = BaremePoints.DeLigue(match.Division?.League);
+        var ancienRecords = feuille.RecordsJoueurs.ToList();
+
+        dom.PointsLigue -= baremeAvant.PointsEquipe(
+            feuille.TouchdownsDomicile, feuille.TouchdownsExterieur, feuille.NombreDeTours,
+            BaremePoints.ActionsDe(ancienRecords, coteDomicile: true));
+        ext.PointsLigue -= baremeAvant.PointsEquipe(
+            feuille.TouchdownsExterieur, feuille.TouchdownsDomicile, feuille.NombreDeTours,
+            BaremePoints.ActionsDe(ancienRecords, coteDomicile: false));
+
         if (feuille.TouchdownsDomicile > feuille.TouchdownsExterieur)
-        { dom.PointsLigue -= 3; dom.NombreVictoires--; ext.NombreDefaites--; }
+        { dom.NombreVictoires--; ext.NombreDefaites--; }
         else if (feuille.TouchdownsDomicile < feuille.TouchdownsExterieur)
-        { ext.PointsLigue -= 3; ext.NombreVictoires--; dom.NombreDefaites--; }
+        { ext.NombreVictoires--; dom.NombreDefaites--; }
         else
-        { dom.PointsLigue--; ext.PointsLigue--; dom.NombreNuls--; ext.NombreNuls--; }
+        { dom.NombreNuls--; ext.NombreNuls--; }
 
         dom.Tresorerie -= feuille.GainsDomicile;
         ext.Tresorerie -= feuille.GainsExterieur;
@@ -797,6 +838,7 @@ public class MatchService(
         feuille.VariationFansDomicile  = feuilleModifiee.VariationFansDomicile;
         feuille.VariationFansExterieur = feuilleModifiee.VariationFansExterieur;
         feuille.NotesCommissaire       = feuilleModifiee.NotesCommissaire;
+        feuille.NombreDeTours          = feuilleModifiee.NombreDeTours;
 
         var gameType = match.Division?.League?.Game?.Type ?? GameType.BloodBowl;
         var baremeModif = XpBareme.DeLigue(match.Division?.League, gameType);
@@ -809,7 +851,7 @@ public class MatchService(
         }
         await db.SaveChangesAsync();
 
-        await MettreAJourStatsEquipesAsync(match, feuille);
+        await MettreAJourStatsEquipesAsync(match, feuille, nouveauxRecords);
         await TraiterBlessuresAsync(nouveauxRecords, matchId);
         await MettreAJourPSPJoueursAsync(nouveauxRecords);
 

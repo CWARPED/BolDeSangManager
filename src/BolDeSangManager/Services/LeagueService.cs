@@ -986,6 +986,194 @@ public class LeagueService(
             .Take(limit)
             .ToListAsync();
 
+    // ── Barème de points de classement ────────────────────────────────────────
+
+    /// <summary>
+    /// Modifie le barème de points d'une ligue et <b>recalcule aussitôt le
+    /// classement</b> depuis les feuilles de match déjà saisies.
+    ///
+    /// ⚠️ Volontairement HORS de <see cref="ModifierLigueAsync"/> : celui-ci
+    /// refuse toute modification dès que la saison est lancée, alors que le
+    /// barème doit justement rester éditable en cours de route (c'est le besoin :
+    /// paramétrer des ligues déjà en cours au moment du déploiement). C'est sans
+    /// danger précisément parce que rien n'est figé — contrairement à
+    /// Team.Tresorerie, PointsLigue est intégralement reconstructible.
+    ///
+    /// Ne touche à AUCUN autre paramètre de la ligue (un test le verrouille).
+    /// </summary>
+    /// <returns>Nombre de matchs rejoués par le recalcul.</returns>
+    public async Task<int> ModifierBaremePointsAsync(
+        int ligueId, BaremePoints bareme, IEnumerable<PalierPointsLigue> paliers, string userId)
+    {
+        if (!await authService.PeutGererLigueAsync(userId, ligueId))
+            throw new InvalidOperationException("Vous ne gérez pas cette ligue.");
+
+        var ligue = await db.Leagues
+            .Include(l => l.PaliersPoints)
+            .FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        var listePaliers = paliers.ToList();
+
+        // Validation côté SERVICE, pas seulement côté écran : ces valeurs
+        // arrivent du navigateur.
+        foreach (var valeur in new[]
+                 {
+                     bareme.Victoire, bareme.Nul, bareme.Defaite,
+                     bareme.ParTouchdown, bareme.ParElimination, bareme.ParInterception,
+                     bareme.ParPasse, bareme.ParDeviation, bareme.ParAgression
+                 })
+        {
+            if (valeur < 0 || valeur > 1_000_000)
+                throw new InvalidOperationException($"Valeur de barème invalide : {valeur}.");
+        }
+
+        foreach (var p in listePaliers)
+        {
+            if (p.JusquAuTour < 1 || p.JusquAuTour > 50)
+                throw new InvalidOperationException(
+                    $"Palier invalide : le nombre de tours doit être compris entre 1 et 50 (reçu {p.JusquAuTour}).");
+            if (p.PointsVictoire < 0 || p.PointsNul < 0 || p.PointsDefaite < 0)
+                throw new InvalidOperationException("Les points d'un palier ne peuvent pas être négatifs.");
+        }
+
+        if (listePaliers.Select(p => p.JusquAuTour).Distinct().Count() != listePaliers.Count)
+            throw new InvalidOperationException("Deux paliers ne peuvent pas viser le même nombre de tours.");
+
+        bareme.AppliquerA(ligue);
+
+        // Les paliers sont remplacés en bloc : plus simple et plus sûr qu'un
+        // diff, la table n'a aucune donnée propre à préserver.
+        db.PaliersPointsLigue.RemoveRange(ligue.PaliersPoints);
+        foreach (var p in listePaliers)
+        {
+            db.PaliersPointsLigue.Add(new PalierPointsLigue
+            {
+                LeagueId       = ligueId,
+                JusquAuTour    = p.JusquAuTour,
+                PointsVictoire = p.PointsVictoire,
+                PointsNul      = p.PointsNul,
+                PointsDefaite  = p.PointsDefaite
+            });
+        }
+
+        await db.SaveChangesAsync();
+
+        var matchsRejoues = await RecalculerClassementAsync(ligueId);
+
+        logger.LogInformation(
+            "Barème de points modifié pour la ligue id={LigueId} ({NbPaliers} palier(s)) — {Nb} match(s) rejoué(s)",
+            ligueId, listePaliers.Count, matchsRejoues);
+
+        await NotifierChangementAsync(ligueId);
+        return matchsRejoues;
+    }
+
+    /// <summary>
+    /// Reconstruit intégralement les compteurs sportifs des équipes d'une ligue
+    /// (points de classement, V/N/D, touchdowns, éliminations) en rejouant toutes
+    /// les feuilles de match terminées.
+    ///
+    /// C'est la SOURCE DE VÉRITÉ du classement : la mise à jour au fil de l'eau
+    /// (MatchService) et ce recalcul appellent la même fonction pure
+    /// <see cref="BaremePoints.PointsEquipe"/>, et un test prouve qu'ils
+    /// convergent. Sans cette propriété, éditer un barème en cours de saison
+    /// laisserait des totaux faux.
+    /// </summary>
+    /// <returns>Nombre de matchs rejoués.</returns>
+    public async Task<int> RecalculerClassementAsync(int ligueId)
+    {
+        var ligue = await db.Leagues
+            .Include(l => l.PaliersPoints)
+            .FirstOrDefaultAsync(l => l.Id == ligueId)
+            ?? throw new InvalidOperationException("Ligue introuvable");
+
+        var equipes = await db.Teams.Where(t => t.LeagueId == ligueId).ToListAsync();
+
+        foreach (var e in equipes)
+        {
+            e.PointsLigue           = 0;
+            e.NombreVictoires       = 0;
+            e.NombreNuls            = 0;
+            e.NombreDefaites        = 0;
+            e.NombreMatchsJoues     = 0;
+            e.TouchdownsMarques     = 0;
+            e.TouchdownsConcedes    = 0;
+            e.EliminationsInfligees = 0;
+        }
+
+        var parId = equipes.ToDictionary(e => e.Id);
+        var bareme = BaremePoints.DeLigue(ligue);
+
+        // Un match compte dès que sa feuille existe et qu'il n'est plus en cours
+        // de saisie : même critère que la mise à jour au fil de l'eau, qui
+        // s'applique à l'enregistrement de la feuille.
+        var matchs = await db.Matches
+            .Include(m => m.Feuille).ThenInclude(f => f!.RecordsJoueurs)
+            .Where(m => m.Division!.LeagueId == ligueId && m.Feuille != null)
+            .ToListAsync();
+
+        int rejoues = 0;
+
+        foreach (var match in matchs)
+        {
+            var feuille = match.Feuille!;
+            if (!parId.TryGetValue(match.EquipeDomicileId, out var dom)) continue;
+            if (!parId.TryGetValue(match.EquipeExterieurId, out var ext)) continue;
+
+            var records = feuille.RecordsJoueurs.ToList();
+
+            dom.NombreMatchsJoues++;
+            ext.NombreMatchsJoues++;
+            dom.TouchdownsMarques     += feuille.TouchdownsDomicile;
+            dom.TouchdownsConcedes    += feuille.TouchdownsExterieur;
+            ext.TouchdownsMarques     += feuille.TouchdownsExterieur;
+            ext.TouchdownsConcedes    += feuille.TouchdownsDomicile;
+            dom.EliminationsInfligees += feuille.EliminationsDomicile;
+            ext.EliminationsInfligees += feuille.EliminationsExterieur;
+
+            dom.PointsLigue += bareme.PointsEquipe(
+                feuille.TouchdownsDomicile, feuille.TouchdownsExterieur, feuille.NombreDeTours,
+                BaremePoints.ActionsDe(records, coteDomicile: true));
+            ext.PointsLigue += bareme.PointsEquipe(
+                feuille.TouchdownsExterieur, feuille.TouchdownsDomicile, feuille.NombreDeTours,
+                BaremePoints.ActionsDe(records, coteDomicile: false));
+
+            if (feuille.TouchdownsDomicile > feuille.TouchdownsExterieur)
+            { dom.NombreVictoires++; ext.NombreDefaites++; }
+            else if (feuille.TouchdownsDomicile < feuille.TouchdownsExterieur)
+            { ext.NombreVictoires++; dom.NombreDefaites++; }
+            else
+            { dom.NombreNuls++; ext.NombreNuls++; }
+
+            rejoues++;
+        }
+
+        await db.SaveChangesAsync();
+        logger.LogInformation(
+            "Classement recalculé pour la ligue id={LigueId} : {Nb} match(s) rejoué(s)", ligueId, rejoues);
+
+        return rejoues;
+    }
+
+    /// <summary>
+    /// Nombre de matchs joués de la ligue dont le nombre de tours n'est pas
+    /// renseigné, alors que la ligue utilise des paliers. Ces matchs sont comptés
+    /// avec les points de BASE ; l'écran de ligue le signale pour qu'un
+    /// commissaire aille compléter les feuilles concernées.
+    /// Renvoie 0 si la ligue n'a aucun palier (l'information ne sert alors à rien).
+    /// </summary>
+    public async Task<int> CompterMatchsSansNombreDeToursAsync(int ligueId)
+    {
+        var aDesPaliers = await db.PaliersPointsLigue.AnyAsync(p => p.LeagueId == ligueId);
+        if (!aDesPaliers) return 0;
+
+        return await db.Matches.CountAsync(m =>
+            m.Division!.LeagueId == ligueId
+            && m.Feuille != null
+            && m.Feuille.NombreDeTours == null);
+    }
+
     public record CoachClassement(ApplicationUser Coach, int PointsLigue, int Victoires, int Nuls, int Defaites);
 
     public async Task<List<CoachClassement>> GetTopCoachsAsync(int ligueId)
@@ -1091,6 +1279,7 @@ public class LeagueService(
         // 5. Ce qui pend à la LIGUE.
         await db.LeagueStaffTypes.Where(s => s.LeagueId == ligueId).ExecuteDeleteAsync();
         await db.EcheancesRondes.Where(e => e.LeagueId == ligueId).ExecuteDeleteAsync();
+        await db.PaliersPointsLigue.Where(p => p.LeagueId == ligueId).ExecuteDeleteAsync();
         await db.LeagueCommissioners.Where(c => c.LeagueId == ligueId).ExecuteDeleteAsync();
 
         await db.Leagues.Where(l => l.Id == ligueId).ExecuteDeleteAsync();
