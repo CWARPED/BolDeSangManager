@@ -126,6 +126,17 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             XpParInterception: version.XpParInterception,
             XpParElimination: version.XpParElimination,
             XpBonusMvp: version.XpBonusMvp,
+            XpParDeviation: version.XpParDeviation,
+            XpParAgression: version.XpParAgression,
+            PointsVictoire: version.PointsVictoire,
+            PointsNul: version.PointsNul,
+            PointsDefaite: version.PointsDefaite,
+            PointsParTouchdown: version.PointsParTouchdown,
+            PointsParElimination: version.PointsParElimination,
+            PointsParInterception: version.PointsParInterception,
+            PointsParPasse: version.PointsParPasse,
+            PointsParDeviation: version.PointsParDeviation,
+            PointsParAgression: version.PointsParAgression,
             Staff: staffTypes.Select(s => new StaffTypeGdDto(
                 s.Nom, s.Description, s.Ordre, s.EstActif, s.Cout,
                 s.CoutDepuisTypeEquipe, s.MinCreation, s.MaxCreation, s.MaxLigue,
@@ -200,7 +211,22 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 XpParPasse        = dto.XpParPasse        ?? 1,
                 XpParInterception = dto.XpParInterception ?? 2,
                 XpParElimination  = dto.XpParElimination  ?? 2,
-                XpBonusMvp        = dto.XpBonusMvp        ?? 4
+                XpBonusMvp        = dto.XpBonusMvp        ?? 4,
+                XpParDeviation    = dto.XpParDeviation    ?? 0,
+                XpParAgression    = dto.XpParAgression    ?? 0,
+                // Barème de points de classement : un export antérieur n'a pas
+                // ces champs, on reprend alors le barème par défaut (3/1/0 sans
+                // bonus) — surtout PAS des zéros, qui vaudraient « aucun point
+                // par victoire ».
+                PointsVictoire        = dto.PointsVictoire        ?? BaremePoints.ParDefaut().Victoire,
+                PointsNul             = dto.PointsNul             ?? BaremePoints.ParDefaut().Nul,
+                PointsDefaite         = dto.PointsDefaite         ?? BaremePoints.ParDefaut().Defaite,
+                PointsParTouchdown    = dto.PointsParTouchdown    ?? 0,
+                PointsParElimination  = dto.PointsParElimination  ?? 0,
+                PointsParInterception = dto.PointsParInterception ?? 0,
+                PointsParPasse        = dto.PointsParPasse        ?? 0,
+                PointsParDeviation    = dto.PointsParDeviation    ?? 0,
+                PointsParAgression    = dto.PointsParAgression    ?? 0
             };
             db.RulesVersions.Add(version);
             await db.SaveChangesAsync();
@@ -1062,6 +1088,19 @@ record GameDataExportDto(
     int? XpParInterception = null,
     int? XpParElimination = null,
     int? XpBonusMvp = null,
+    int? XpParDeviation = null,
+    int? XpParAgression = null,
+    // Barème de points de CLASSEMENT de la version. Optionnels : un export
+    // antérieur reprend le barème par défaut (3 / 1 / 0, aucun bonus).
+    int? PointsVictoire = null,
+    int? PointsNul = null,
+    int? PointsDefaite = null,
+    int? PointsParTouchdown = null,
+    int? PointsParElimination = null,
+    int? PointsParInterception = null,
+    int? PointsParPasse = null,
+    int? PointsParDeviation = null,
+    int? PointsParAgression = null,
     // Staff configurable. Optionnel : un JSON exporté avant cette fonctionnalité
     // reste importable, la version reprend alors le staff standard.
     List<StaffTypeGdDto>? Staff = null,

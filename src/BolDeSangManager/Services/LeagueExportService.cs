@@ -43,6 +43,7 @@ public class LeagueExportService(
             .Include(l => l.Equipes).ThenInclude(e => e.Joueurs).ThenInclude(j => j.Blessures)
             .Include(l => l.Equipes).ThenInclude(e => e.Staff).ThenInclude(ts => ts.LeagueStaffType)
             .Include(l => l.StaffTypes)
+            .Include(l => l.PaliersPoints)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs).ThenInclude(m => m.EquipeDomicile)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs).ThenInclude(m => m.EquipeExterieur)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs)
@@ -176,6 +177,7 @@ public class LeagueExportService(
                     VariationFansExterieur: m.Feuille.VariationFansExterieur,
                     ValideParCommissaire: m.Feuille.ValideParCommissaire,
                     NotesCommissaire: m.Feuille.NotesCommissaire,
+                    NombreDeTours: m.Feuille.NombreDeTours,
                     Records: m.Feuille.RecordsJoueurs.Select(r => new RecordJoueurExportDto(
                         JoueurNom: r.TeamPlayer?.Nom ?? $"Joueur#{r.TeamPlayerId}",
                         EquipeNom: playerTeam.GetValueOrDefault(r.TeamPlayerId, ""),
@@ -183,6 +185,9 @@ public class LeagueExportService(
                         Passes: r.Passes,
                         Interceptions: r.Interceptions,
                         EliminationsInfligees: r.EliminationsInfligees,
+                        Deviations: r.Deviations,
+                        Agressions: r.Agressions,
+                        EstCoteDomicile: r.EstCoteDomicile,
                         EstMVP: r.EstMVP,
                         PspGagnes: r.PspGagnes,
                         Blessure: r.Blessure,
@@ -205,6 +210,22 @@ public class LeagueExportService(
             XpParInterception: ligue.XpParInterception,
             XpParElimination: ligue.XpParElimination,
             XpBonusMvp: ligue.XpBonusMvp,
+            XpParDeviation: ligue.XpParDeviation,
+            XpParAgression: ligue.XpParAgression,
+            PointsVictoire: ligue.PointsVictoire,
+            PointsNul: ligue.PointsNul,
+            PointsDefaite: ligue.PointsDefaite,
+            PointsParTouchdown: ligue.PointsParTouchdown,
+            PointsParElimination: ligue.PointsParElimination,
+            PointsParInterception: ligue.PointsParInterception,
+            PointsParPasse: ligue.PointsParPasse,
+            PointsParDeviation: ligue.PointsParDeviation,
+            PointsParAgression: ligue.PointsParAgression,
+            Paliers: ligue.PaliersPoints
+                .OrderBy(p => p.JusquAuTour)
+                .Select(p => new PalierPointsExportDto(
+                    p.JusquAuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
+                .ToList(),
             ModeBrouillard: ligue.ModeBrouillard,
             Reglement: ligue.Reglement,
             NombreEquipesPlayoff: ligue.NombreEquipesPlayoff,
@@ -311,6 +332,19 @@ public class LeagueExportService(
             XpParInterception = dto.XpParInterception ?? 2,
             XpParElimination  = dto.XpParElimination  ?? 2,
             XpBonusMvp        = dto.XpBonusMvp        ?? 4,
+            XpParDeviation    = dto.XpParDeviation    ?? 0,
+            XpParAgression    = dto.XpParAgression    ?? 0,
+            // Barème de points de classement. Un export antérieur n'a pas ces
+            // champs : on reprend le barème par défaut (3/1/0), jamais des zéros.
+            PointsVictoire        = dto.PointsVictoire        ?? BaremePoints.ParDefaut().Victoire,
+            PointsNul             = dto.PointsNul             ?? BaremePoints.ParDefaut().Nul,
+            PointsDefaite         = dto.PointsDefaite         ?? BaremePoints.ParDefaut().Defaite,
+            PointsParTouchdown    = dto.PointsParTouchdown    ?? 0,
+            PointsParElimination  = dto.PointsParElimination  ?? 0,
+            PointsParInterception = dto.PointsParInterception ?? 0,
+            PointsParPasse        = dto.PointsParPasse        ?? 0,
+            PointsParDeviation    = dto.PointsParDeviation    ?? 0,
+            PointsParAgression    = dto.PointsParAgression    ?? 0,
             ModeBrouillard    = dto.ModeBrouillard    ?? false,
             Reglement         = dto.Reglement         ?? string.Empty,
             NombreEquipesPlayoff = dto.NombreEquipesPlayoff,
@@ -319,6 +353,19 @@ public class LeagueExportService(
         };
         db.Leagues.Add(ligue);
         await db.SaveChangesAsync();
+
+        foreach (var p in dto.Paliers ?? [])
+        {
+            db.PaliersPointsLigue.Add(new PalierPointsLigue
+            {
+                LeagueId       = ligue.Id,
+                JusquAuTour    = p.JusquAuTour,
+                PointsVictoire = p.PointsVictoire,
+                PointsNul      = p.PointsNul,
+                PointsDefaite  = p.PointsDefaite
+            });
+        }
+        if (dto.Paliers is { Count: > 0 }) await db.SaveChangesAsync();
 
         // Staff de la ligue : sans cette copie, une ligue importée n'aurait aucun
         // staff configuré — les équipes réimportées seraient rattachées à rien et
@@ -472,7 +519,8 @@ public class LeagueExportService(
                     VariationFansDomicile = matchDto.Feuille.VariationFansDomicile,
                     VariationFansExterieur = matchDto.Feuille.VariationFansExterieur,
                     ValideParCommissaire = matchDto.Feuille.ValideParCommissaire,
-                    NotesCommissaire = matchDto.Feuille.NotesCommissaire
+                    NotesCommissaire = matchDto.Feuille.NotesCommissaire,
+                    NombreDeTours = matchDto.Feuille.NombreDeTours
                 };
                 db.MatchSheets.Add(feuille);
                 await db.SaveChangesAsync();
@@ -492,6 +540,13 @@ public class LeagueExportService(
                         Passes = r.Passes,
                         Interceptions = r.Interceptions,
                         EliminationsInfligees = r.EliminationsInfligees,
+                        Deviations = r.Deviations,
+                        Agressions = r.Agressions,
+                        // Sans ce drapeau, les bonus par action seraient tous
+                        // attribués à l'équipe extérieure au recalcul (défaut
+                        // false). Repli : l'équipe du joueur est le domicile.
+                        EstCoteDomicile = r.EstCoteDomicile
+                            ?? (r.EquipeNom == matchDto.EquipeDomicileNom),
                         EstMVP = r.EstMVP,
                         PspGagnes = r.PspGagnes,
                         Blessure = r.Blessure,
@@ -528,8 +583,29 @@ record LeagueExportDto(
     int? XpParInterception = null,
     int? XpParElimination = null,
     int? XpBonusMvp = null,
+    int? XpParDeviation = null,
+    int? XpParAgression = null,
+    // Barème de points de CLASSEMENT de la ligue et ses paliers. Optionnels :
+    // un export antérieur reprend le barème par défaut, sans palier.
+    int? PointsVictoire = null,
+    int? PointsNul = null,
+    int? PointsDefaite = null,
+    int? PointsParTouchdown = null,
+    int? PointsParElimination = null,
+    int? PointsParInterception = null,
+    int? PointsParPasse = null,
+    int? PointsParDeviation = null,
+    int? PointsParAgression = null,
+    List<PalierPointsExportDto>? Paliers = null,
     bool? ModeBrouillard = null,
     string? Reglement = null   // règlement markdown (R5), optionnel = rétrocompat
+);
+
+record PalierPointsExportDto(
+    int JusquAuTour,
+    int PointsVictoire,
+    int PointsNul,
+    int PointsDefaite
 );
 
 record EquipeExportDto(
@@ -603,7 +679,10 @@ record MatchSheetExportDto(
     int VariationFansExterieur,
     bool ValideParCommissaire,
     string NotesCommissaire,
-    List<RecordJoueurExportDto> Records
+    List<RecordJoueurExportDto> Records,
+    // Nombre de tours joués : sert aux paliers du barème de points. Optionnel,
+    // les feuilles antérieures n'en ont pas.
+    int? NombreDeTours = null
 );
 
 record RecordJoueurExportDto(
@@ -616,5 +695,12 @@ record RecordJoueurExportDto(
     bool EstMVP,
     int PspGagnes,
     InjuryType? Blessure,
-    AffectedStat? StatAffectee
+    AffectedStat? StatAffectee,
+    // Actions ajoutées avec le barème de points. Optionnelles : un export
+    // antérieur les importe à zéro.
+    int Deviations = 0,
+    int Agressions = 0,
+    // Côté de l'équipe. Optionnel pour la rétrocompatibilité, mais nécessaire au
+    // recalcul du classement : sans lui, tous les bonus tomberaient du même côté.
+    bool? EstCoteDomicile = null
 );

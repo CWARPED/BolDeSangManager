@@ -87,6 +87,10 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             vDest.XpParInterception = vSource.XpParInterception;
             vDest.XpParElimination  = vSource.XpParElimination;
             vDest.XpBonusMvp        = vSource.XpBonusMvp;
+            vDest.XpParDeviation    = vSource.XpParDeviation;
+            vDest.XpParAgression    = vSource.XpParAgression;
+            // Barème de points de classement : mêmes règles, même clonage.
+            BaremePoints.DeVersion(vSource).AppliquerA(vDest);
             await db.SaveChangesAsync();
         }
 

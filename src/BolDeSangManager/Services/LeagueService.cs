@@ -85,6 +85,17 @@ public class LeagueService(
         ligue.Statut = LeagueStatus.Creation;
         ligue.CreeLe = DateTime.UtcNow;
 
+        // Barème de points de CLASSEMENT : copié depuis la version de règles,
+        // côté serveur. C'est le même principe que le staff juste en dessous —
+        // la ligue prend une copie figée qu'elle pourra ajuster ensuite via sa
+        // propre commande, sans qu'une évolution des règles rétro-modifie une
+        // ligue en cours. L'écran de création ne poste donc AUCUNE de ces
+        // valeurs : elles ne sont pas falsifiables.
+        var versionBareme = await db.RulesVersions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(v => v.Id == ligue.RulesVersionId);
+        BaremePoints.DeVersion(versionBareme).AppliquerA(ligue);
+
         db.Leagues.Add(ligue);
         await db.SaveChangesAsync();
 
