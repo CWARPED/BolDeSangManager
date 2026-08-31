@@ -178,6 +178,9 @@ public class AbonnementCalendrierServiceTests : IDisposable
         Ajouter(1, a.Id, b.Id, MatchStatus.Termine, 2);   // mon match joué
         Ajouter(2, a.Id, c.Id, MatchStatus.Programme);     // MON prochain match
         Ajouter(3, a.Id, d.Id, MatchStatus.Programme);     // mon match ULTÉRIEUR
+        // Match entre DEUX AUTRES équipes : absent du flux personnel, présent
+        // dans le flux « ligue complète ». C'est lui qui discrimine les deux.
+        Ajouter(2, c.Id, d.Id, MatchStatus.Programme);
         await db.SaveChangesAsync();
 
         return (coach, ligue, db);
@@ -310,4 +313,105 @@ public class AbonnementCalendrierServiceTests : IDisposable
         Assert.Contains("BEGIN:VCALENDAR", ics);
         Assert.DoesNotContain("BEGIN:VEVENT", ics);
     }
+
+    // ─── Flux « calendrier complet de la ligue » ─────────────────────────────
+    //
+    // Décision produit explicite de l'utilisateur : ce flux montre TOUS les
+    // matchs de la ligue et n'applique PAS le mode brouillard. Voir les dates
+    // posées par les autres est le but recherché ; le brouillard vise à
+    // empêcher de préparer SES prochaines rencontres, pas à cacher un
+    // calendrier commun. Ces tests figent ce choix pour qu'on ne le
+    // « corrige » pas par méprise plus tard.
+
+    [Fact]
+    public async Task LigueComplete_ContientLesMatchsDesAutresEquipes()
+    {
+        var (coach, ligue, db) = await SeedLigueAsync(brouillard: false);
+        var jeton = await Svc(db).ObtenirOuCreerJetonAsync(coach.Id);
+
+        var perso = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id))!);
+        var complet = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id, ligueComplete: true))!);
+
+        // Le match « Les Rats vs Les Ogres » n'implique pas le coach.
+        Assert.DoesNotContain("Les Rats vs Les Ogres", perso);
+        Assert.Contains("Les Rats vs Les Ogres", complet);
+
+        Assert.Equal(3, NbEvenements(perso));
+        Assert.Equal(4, NbEvenements(complet));
+    }
+
+    [Fact]
+    public async Task LigueComplete_IgnoreLeModeBrouillard()
+    {
+        // Avec brouillard, le flux personnel masque le match ultérieur (ronde 3).
+        var (coach, ligue, db) = await SeedLigueAsync(brouillard: true);
+        var jeton = await Svc(db).ObtenirOuCreerJetonAsync(coach.Id);
+
+        var perso = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id))!);
+        var complet = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id, ligueComplete: true))!);
+
+        Assert.Equal(2, NbEvenements(perso));      // joué + prochain
+        Assert.Equal(4, NbEvenements(complet));    // toute la ligue
+    }
+
+    [Fact]
+    public async Task LigueComplete_NommeLeCalendrierAvecLaLigue()
+    {
+        var (coach, ligue, db) = await SeedLigueAsync(brouillard: false);
+        var jeton = await Svc(db).ObtenirOuCreerJetonAsync(coach.Id);
+
+        var ics = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id, ligueComplete: true))!);
+
+        Assert.Contains($"X-WR-CALNAME:{ligue.Nom} — calendrier complet", ics);
+    }
+
+    /// <summary>
+    /// Un commissaire SANS équipe doit obtenir le calendrier complet : c'est
+    /// précisément lui qui publie le lien. Le flux personnel, lui, reste vide.
+    /// </summary>
+    [Fact]
+    public async Task LigueComplete_FonctionnePourUnCoachSansEquipe()
+    {
+        var (_, ligue, db) = await SeedLigueAsync(brouillard: false);
+
+        var spectateur = DataSeeder.CreateUser("spectateur");
+        db.Users.Add(spectateur);
+        await db.SaveChangesAsync();
+
+        var jeton = await Svc(db).ObtenirOuCreerJetonAsync(spectateur.Id);
+
+        var perso = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id))!);
+        var complet = Encoding.UTF8.GetString(
+            (await Svc(db).GenererFluxAsync(jeton, ligue.Id, ligueComplete: true))!);
+
+        Assert.Equal(0, NbEvenements(perso));
+        Assert.Equal(4, NbEvenements(complet));
+    }
+
+    [Fact]
+    public async Task LigueComplete_SansLigue_EstRefuse()
+    {
+        var (coach, _, db) = await SeedLigueAsync(brouillard: false);
+        var jeton = await Svc(db).ObtenirOuCreerJetonAsync(coach.Id);
+
+        // Pas de repli silencieux sur le flux personnel.
+        Assert.Null(await Svc(db).GenererFluxAsync(jeton, ligueId: null, ligueComplete: true));
+    }
+
+    [Fact]
+    public async Task LigueComplete_JetonInvalide_EstRefuse()
+    {
+        var (_, ligue, db) = await SeedLigueAsync(brouillard: false);
+
+        Assert.Null(await Svc(db).GenererFluxAsync("pas-un-jeton", ligue.Id, ligueComplete: true));
+    }
+
+    private static int NbEvenements(string ics) =>
+        ics.Split("BEGIN:VEVENT").Length - 1;
 }

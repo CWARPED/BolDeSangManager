@@ -18,12 +18,16 @@
 <MudButton Variant="Variant.Outlined" Size="Size.Small"
            StartIcon="@Icons.Material.Filled.Link"
            OnClick="Ouvrir">
-    S'abonner à mes matchs
+    @(LigueComplete ? "Partager le calendrier" : "S'abonner à mes matchs")
 </MudButton>
 
 <MudDialog @bind-Visible="_ouvert" Options="_options">
     <TitleContent>
-        <MudText Typo="Typo.h6">S'abonner à @(LigueId is null ? "mes matchs" : "cette ligue")</MudText>
+        <MudText Typo="Typo.h6">
+            @(LigueComplete
+                ? "Calendrier complet de la ligue"
+                : $"S'abonner à {(LigueId is null ? "mes matchs" : "cette ligue")}")
+        </MudText>
     </TitleContent>
     <DialogContent>
         @if (_url is null)
@@ -33,9 +37,23 @@
         else
         {
             <MudText Typo="Typo.body2" Class="mb-2">
-                Collez cette adresse dans votre agenda (Google Agenda :
-                <i>Autres agendas → + → À partir de l'URL</i>). Les nouvelles dates
-                et les nouveaux matchs arriveront ensuite tout seuls.
+                @if (LigueComplete)
+                {
+                    <text>
+                        Adresse du calendrier de <b>toute la ligue</b> — tous les matchs,
+                        toutes les équipes. À diffuser aux participants : chacun la colle
+                        une fois dans son agenda (Google Agenda :
+                        <i>Autres agendas → + → À partir de l'URL</i>).
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        Collez cette adresse dans votre agenda (Google Agenda :
+                        <i>Autres agendas → + → À partir de l'URL</i>). Les nouvelles dates
+                        et les nouveaux matchs arriveront ensuite tout seuls.
+                    </text>
+                }
             </MudText>
 
             <MudTextField T="string" Value="@_url" ReadOnly="true" Variant="Variant.Outlined"
@@ -54,12 +72,37 @@
                 soir, fiez-vous à l'e-mail. (Apple Calendrier est plus rapide.)
             </MudAlert>
 
-            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
-                Cette adresse contient un lien secret : toute personne qui l'obtient
-                voit vos matchs, sans mot de passe. Ne la publiez pas. En cas de
-                fuite, régénérez-la depuis <b>Mon profil</b> — l'ancienne cesse
-                aussitôt de fonctionner.
-            </MudAlert>
+            @if (LigueComplete)
+            {
+                @* Le commissaire doit savoir ce qu'il publie : ce flux ignore le
+                   brouillard, contrairement à l'onglet Calendrier. Le taire
+                   reviendrait à lui faire diffuser plus qu'il ne croit. *@
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                    Ce calendrier contient <b>tous les matchs datés de la ligue</b>.
+                    @if (BrouillardActif)
+                    {
+                        <text>
+                            Le <b>mode brouillard</b> est actif sur cette ligue : ce lien
+                            montre donc <b>plus</b> que l'onglet Calendrier de
+                            l'application, qui masque les rencontres à venir. À ne
+                            diffuser que si cela vous convient.
+                        </text>
+                    }
+                    else
+                    {
+                        <text> Toute personne disposant du lien les voit, sans mot de passe.</text>
+                    }
+                </MudAlert>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                    Cette adresse contient un lien secret : toute personne qui l'obtient
+                    voit vos matchs, sans mot de passe. Ne la publiez pas. En cas de
+                    fuite, régénérez-la depuis <b>Mon profil</b> — l'ancienne cesse
+                    aussitôt de fonctionner.
+                </MudAlert>
+            }
         }
     </DialogContent>
     <DialogActions>
@@ -73,6 +116,18 @@
 
     /// <summary>Restreint le flux à une ligue ; null = tous les matchs du coach.</summary>
     [Parameter] public int? LigueId { get; set; }
+
+    /// <summary>
+    /// true = calendrier de TOUTE la ligue (tous les matchs, toutes les équipes),
+    /// destiné à être diffusé aux participants. Exige <see cref="LigueId"/>.
+    /// </summary>
+    [Parameter] public bool LigueComplete { get; set; }
+
+    /// <summary>
+    /// Mode brouillard de la ligue, pour prévenir le commissaire que ce flux
+    /// en montre plus que l'écran. Purement informatif.
+    /// </summary>
+    [Parameter] public bool BrouillardActif { get; set; }
 
     bool _ouvert;
     string? _url;
@@ -97,9 +152,12 @@
         }
 
         var racine = Nav.BaseUri.TrimEnd('/');
-        _url = LigueId is int id
-            ? $"{racine}/calendrier/{jeton}/ligue/{id}.ics"
-            : $"{racine}/calendrier/{jeton}.ics";
+        _url = (LigueId, LigueComplete) switch
+        {
+            (int id, true)  => $"{racine}/calendrier/{jeton}/ligue/{id}/complet.ics",
+            (int id, false) => $"{racine}/calendrier/{jeton}/ligue/{id}.ics",
+            _               => $"{racine}/calendrier/{jeton}.ics",
+        };
     }
 
     async Task Copier()

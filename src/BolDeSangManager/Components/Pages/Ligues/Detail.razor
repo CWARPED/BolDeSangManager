@@ -308,6 +308,19 @@ else
                     {
                         <BoutonAbonnementCalendrier UserId="@_currentUserId" LigueId="Id" />
                     }
+                    @* Calendrier COMPLET de la ligue, a diffuser aux participants.
+                       Reserve au commissaire : c'est lui qui decide de publier.
+                       Visible meme sans equipe engagee, contrairement au flux
+                       personnel juste au-dessus. *@
+                    @* _estCommissaire (et non _peutGererLigue) : ce bouton est un
+                       OUTIL de commissaire, il doit donc disparaitre en vue coach
+                       comme les autres. *@
+                    @if (_estCommissaire)
+                    {
+                        <BoutonAbonnementCalendrier UserId="@_currentUserId" LigueId="Id"
+                                                    LigueComplete="true"
+                                                    BrouillardActif="_ligue.ModeBrouillard" />
+                    }
                 </MudStack>
             </MudStack>
             @if (_ligue.ModeBrouillard && !_estCommissaire)
@@ -397,6 +410,19 @@ else
                     @if (MesEquipeIds().Count > 0)
                     {
                         <BoutonAbonnementCalendrier UserId="@_currentUserId" LigueId="Id" />
+                    }
+                    @* Calendrier COMPLET de la ligue, a diffuser aux participants.
+                       Reserve au commissaire : c'est lui qui decide de publier.
+                       Visible meme sans equipe engagee, contrairement au flux
+                       personnel juste au-dessus. *@
+                    @* _estCommissaire (et non _peutGererLigue) : ce bouton est un
+                       OUTIL de commissaire, il doit donc disparaitre en vue coach
+                       comme les autres. *@
+                    @if (_estCommissaire)
+                    {
+                        <BoutonAbonnementCalendrier UserId="@_currentUserId" LigueId="Id"
+                                                    LigueComplete="true"
+                                                    BrouillardActif="_ligue.ModeBrouillard" />
                     }
                 </MudStack>
             </MudStack>

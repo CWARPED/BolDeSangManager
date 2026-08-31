@@ -258,6 +258,21 @@ app.MapGet("/calendrier/{jeton}/ligue/{ligueId:int}.ics",
     })
     .AllowAnonymous();
 
+// Calendrier COMPLET d'une ligue : tous les matchs, toutes les équipes.
+// ⚠️ Ce flux n'applique volontairement PAS le mode brouillard (décision
+// produit) : connaître les dates posées par les autres est ce qu'on cherche
+// ici. Il montre donc plus que l'onglet Calendrier sur une ligue en
+// brouillard — l'interface prévient le commissaire avant qu'il publie.
+app.MapGet("/calendrier/{jeton}/ligue/{ligueId:int}/complet.ics",
+    async (string jeton, int ligueId, AbonnementCalendrierService svc) =>
+    {
+        var ics = await svc.GenererFluxAsync(jeton, ligueId, ligueComplete: true);
+        return ics is null
+            ? Results.NotFound()
+            : Results.File(ics, "text/calendar; charset=utf-8", $"ligue-{ligueId}-complet.ics");
+    })
+    .AllowAnonymous();
+
 // Seeder au démarrage
 await DbSeeder.SeedAsync(app.Services);
 

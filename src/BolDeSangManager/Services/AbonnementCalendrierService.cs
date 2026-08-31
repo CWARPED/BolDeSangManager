@@ -93,8 +93,34 @@ public class AbonnementCalendrierService(
     /// par ligue — la même règle que « Mes matchs ».
     /// </summary>
     /// <param name="ligueId">Restreint le flux à une ligue ; null = toutes.</param>
-    public async Task<List<Match>> MatchsVisiblesAsync(string userId, int? ligueId = null)
+    /// <param name="ligueComplete">
+    /// true = TOUS les matchs de la ligue, pas seulement ceux du coach (flux
+    /// « calendrier de la ligue »). Exige <paramref name="ligueId"/>.
+    ///
+    /// ⚠️ Décision produit assumée : ce flux N'APPLIQUE PAS le mode brouillard.
+    /// Voir les matchs datés des autres équipes est justement ce qu'on veut
+    /// pour s'organiser, et le brouillard vise à empêcher de préparer SES
+    /// prochaines rencontres, pas à cacher un calendrier commun. Conséquence à
+    /// connaître : sur une ligue en brouillard, ce flux montre PLUS que
+    /// l'onglet Calendrier de l'application, qui filtre, lui. L'interface le
+    /// signale au commissaire au moment de publier le lien.
+    /// </param>
+    public async Task<List<Match>> MatchsVisiblesAsync(
+        string userId, int? ligueId = null, bool ligueComplete = false)
     {
+        if (ligueComplete)
+        {
+            if (ligueId is not int id) return [];
+
+            return await db.Matches.AsNoTracking().AsSplitQuery()
+                .Include(m => m.EquipeDomicile)
+                .Include(m => m.EquipeExterieur)
+                .Include(m => m.Division).ThenInclude(d => d!.League)
+                .Where(m => m.Division!.LeagueId == id)
+                .OrderBy(m => m.Ronde)
+                .ToListAsync();
+        }
+
         var mesEquipes = await db.Teams.AsNoTracking()
             .Where(t => t.CoachId == userId)
             .Select(t => t.Id)
@@ -139,7 +165,8 @@ public class AbonnementCalendrierService(
     /// Réutilise <see cref="CalendrierService.GenererIcs(IEnumerable{Match}, string)"/>
     /// tel quel : la génération RFC 5545 est déjà correcte et testée.
     /// </summary>
-    public async Task<byte[]?> GenererFluxAsync(string? jeton, int? ligueId = null)
+    public async Task<byte[]?> GenererFluxAsync(
+        string? jeton, int? ligueId = null, bool ligueComplete = false)
     {
         var user = await TrouverParJetonAsync(jeton);
         if (user is null) return null;
@@ -150,10 +177,18 @@ public class AbonnementCalendrierService(
         {
             var ligue = await db.Leagues.AsNoTracking().FirstOrDefaultAsync(l => l.Id == id);
             if (ligue is null) return null;
-            nom = $"{ligue.Nom} — BolDeSang";
+            nom = ligueComplete
+                ? $"{ligue.Nom} — calendrier complet"
+                : $"{ligue.Nom} — BolDeSang";
+        }
+        else if (ligueComplete)
+        {
+            // « Ligue complète » sans ligue n'a pas de sens : refuser plutôt que
+            // de retomber silencieusement sur le flux personnel.
+            return null;
         }
 
-        var matchs = await MatchsVisiblesAsync(user.Id, ligueId);
+        var matchs = await MatchsVisiblesAsync(user.Id, ligueId, ligueComplete);
         return calendrier.GenererIcs(matchs, nom);
     }
 }
