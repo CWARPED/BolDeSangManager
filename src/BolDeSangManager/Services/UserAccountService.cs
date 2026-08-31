@@ -141,6 +141,11 @@ public class UserAccountService(
         user.SupprimeLe = DateTime.UtcNow;
         user.SupprimePar = parQui;
 
+        // Le jeton d'abonnement iCalendar est une porte d'entrée non
+        // authentifiée vers le calendrier du coach : l'effacer fait cesser
+        // immédiatement de répondre toute URL déjà collée dans un agenda.
+        user.JetonCalendrier = null;
+
         var roles = await userManager.GetRolesAsync(user);
         if (roles.Count > 0)
             await userManager.RemoveFromRolesAsync(user, roles);

@@ -15,13 +15,22 @@
 
 <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-4" Wrap="Wrap.Wrap">
     <MudText Typo="Typo.h5" Color="Color.Error"><b>Mes matchs</b></MudText>
-    @if (_matchs?.Any(m => m.DateProgrammee.HasValue) == true)
+    @if (_matchs?.Count > 0)
     {
-        <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                   StartIcon="@Icons.Material.Filled.CalendarMonth"
-                   OnClick="TelechargerTousIcs">
-            Ajouter mes matchs à mon agenda
-        </MudButton>
+        <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
+            @if (_matchs.Any(m => m.DateProgrammee.HasValue))
+            {
+                <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                           StartIcon="@Icons.Material.Filled.CalendarMonth"
+                           OnClick="TelechargerTousIcs">
+                    Ajouter mes matchs à mon agenda
+                </MudButton>
+            }
+            @* L'abonnement, lui, ne dépend PAS d'une date déjà fixée : c'est
+               justement son intérêt, les dates à venir arrivent toutes seules.
+               ⚠️ UserId avec @ : un paramètre string sans @ passerait le TEXTE "_userId". *@
+            <BoutonAbonnementCalendrier UserId="@_userId" />
+        </MudStack>
     }
 </MudStack>
 

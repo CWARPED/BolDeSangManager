@@ -199,6 +199,29 @@ public class UserAccountServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Supprimer_EffaceLeJetonDAbonnementCalendrier()
+    {
+        // Le jeton ouvre l'accès au calendrier du coach SANS authentification :
+        // laissé en place, il continuerait de répondre après l'anonymisation.
+        var (svc, um, db) = Creer();
+        var user = await CreerUserAsync(um, "abonne@test.fr", "Abonne");
+        var (gameId, versionId, teamTypeId) = await SeedRefsAsync(db);
+        var tiers = await CreerTiersAsync(db);
+        var ligue = await DataSeeder.SeedLeagueAsync(db, gameId, versionId, tiers.Id);
+        await DataSeeder.SeedTeamAsync(db, ligue.Id, user.Id, teamTypeId, "Les Abonnes");
+
+        user.JetonCalendrier = AbonnementCalendrierService.NouveauJeton();
+        await db.SaveChangesAsync();
+
+        var r = await svc.SupprimerCompteAsync(user.Id, parQui: "self");
+        Assert.True(r.Succeeded);
+
+        var apres = await db.Users.FindAsync(user.Id);
+        Assert.True(apres!.EstSupprime);
+        Assert.Null(apres.JetonCalendrier);
+    }
+
+    [Fact]
     public async Task Supprimer_CompteAnonymise_NePeutPlusSeConnecter()
     {
         var (svc, um, db) = Creer();

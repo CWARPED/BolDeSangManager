@@ -76,6 +76,30 @@
         window.bdsmPrefEcrire = function (cle, valeur) {
             try { localStorage.setItem(cle, valeur); } catch { }
         };
+        // Copie dans le presse-papier (URL d'abonnement au calendrier).
+        // navigator.clipboard n'existe qu'en contexte sécurisé (https ou
+        // localhost) : sur un accès LAN en http il est INDÉFINI. D'où le repli
+        // par un textarea + execCommand, obsolète mais universel — sans lui le
+        // bouton « Copier » serait inerte pour un coach en réseau local.
+        window.bdsmCopier = async function (texte) {
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(texte);
+                    return true;
+                }
+            } catch { }
+            try {
+                const ta = document.createElement('textarea');
+                ta.value = texte;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.select();
+                const ok = document.execCommand('copy');
+                document.body.removeChild(ta);
+                return ok;
+            } catch { return false; }
+        };
     </script>
 </body>
 

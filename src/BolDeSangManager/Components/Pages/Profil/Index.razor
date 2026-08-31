@@ -13,6 +13,7 @@
 @inject NavigationManager Nav
 @inject ISnackbar Snackbar
 @inject UserAccountService UserAccountService
+@inject AbonnementCalendrierService Abonnement
 @inject BolDeSangManager.Services.IAuthorizationService Auth
 
 <PageTitle>Mon Profil — BolDeSang Manager</PageTitle>
@@ -322,6 +323,71 @@ else
             </MudCard>
         </MudItem>
 
+        <!-- Abonnement calendrier : régénération du lien secret -->
+        <MudItem xs="12">
+            <MudCard Elevation="2" Class="mt-3">
+                <MudCardContent>
+                    <MudText Typo="Typo.subtitle1" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-1" Size="Size.Small" />
+                        <b>Abonnement à mon calendrier</b>
+                    </MudText>
+
+                    @if (!_aUnJeton)
+                    {
+                        <MudText Typo="Typo.body2">
+                            Vous n'avez pas encore de lien d'abonnement. Créez-le depuis
+                            <b>Mes matchs</b> ou depuis la fiche d'une ligue, avec le bouton
+                            « S'abonner à mes matchs ».
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body2">
+                            Un lien d'abonnement existe pour votre compte. Il donne accès à
+                            vos matchs <b>sans mot de passe</b> : toute personne qui l'obtient
+                            peut les consulter.
+                        </MudText>
+                        <MudText Typo="Typo.body2" Class="mt-2">
+                            Si vous l'avez partagé par erreur, régénérez-le : l'ancienne
+                            adresse cesse aussitôt de fonctionner, et vous devrez recoller
+                            la nouvelle dans votre agenda.
+                        </MudText>
+
+                        @if (_confirmerRegeneration)
+                        {
+                            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-3">
+                                Confirmer ? Les agendas déjà abonnés cesseront de se mettre à jour
+                                tant que vous n'y aurez pas collé la nouvelle adresse.
+                            </MudAlert>
+                        }
+                    }
+                </MudCardContent>
+                <MudCardActions>
+                    @if (_aUnJeton && !_confirmerRegeneration)
+                    {
+                        <MudButton Variant="Variant.Outlined" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Autorenew"
+                                   OnClick="@(() => _confirmerRegeneration = true)">
+                            Régénérer mon lien…
+                        </MudButton>
+                    }
+                    else if (_aUnJeton)
+                    {
+                        <MudButton Variant="Variant.Filled" Color="Color.Warning"
+                                   StartIcon="@Icons.Material.Filled.Autorenew"
+                                   Disabled="_regenerationEnCours"
+                                   OnClick="RegenererJeton">
+                            Oui, régénérer
+                        </MudButton>
+                        <MudButton Variant="Variant.Text"
+                                   OnClick="@(() => _confirmerRegeneration = false)">
+                            Annuler
+                        </MudButton>
+                    }
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
         <!-- Zone de danger : suppression du compte -->
         <MudItem xs="12">
             <MudCard Elevation="2" Class="mt-3" Style="border:1px solid var(--mud-palette-error)">
@@ -370,6 +436,46 @@ else
 
 @code {
     ApplicationUser? _user;
+
+    /// <summary>
+    /// Un lien d'abonnement iCalendar existe-t-il ? On n'affiche jamais le
+    /// jeton ici : /profil sert à l'INVALIDER, l'adresse complète se récupère
+    /// depuis « Mes matchs » ou la fiche de ligue.
+    /// </summary>
+    bool _aUnJeton;
+    bool _confirmerRegeneration;
+    bool _regenerationEnCours;
+
+    /// <summary>
+    /// Remplace le secret : toute URL déjà collée dans un agenda répond
+    /// aussitôt 404. Seule parade en cas de fuite, d'où la confirmation.
+    /// </summary>
+    async Task RegenererJeton()
+    {
+        if (_user is null) return;
+
+        _regenerationEnCours = true;
+        try
+        {
+            var jeton = await Abonnement.RegenererJetonAsync(_user.Id);
+            if (jeton is null)
+            {
+                Snackbar.Add("Impossible de régénérer le lien.", Severity.Error);
+                return;
+            }
+
+            _aUnJeton = true;
+            _confirmerRegeneration = false;
+            Snackbar.Add(
+                "Lien régénéré. L'ancienne adresse ne fonctionne plus : recopiez la "
+                + "nouvelle depuis « Mes matchs » dans votre agenda.",
+                Severity.Success);
+        }
+        finally
+        {
+            _regenerationEnCours = false;
+        }
+    }
 
     /// <summary>
     /// Ce qui sera réellement effacé : affiché AVANT que le coach clique, pour
@@ -423,6 +529,8 @@ else
         if (_user is null) { Nav.NavigateTo("/Account/Login"); return; }
 
         _verdict = await UserAccountService.EvaluerSuppressionAsync(userId);
+
+        _aUnJeton = !string.IsNullOrEmpty(_user.JetonCalendrier);
 
         // ⚠️ Le rôle "Commissaire" n'existe plus (DbSeeder le migre vers "Admin") :
         // ce test renvoyait toujours false et le bloc « Ligues gérées » n'était

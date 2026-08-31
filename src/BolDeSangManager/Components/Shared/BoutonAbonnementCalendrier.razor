@@ -1,0 +1,114 @@
+@inject AbonnementCalendrierService Abonnement
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
+
+@*
+    Bouton « S'abonner » : donne l'URL iCalendar à coller UNE fois dans un
+    agenda, qui la réinterroge ensuite tout seul.
+
+    Mutualisé entre « Mes matchs » et la fiche de ligue : seul LigueId change
+    (null = toutes ligues). Le téléchargement .ics est CONSERVÉ à côté — il
+    reste le bon outil pour Outlook, Apple et l'import manuel.
+
+    ⚠️ Le texte doit dire que Google rafraîchit toutes les 8 à 24 h. Sans cela
+    la fonctionnalité passe pour buguée dès le premier changement de date.
+*@
+
+<MudButton Variant="Variant.Outlined" Size="Size.Small"
+           StartIcon="@Icons.Material.Filled.Link"
+           OnClick="Ouvrir">
+    S'abonner à mes matchs
+</MudButton>
+
+<MudDialog @bind-Visible="_ouvert" Options="_options">
+    <TitleContent>
+        <MudText Typo="Typo.h6">S'abonner à @(LigueId is null ? "mes matchs" : "cette ligue")</MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_url is null)
+        {
+            <MudProgressLinear Color="Color.Error" Indeterminate="true" />
+        }
+        else
+        {
+            <MudText Typo="Typo.body2" Class="mb-2">
+                Collez cette adresse dans votre agenda (Google Agenda :
+                <i>Autres agendas → + → À partir de l'URL</i>). Les nouvelles dates
+                et les nouveaux matchs arriveront ensuite tout seuls.
+            </MudText>
+
+            <MudTextField T="string" Value="@_url" ReadOnly="true" Variant="Variant.Outlined"
+                          Label="Adresse d'abonnement" Class="mb-2" />
+
+            <MudButton Variant="Variant.Filled" Color="Color.Error" Size="Size.Small"
+                       StartIcon="@Icons.Material.Filled.ContentCopy"
+                       OnClick="Copier">
+                Copier l'adresse
+            </MudButton>
+
+            <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3">
+                <b>Ce n'est pas du temps réel.</b> Google interroge un agenda
+                abonné toutes les 8 à 24 heures environ, et rien ne permet de
+                forcer la mise à jour. Pour un changement de date la veille au
+                soir, fiez-vous à l'e-mail. (Apple Calendrier est plus rapide.)
+            </MudAlert>
+
+            <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2">
+                Cette adresse contient un lien secret : toute personne qui l'obtient
+                voit vos matchs, sans mot de passe. Ne la publiez pas. En cas de
+                fuite, régénérez-la depuis <b>Mon profil</b> — l'ancienne cesse
+                aussitôt de fonctionner.
+            </MudAlert>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="@(() => _ouvert = false)">Fermer</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    /// <summary>Identifiant du coach abonné.</summary>
+    [Parameter, EditorRequired] public string UserId { get; set; } = "";
+
+    /// <summary>Restreint le flux à une ligue ; null = tous les matchs du coach.</summary>
+    [Parameter] public int? LigueId { get; set; }
+
+    bool _ouvert;
+    string? _url;
+
+    readonly DialogOptions _options = new() { MaxWidth = MaxWidth.Small, FullWidth = true };
+
+    /// <summary>
+    /// Le jeton n'est créé qu'ici, au premier clic : un compte qui ne s'abonne
+    /// jamais n'expose aucune adresse.
+    /// </summary>
+    async Task Ouvrir()
+    {
+        _ouvert = true;
+        _url = null;
+
+        var jeton = await Abonnement.ObtenirOuCreerJetonAsync(UserId);
+        if (jeton is null)
+        {
+            Snackbar.Add("Impossible de générer votre lien d'abonnement.", Severity.Error);
+            _ouvert = false;
+            return;
+        }
+
+        var racine = Nav.BaseUri.TrimEnd('/');
+        _url = LigueId is int id
+            ? $"{racine}/calendrier/{jeton}/ligue/{id}.ics"
+            : $"{racine}/calendrier/{jeton}.ics";
+    }
+
+    async Task Copier()
+    {
+        if (_url is null) return;
+
+        var ok = await JS.InvokeAsync<bool>("bdsmCopier", _url);
+        Snackbar.Add(
+            ok ? "Adresse copiée." : "Copie impossible : sélectionnez l'adresse à la main.",
+            ok ? Severity.Success : Severity.Warning);
+    }
+}

@@ -21,6 +21,17 @@ public class ApplicationUser : IdentityUser
     /// <summary>Id de l'admin auteur de la suppression, ou "self" si le coach l'a demandée.</summary>
     public string? SupprimePar { get; set; }
 
+    /// <summary>
+    /// Secret de l'URL d'abonnement iCalendar (« S'abonner à mes matchs »).
+    ///
+    /// Nullable et généré À LA DEMANDE : un compte qui n'a jamais demandé
+    /// d'abonnement n'expose aucune adresse. Le jeton tient lieu de mot de passe
+    /// (le flux est servi sans authentification, un agenda tiers n'ayant pas de
+    /// cookie) — il est donc tiré de RandomNumberGenerator, jamais d'un Guid.
+    /// Le régénérer invalide immédiatement l'ancien lien.
+    /// </summary>
+    public string? JetonCalendrier { get; set; }
+
     public ICollection<Team> Equipes { get; set; } = [];
     public ICollection<League> LiguesCommissaireees { get; set; } = [];
 }

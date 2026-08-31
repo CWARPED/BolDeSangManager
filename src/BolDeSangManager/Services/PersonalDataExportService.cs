@@ -110,7 +110,14 @@ public class PersonalDataExportService(
                 InscritLe: user.CreeLe,
                 Roles: [.. roles],
                 CompteSupprime: user.EstSupprime,
-                SupprimeLe: user.SupprimeLe),
+                SupprimeLe: user.SupprimeLe,
+                // On signale l'EXISTENCE de l'abonnement iCalendar sans recopier
+                // le jeton : c'est un secret équivalent à un mot de passe, et un
+                // fichier d'export circule (téléphone, pièce jointe, sauvegarde).
+                // Le coach retrouve son URL complète sur /profil, et peut la
+                // régénérer. Le droit d'accès porte ici sur le fait qu'un lien
+                // existe, pas sur la valeur du secret.
+                AbonnementCalendrierActif: !string.IsNullOrEmpty(user.JetonCalendrier)),
             Equipes: [.. equipes.Select(e => new EquipeExport(
                 Nom: e.Nom,
                 Type: e.TeamType?.Nom ?? "",
@@ -178,7 +185,8 @@ public class PersonalDataExportService(
         DateTime InscritLe,
         List<string> Roles,
         bool CompteSupprime,
-        DateTime? SupprimeLe);
+        DateTime? SupprimeLe,
+        bool AbonnementCalendrierActif);
 
     public record EquipeExport(
         string Nom,

@@ -136,6 +136,7 @@ builder.Services.AddScoped<MatchService>();
 builder.Services.AddScoped<PdfService>();
 builder.Services.AddScoped<MarkdownService>();
 builder.Services.AddScoped<CalendrierService>();
+builder.Services.AddScoped<AbonnementCalendrierService>();
 builder.Services.AddScoped<LeagueExportService>();
 builder.Services.AddScoped<GameDataExportService>();
 builder.Services.AddScoped<SettingsService>();
@@ -225,6 +226,37 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 app.MapAdditionalIdentityEndpoints();
+
+// ── Flux d'abonnement iCalendar (option A) ───────────────────────────────────
+//
+// Endpoints minimal API et NON des pages Blazor : Google/Apple/Outlook
+// interrogent ces adresses sans cookie de session, il faut donc AllowAnonymous
+// et une réponse brute. Le jeton, tiré au sort sur 32 octets, tient lieu
+// d'authentification ; inconnu ⇒ 404, sans distinguer « jeton faux » de
+// « ligue inexistante » (ne pas renseigner un curieux).
+//
+// ⚠️ AbonnementCalendrierService applique le mode brouillard : ne jamais
+// court-circuiter ce chemin en interrogeant db.Matches directement ici.
+
+app.MapGet("/calendrier/{jeton}.ics",
+    async (string jeton, AbonnementCalendrierService svc) =>
+    {
+        var ics = await svc.GenererFluxAsync(jeton);
+        return ics is null
+            ? Results.NotFound()
+            : Results.File(ics, "text/calendar; charset=utf-8", "mes-matchs.ics");
+    })
+    .AllowAnonymous();
+
+app.MapGet("/calendrier/{jeton}/ligue/{ligueId:int}.ics",
+    async (string jeton, int ligueId, AbonnementCalendrierService svc) =>
+    {
+        var ics = await svc.GenererFluxAsync(jeton, ligueId);
+        return ics is null
+            ? Results.NotFound()
+            : Results.File(ics, "text/calendar; charset=utf-8", $"ligue-{ligueId}.ics");
+    })
+    .AllowAnonymous();
 
 // Seeder au démarrage
 await DbSeeder.SeedAsync(app.Services);
