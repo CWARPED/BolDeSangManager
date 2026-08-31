@@ -69,6 +69,18 @@ public class MatchSheet
     public int? VariationFansDomicileAppliquee { get; set; }
     public int? VariationFansExterieurAppliquee { get; set; }
 
+    /// <summary>
+    /// Nombre de tours joués sur ce match (un seul chiffre : les deux équipes
+    /// jouent le même nombre de tours). Sert aux PALIERS du barème de points de
+    /// ligue : « victoire avant le 13e tour = 3000 pts ».
+    ///
+    /// Nullable, et c'est essentiel : les feuilles saisies avant l'ajout des
+    /// paliers n'ont pas l'information. Le calcul retombe alors sur les points de
+    /// base de la ligue plutôt que d'inventer une valeur. Le champ n'est proposé
+    /// à la saisie que si la ligue a effectivement défini des paliers.
+    /// </summary>
+    public int? NombreDeTours { get; set; }
+
     // Inducements pré-match (JSON simple: {"entrainement": 2, "potDeVin": 1})
     public string InducementsDomicile { get; set; } = "{}";
     public string InducementsExterieur { get; set; } = "{}";
@@ -96,6 +108,20 @@ public class MatchPlayerRecord
     public int Passes { get; set; } = 0;
     public int Interceptions { get; set; } = 0;
     public int EliminationsInfligees { get; set; } = 0;
+
+    /// <summary>
+    /// Déviations (DEV) réalisées par le joueur. Ne rapporte aucune XP par défaut
+    /// (XpParDeviation = 0), mais peut valoir des points de classement selon le
+    /// barème de la ligue.
+    /// </summary>
+    public int Deviations { get; set; } = 0;
+
+    /// <summary>
+    /// Agressions (AGRO) : frapper un joueur au sol. Aucune XP par défaut, comme
+    /// les déviations.
+    /// </summary>
+    public int Agressions { get; set; } = 0;
+
     public bool EstMVP { get; set; } = false;
 
     // PSP gagnés ce match

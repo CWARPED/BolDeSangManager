@@ -21,6 +21,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<League> Leagues => Set<League>();
     public DbSet<Division> Divisions => Set<Division>();
     public DbSet<EcheanceRonde> EcheancesRondes => Set<EcheanceRonde>();
+    public DbSet<PalierPointsLigue> PaliersPointsLigue => Set<PalierPointsLigue>();
     public DbSet<Team> Teams => Set<Team>();
     public DbSet<TeamPlayer> TeamPlayers => Set<TeamPlayer>();
     public DbSet<TeamPlayerSkill> TeamPlayerSkills => Set<TeamPlayerSkill>();
@@ -154,6 +155,18 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasOne(e => e.League)
             .WithMany()
             .HasForeignKey(e => e.LeagueId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // PalierPointsLigue — un seul palier par (ligue, seuil de tours).
+        // Cascade : un palier n'a aucun sens hors de sa ligue.
+        builder.Entity<PalierPointsLigue>()
+            .HasIndex(p => new { p.LeagueId, p.JusquAuTour })
+            .IsUnique();
+
+        builder.Entity<PalierPointsLigue>()
+            .HasOne(p => p.League)
+            .WithMany(l => l.PaliersPoints)
+            .HasForeignKey(p => p.LeagueId)
             .OnDelete(DeleteBehavior.Cascade);
 
         // Team — FK vers ApplicationUser (Coach)

@@ -45,6 +45,33 @@ public class XpLibreTests : IDisposable
         Assert.Equal(20, b.Calculer(touchdowns: 2, passes: 0, interceptions: 0, eliminations: 0, estMvp: true));
     }
 
+    [Fact]
+    public void Bareme_DeviationEtAgression_NeRapportentRienParDefaut()
+    {
+        // DEV et AGRO sont saisies pour le CLASSEMENT, pas pour la progression :
+        // ajouter ces deux actions ne doit rien changer à l'XP des ligues
+        // existantes. C'est la garantie de non-régression du lot « barème de points ».
+        var b = XpBareme.ParDefaut(GameType.BloodBowl);
+        var sansActions = b.Calculer(touchdowns: 1, passes: 0, interceptions: 0,
+                                     eliminations: 0, estMvp: false);
+        var avecActions = b.Calculer(touchdowns: 1, passes: 0, interceptions: 0,
+                                     eliminations: 0, estMvp: false,
+                                     deviations: 3, agressions: 7);
+        Assert.Equal(sansActions, avecActions);
+
+        var record = new MatchPlayerRecord { Touchdowns = 1, Deviations = 3, Agressions = 7 };
+        Assert.Equal(3, b.Calculer(record));
+    }
+
+    [Fact]
+    public void Bareme_DeviationEtAgression_ComptentSiLaLigueLesValorise()
+    {
+        var b = new XpBareme { ParTouchdown = 0, BonusMvp = 0, ParDeviation = 1, ParAgression = 2 };
+        Assert.Equal(3 * 1 + 2 * 2, b.Calculer(
+            touchdowns: 0, passes: 0, interceptions: 0, eliminations: 0, estMvp: false,
+            deviations: 3, agressions: 2));
+    }
+
     // ── Barème porté par la version de règles, puis par la ligue (R6) ─────────
 
     [Fact]

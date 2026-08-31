@@ -54,10 +54,58 @@ public class League
     /// <summary>XP bonus pour le joueur désigné MVP.</summary>
     public int XpBonusMvp { get; set; } = 4;
 
+    /// <summary>XP par déviation (DEV). Zéro par défaut.</summary>
+    public int XpParDeviation { get; set; } = 0;
+
+    /// <summary>XP par agression (AGRO). Zéro par défaut.</summary>
+    public int XpParAgression { get; set; } = 0;
+
+    // ── Barème de points de classement de la ligue ────────────────────────────
+    // Copie prise sur la version de règles à la création, puis éditable par les
+    // commissaires MÊME SAISON LANCÉE : chaque enregistrement déclenche un
+    // recalcul complet du classement depuis les feuilles de match
+    // (LeagueService.RecalculerClassementAsync). C'est ce recalcul qui rend
+    // l'édition en cours de route sûre — contrairement à Team.Tresorerie, aucune
+    // valeur dérivée n'est ici figée sans moyen de la reconstruire.
+
+    /// <summary>Points de classement pour une victoire (au-delà du dernier palier).</summary>
+    public int PointsVictoire { get; set; } = 3;
+
+    /// <summary>Points de classement pour un match nul.</summary>
+    public int PointsNul { get; set; } = 1;
+
+    /// <summary>Points de classement pour une défaite.</summary>
+    public int PointsDefaite { get; set; } = 0;
+
+    /// <summary>Points bonus par touchdown marqué.</summary>
+    public int PointsParTouchdown { get; set; } = 0;
+
+    /// <summary>Points bonus par élimination infligée.</summary>
+    public int PointsParElimination { get; set; } = 0;
+
+    /// <summary>Points bonus par interception.</summary>
+    public int PointsParInterception { get; set; } = 0;
+
+    /// <summary>Points bonus par passe réussie.</summary>
+    public int PointsParPasse { get; set; } = 0;
+
+    /// <summary>Points bonus par déviation.</summary>
+    public int PointsParDeviation { get; set; } = 0;
+
+    /// <summary>Points bonus par agression.</summary>
+    public int PointsParAgression { get; set; } = 0;
+
     public DateTime CreeLe { get; set; } = DateTime.UtcNow;
 
     public ICollection<Division> Divisions { get; set; } = [];
     public ICollection<Team> Equipes { get; set; } = [];
+
+    /// <summary>
+    /// Paliers de points selon le nombre de tours joués. Vide = barème simple
+    /// (victoire / nul / défaite), et le champ « nombre de tours » n'est alors
+    /// même pas proposé sur la feuille de match.
+    /// </summary>
+    public ICollection<PalierPointsLigue> PaliersPoints { get; set; } = [];
     public ICollection<PhaseDeReposValidation> ValidationsRepos { get; set; } = [];
     public ICollection<LeagueAward> Awards { get; set; } = [];
     public ICollection<LeagueCommissioner> CommissairesDeLigue { get; set; } = [];

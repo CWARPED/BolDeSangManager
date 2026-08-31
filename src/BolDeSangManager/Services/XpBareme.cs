@@ -30,6 +30,16 @@ public class XpBareme
     /// <summary>XP bonus pour le joueur désigné MVP.</summary>
     public int BonusMvp { get; init; } = 4;
 
+    /// <summary>
+    /// XP par déviation (DEV). <b>Zéro par défaut</b> : l'action est saisie pour
+    /// le classement, pas pour la progression du joueur. Une ligue qui voudrait
+    /// la valoriser peut le faire, mais rien ne change pour les autres.
+    /// </summary>
+    public int ParDeviation { get; init; } = 0;
+
+    /// <summary>XP par agression (AGRO). Zéro par défaut, comme la déviation.</summary>
+    public int ParAgression { get; init; } = 0;
+
     /// <summary>Barème par défaut pour un type de jeu donné.</summary>
     public static XpBareme ParDefaut(GameType gameType) => new()
     {
@@ -49,7 +59,9 @@ public class XpBareme
                 ParPasse        = version.XpParPasse,
                 ParInterception = version.XpParInterception,
                 ParElimination  = version.XpParElimination,
-                BonusMvp        = version.XpBonusMvp
+                BonusMvp        = version.XpBonusMvp,
+                ParDeviation    = version.XpParDeviation,
+                ParAgression    = version.XpParAgression
             };
 
     /// <summary>Applique ce barème à une version de règles.</summary>
@@ -60,6 +72,8 @@ public class XpBareme
         version.XpParInterception = ParInterception;
         version.XpParElimination  = ParElimination;
         version.XpBonusMvp        = BonusMvp;
+        version.XpParDeviation    = ParDeviation;
+        version.XpParAgression    = ParAgression;
     }
 
     /// <summary>
@@ -75,7 +89,9 @@ public class XpBareme
                 ParPasse        = ligue.XpParPasse,
                 ParInterception = ligue.XpParInterception,
                 ParElimination  = ligue.XpParElimination,
-                BonusMvp        = ligue.XpBonusMvp
+                BonusMvp        = ligue.XpBonusMvp,
+                ParDeviation    = ligue.XpParDeviation,
+                ParAgression    = ligue.XpParAgression
             };
 
     /// <summary>Applique ce barème aux champs d'une ligue (création / édition).</summary>
@@ -86,6 +102,8 @@ public class XpBareme
         ligue.XpParInterception = ParInterception;
         ligue.XpParElimination  = ParElimination;
         ligue.XpBonusMvp        = BonusMvp;
+        ligue.XpParDeviation    = ParDeviation;
+        ligue.XpParAgression    = ParAgression;
     }
 
     /// <summary>
@@ -100,18 +118,23 @@ public class XpBareme
         xp += record.Passes * ParPasse;
         xp += record.Interceptions * ParInterception;
         xp += record.EliminationsInfligees * ParElimination;
+        xp += record.Deviations * ParDeviation;
+        xp += record.Agressions * ParAgression;
         if (record.EstMVP) xp += BonusMvp;
         return xp;
     }
 
     /// <summary>Variante pour les écrans de saisie, qui manipulent des stats détachées.</summary>
-    public int Calculer(int touchdowns, int passes, int interceptions, int eliminations, bool estMvp)
+    public int Calculer(int touchdowns, int passes, int interceptions, int eliminations, bool estMvp,
+                        int deviations = 0, int agressions = 0)
     {
         int xp = 0;
         xp += touchdowns * ParTouchdown;
         xp += passes * ParPasse;
         xp += interceptions * ParInterception;
         xp += eliminations * ParElimination;
+        xp += deviations * ParDeviation;
+        xp += agressions * ParAgression;
         if (estMvp) xp += BonusMvp;
         return xp;
     }
