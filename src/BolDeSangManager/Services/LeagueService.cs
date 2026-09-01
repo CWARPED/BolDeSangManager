@@ -129,7 +129,7 @@ public class LeagueService(
             db.PaliersPointsLigue.Add(new PalierPointsLigue
             {
                 LeagueId       = ligue.Id,
-                JusquAuTour    = p.JusquAuTour,
+                APartirDuTour    = p.APartirDuTour,
                 PointsVictoire = p.PointsVictoire,
                 PointsNul      = p.PointsNul,
                 PointsDefaite  = p.PointsDefaite
@@ -1075,7 +1075,7 @@ public class LeagueService(
             db.PaliersPointsLigue.Add(new PalierPointsLigue
             {
                 LeagueId       = ligueId,
-                JusquAuTour    = p.JusquAuTour,
+                APartirDuTour    = p.APartirDuTour,
                 PointsVictoire = p.PointsVictoire,
                 PointsNul      = p.PointsNul,
                 PointsDefaite  = p.PointsDefaite
@@ -1114,14 +1114,14 @@ public class LeagueService(
 
         foreach (var p in paliers)
         {
-            if (p.JusquAuTour < 1 || p.JusquAuTour > 50)
+            if (p.APartirDuTour < 1 || p.APartirDuTour > 50)
                 throw new InvalidOperationException(
-                    $"Palier invalide : le nombre de tours doit être compris entre 1 et 50 (reçu {p.JusquAuTour}).");
+                    $"Palier invalide : le nombre de tours doit être compris entre 1 et 50 (reçu {p.APartirDuTour}).");
             if (p.PointsVictoire < 0 || p.PointsNul < 0 || p.PointsDefaite < 0)
                 throw new InvalidOperationException("Les points d'un palier ne peuvent pas être négatifs.");
         }
 
-        if (paliers.Select(p => p.JusquAuTour).Distinct().Count() != paliers.Count)
+        if (paliers.Select(p => p.APartirDuTour).Distinct().Count() != paliers.Count)
             throw new InvalidOperationException("Deux paliers ne peuvent pas viser le même nombre de tours.");
     }
 

@@ -174,8 +174,8 @@ public class BaremePointsPortableTests : IDisposable
             BaremeReference().AppliquerA(ligue);
             db.PaliersPointsLigue.Add(new PalierPointsLigue
             {
-                LeagueId = ligue.Id, JusquAuTour = 12,
-                PointsVictoire = 3000, PointsNul = 1500, PointsDefaite = 0
+                LeagueId = ligue.Id, APartirDuTour = 13,
+                PointsVictoire = 2000, PointsNul = 1500, PointsDefaite = 1000
             });
             await db.SaveChangesAsync();
 
@@ -211,9 +211,9 @@ public class BaremePointsPortableTests : IDisposable
             Assert.Equal(1, l.PointsParDeviation);
 
             var palier = Assert.Single(l.PaliersPoints);
-            Assert.Equal(12, palier.JusquAuTour);
-            Assert.Equal(3000, palier.PointsVictoire);
-            Assert.Equal(0, palier.PointsDefaite);
+            Assert.Equal(13, palier.APartirDuTour);
+            Assert.Equal(2000, palier.PointsVictoire);
+            Assert.Equal(1000, palier.PointsDefaite);
         }
     }
 
@@ -340,8 +340,8 @@ public class BaremePointsPortableTests : IDisposable
             var ligue = await DataSeeder.SeedLeagueAsync(db, game.Id, rv.Id, comm.Id);
             db.PaliersPointsLigue.Add(new PalierPointsLigue
             {
-                LeagueId = ligue.Id, JusquAuTour = 12,
-                PointsVictoire = 3000, PointsNul = 1500, PointsDefaite = 0
+                LeagueId = ligue.Id, APartirDuTour = 13,
+                PointsVictoire = 2000, PointsNul = 1500, PointsDefaite = 1000
             });
             await db.SaveChangesAsync();
             (ligueId, commId) = (ligue.Id, comm.Id);

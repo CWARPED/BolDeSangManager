@@ -9,14 +9,19 @@ namespace BolDeSangManager.Tests;
 /// </summary>
 public class BaremePointsTests
 {
-    /// <summary>Le barème de la ligue de l'utilisateur (VPS), pour les cas concrets.</summary>
+    /// <summary>
+    /// Le barème de la ligue de l'utilisateur (VPS), pour les cas concrets.
+    ///
+    /// Sens des paliers : la BASE est le cas normal (le match se décide tôt), et
+    /// un palier décrit la dégradation quand la rencontre traîne —
+    /// « 3000 pour une victoire, mais 2000 à partir du 13e tour ».
+    /// </summary>
     private static BaremePoints BaremeReference() => new()
     {
-        // Au-delà du 12e tour
-        Victoire = 2000, Nul = 1500, Defaite = 1000,
+        Victoire = 3000, Nul = 1500, Defaite = 0,
         ParTouchdown = 5, ParElimination = 2, ParInterception = 1,
         ParPasse = 1, ParDeviation = 1, ParAgression = 1,
-        Paliers = [new PalierPoints(12, 3000, 1500, 0)]
+        Paliers = [new PalierPoints(13, 2000, 1500, 1000)]
     };
 
     [Fact]
@@ -46,11 +51,11 @@ public class BaremePointsTests
     }
 
     [Theory]
-    [InlineData(11, 3000, 0)]      // avant le seuil : palier
-    [InlineData(12, 3000, 0)]      // AU seuil : palier (JusquAuTour est inclusif)
-    [InlineData(13, 2000, 1000)]   // après : points de base
-    [InlineData(16, 2000, 1000)]
-    public void Palier_SappliqueJusquAuTourInclus(int tours, int attenduVainqueur, int attenduPerdant)
+    [InlineData(11, 3000, 0)]      // avant le seuil : points de BASE
+    [InlineData(12, 3000, 0)]      // dernier tour avant le palier
+    [InlineData(13, 2000, 1000)]   // AU seuil : le palier s'applique (inclusif)
+    [InlineData(16, 2000, 1000)]   // au-delà : toujours le palier
+    public void Palier_SappliqueAPartirDuTourInclus(int tours, int attenduVainqueur, int attenduPerdant)
     {
         var b = BaremeReference();
         Assert.Equal(attenduVainqueur, b.PointsEquipe(2, 1, tours, actions: default));
@@ -69,10 +74,10 @@ public class BaremePointsTests
     public void ToursNonRenseigne_RetombeSurLesPointsDeBase()
     {
         // Cas des matchs déjà joués au moment du déploiement : pas de nombre de
-        // tours en base, donc barème de base — jamais une exception ni un zéro.
+        // tours en base, donc points de base — jamais une exception ni un zéro.
         var b = BaremeReference();
-        Assert.Equal(2000, b.PointsEquipe(2, 1, tours: null, actions: default));
-        Assert.Equal(1000, b.PointsEquipe(1, 2, tours: null, actions: default));
+        Assert.Equal(3000, b.PointsEquipe(2, 1, tours: null, actions: default));
+        Assert.Equal(0, b.PointsEquipe(1, 2, tours: null, actions: default));
     }
 
     [Fact]
@@ -81,7 +86,7 @@ public class BaremePointsTests
         var b = BaremeReference();
         var actions = new ActionsEquipe(Touchdowns: 3, Eliminations: 2, Interceptions: 1,
                                         Passes: 4, Deviations: 2, Agressions: 5);
-        // 3000 (victoire avant le 13e) + 15 + 4 + 1 + 4 + 2 + 5 = 3031
+        // 3000 (victoire avant le 13e tour) + 15 + 4 + 1 + 4 + 2 + 5 = 3031
         Assert.Equal(3031, b.PointsEquipe(3, 0, tours: 10, actions: actions));
     }
 
@@ -91,26 +96,57 @@ public class BaremePointsTests
         var b = BaremeReference();
         var actions = new ActionsEquipe(Touchdowns: 1, Eliminations: 3, Interceptions: 0,
                                         Passes: 2, Deviations: 1, Agressions: 4);
-        // 0 (défaite avant le 13e) + 5 + 6 + 0 + 2 + 1 + 4 = 18
+        // 0 (défaite avant le 13e tour) + 5 + 6 + 0 + 2 + 1 + 4 = 18
         Assert.Equal(18, b.PointsEquipe(1, 3, tours: 9, actions: actions));
     }
 
     [Fact]
-    public void PlusieursPaliers_LePlusPetitSeuilAtteintGagne()
+    public void BonusSAppliquentAussiApresLeSeuil()
     {
+        // Le palier ne change QUE le triplet victoire/nul/défaite : les bonus par
+        // action restent les mêmes de part et d'autre du seuil.
+        var b = BaremeReference();
+        var actions = new ActionsEquipe(Touchdowns: 3, Eliminations: 2, Interceptions: 1,
+                                        Passes: 4, Deviations: 2, Agressions: 5);
+        // 2000 (victoire à partir du 13e) + 31 de bonus
+        Assert.Equal(2031, b.PointsEquipe(3, 0, tours: 14, actions: actions));
+    }
+
+    [Fact]
+    public void PlusieursPaliers_LePlusGrandSeuilAtteintGagne()
+    {
+        // Deux dégradations successives : plus le match traîne, moins il rapporte.
         var b = new BaremePoints
         {
-            Victoire = 1000, Nul = 500, Defaite = 100,
+            Victoire = 5000, Nul = 2000, Defaite = 0,
             Paliers =
             [
-                new PalierPoints(12, 3000, 1500, 0),
-                new PalierPoints(8,  5000, 2000, 0)
+                new PalierPoints(9,  3000, 1500, 0),
+                new PalierPoints(13, 1000, 500, 100)
             ]
         };
-        Assert.Equal(5000, b.PointsEquipe(2, 0, tours: 7, actions: default));
-        Assert.Equal(5000, b.PointsEquipe(2, 0, tours: 8, actions: default));
-        Assert.Equal(3000, b.PointsEquipe(2, 0, tours: 9, actions: default));
-        Assert.Equal(1000, b.PointsEquipe(2, 0, tours: 13, actions: default));
+        Assert.Equal(5000, b.PointsEquipe(2, 0, tours: 8, actions: default));   // avant tout palier
+        Assert.Equal(3000, b.PointsEquipe(2, 0, tours: 9, actions: default));   // 1er palier, au seuil
+        Assert.Equal(3000, b.PointsEquipe(2, 0, tours: 12, actions: default));
+        Assert.Equal(1000, b.PointsEquipe(2, 0, tours: 13, actions: default));  // 2e palier, au seuil
+        Assert.Equal(1000, b.PointsEquipe(2, 0, tours: 16, actions: default));
+    }
+
+    [Fact]
+    public void PaliersDesordonnes_LeSeuilLePlusGrandGagneQuandMeme()
+    {
+        // L'ordre de saisie ne doit rien changer : la sélection trie elle-même.
+        var b = new BaremePoints
+        {
+            Victoire = 5000, Nul = 2000, Defaite = 0,
+            Paliers =
+            [
+                new PalierPoints(13, 1000, 500, 100),
+                new PalierPoints(9,  3000, 1500, 0)
+            ]
+        };
+        Assert.Equal(3000, b.PointsEquipe(2, 0, tours: 10, actions: default));
+        Assert.Equal(1000, b.PointsEquipe(2, 0, tours: 14, actions: default));
     }
 
     [Fact]

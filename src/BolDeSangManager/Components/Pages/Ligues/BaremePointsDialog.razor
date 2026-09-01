@@ -40,16 +40,17 @@
 
         <MudText Typo="Typo.subtitle2" Class="mb-1"><b>Paliers par nombre de tours</b></MudText>
         <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
-            Facultatif. Un palier donne d'autres points quand le match s'est décidé
-            tôt — par exemple « jusqu'au tour 12 : victoire 3000 ». Au-delà du plus
-            grand palier, ce sont les points de match ci-dessus qui s'appliquent.
+            Facultatif. Un palier change les points quand le match a duré longtemps —
+            par exemple « à partir du tour 13 : victoire 2000 » alors que les points
+            de match ci-dessus en donnent 3000. En dessous du plus petit palier, ce
+            sont les points de match qui s'appliquent.
         </MudText>
 
         @foreach (var p in _paliers)
         {
             <MudGrid Spacing="1" Class="mb-1" Justify="Justify.FlexStart">
                 <MudItem xs="3">
-                    <MudNumericField @bind-Value="p.JusquAuTour" Label="Jusqu'au tour" Min="1" Max="50"
+                    <MudNumericField @bind-Value="p.APartirDuTour" Label="À partir du tour" Min="1" Max="50"
                                      Variant="Variant.Outlined" Margin="Margin.Dense" />
                 </MudItem>
                 <MudItem xs="3">
@@ -150,7 +151,7 @@
         foreach (var p in Bareme.Paliers)
             _paliers.Add(new PalierPointsLigue
             {
-                JusquAuTour    = p.JusquAuTour,
+                APartirDuTour    = p.APartirDuTour,
                 PointsVictoire = p.Victoire,
                 PointsNul      = p.Nul,
                 PointsDefaite  = p.Defaite
@@ -159,7 +160,7 @@
 
     void AjouterPalier() => _paliers.Add(new PalierPointsLigue
     {
-        JusquAuTour    = _paliers.Count == 0 ? 12 : _paliers.Max(p => p.JusquAuTour) + 1,
+        APartirDuTour    = _paliers.Count == 0 ? 13 : _paliers.Max(p => p.APartirDuTour) + 1,
         PointsVictoire = _victoire,
         PointsNul      = _nul,
         PointsDefaite  = _defaite

@@ -222,9 +222,9 @@ public class LeagueExportService(
             PointsParDeviation: ligue.PointsParDeviation,
             PointsParAgression: ligue.PointsParAgression,
             Paliers: ligue.PaliersPoints
-                .OrderBy(p => p.JusquAuTour)
+                .OrderBy(p => p.APartirDuTour)
                 .Select(p => new PalierPointsExportDto(
-                    p.JusquAuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
+                    p.APartirDuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
                 .ToList(),
             ModeBrouillard: ligue.ModeBrouillard,
             Reglement: ligue.Reglement,
@@ -359,7 +359,7 @@ public class LeagueExportService(
             db.PaliersPointsLigue.Add(new PalierPointsLigue
             {
                 LeagueId       = ligue.Id,
-                JusquAuTour    = p.JusquAuTour,
+                APartirDuTour    = p.APartirDuTour,
                 PointsVictoire = p.PointsVictoire,
                 PointsNul      = p.PointsNul,
                 PointsDefaite  = p.PointsDefaite
@@ -602,7 +602,7 @@ record LeagueExportDto(
 );
 
 record PalierPointsExportDto(
-    int JusquAuTour,
+    int APartirDuTour,
     int PointsVictoire,
     int PointsNul,
     int PointsDefaite

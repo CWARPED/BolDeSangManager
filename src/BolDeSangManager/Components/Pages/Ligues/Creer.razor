@@ -428,7 +428,7 @@ else
                     ParDeviation    = _baremePoints.ParDeviation,
                     ParAgression    = _baremePoints.ParAgression,
                     Paliers         = _paliersPoints
-                        .Select(p => new PalierPoints(p.JusquAuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
+                        .Select(p => new PalierPoints(p.APartirDuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
                         .ToList()
                 } },
         };

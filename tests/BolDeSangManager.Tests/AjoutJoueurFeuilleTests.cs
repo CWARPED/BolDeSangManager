@@ -101,11 +101,11 @@ public class AjoutJoueurFeuilleTests : IDisposable
         await CreateLeagueService(db).ModifierBaremePointsAsync(ligueId,
             new BaremePoints
             {
-                Victoire = 2000, Nul = 1500, Defaite = 1000,
+                Victoire = 3000, Nul = 1500, Defaite = 0,
                 ParTouchdown = 5, ParElimination = 2, ParInterception = 1,
                 ParPasse = 1, ParDeviation = 1, ParAgression = 1
             },
-            [new PalierPointsLigue { JusquAuTour = 12, PointsVictoire = 3000, PointsNul = 1500, PointsDefaite = 0 }],
+            [new PalierPointsLigue { APartirDuTour = 13, PointsVictoire = 2000, PointsNul = 1500, PointsDefaite = 1000 }],
             CommissaireId);
     }
 
@@ -221,7 +221,7 @@ public class AjoutJoueurFeuilleTests : IDisposable
         await using (var db = _factory.CreateContext())
         {
             avant = (await db.Teams.FindAsync(domId))!.PointsLigue;
-            // 3000 (victoire avant le 13e) + 3 TD×5 + 1 élim×2 = 3017
+            // 3000 (victoire avant le 13e tour) + 3 TD×5 + 1 élim×2 = 3017
             Assert.Equal(3017, avant);
         }
 

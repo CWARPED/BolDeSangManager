@@ -160,7 +160,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
         // PalierPointsLigue — un seul palier par (ligue, seuil de tours).
         // Cascade : un palier n'a aucun sens hors de sa ligue.
         builder.Entity<PalierPointsLigue>()
-            .HasIndex(p => new { p.LeagueId, p.JusquAuTour })
+            .HasIndex(p => new { p.LeagueId, p.APartirDuTour })
             .IsUnique();
 
         builder.Entity<PalierPointsLigue>()

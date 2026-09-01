@@ -757,12 +757,11 @@ else
         if (_ligue is null) return "";
         var b = BaremePoints.DeLigue(_ligue);
 
-        var parts = new List<string>();
-        foreach (var p in b.Paliers)
-            parts.Add($"jusqu'au tour {p.JusquAuTour} : V {p.Victoire} · N {p.Nul} · D {p.Defaite}");
-        parts.Add(b.Paliers.Count > 0
-            ? $"au-delà : V {b.Victoire} · N {b.Nul} · D {b.Defaite}"
-            : $"V {b.Victoire} · N {b.Nul} · D {b.Defaite}");
+        // On lit dans l'ordre du match : les points de base d'abord, puis les
+        // paliers par seuil croissant — c'est la chronologie d'une rencontre.
+        var parts = new List<string> { $"V {b.Victoire} · N {b.Nul} · D {b.Defaite}" };
+        foreach (var p in b.Paliers.OrderBy(p => p.APartirDuTour))
+            parts.Add($"à partir du tour {p.APartirDuTour} : V {p.Victoire} · N {p.Nul} · D {p.Defaite}");
 
         var bonus = new List<string>();
         if (b.ParTouchdown > 0)    bonus.Add($"TD {b.ParTouchdown}");

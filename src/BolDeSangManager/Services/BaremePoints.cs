@@ -15,11 +15,16 @@ public readonly record struct ActionsEquipe(
     int Agressions);
 
 /// <summary>
-/// Palier de points selon le nombre de tours joués : « jusqu'au tour
-/// <paramref name="JusquAuTour"/> inclus, une victoire vaut <paramref name="Victoire"/>… ».
+/// Palier de points selon le nombre de tours joués : « <b>à partir du tour</b>
+/// <paramref name="APartirDuTour"/> inclus, une victoire vaut <paramref name="Victoire"/>… ».
+///
+/// Sens choisi par l'utilisateur : les points de BASE sont ceux du cas normal
+/// (le match se décide tôt), et un palier décrit la dégradation quand ça traîne
+/// — « normalement 3000, à partir du 13e tour 2000 ». L'inverse (« jusqu'au tour
+/// N ») avait été implémenté d'abord et se lisait à l'envers.
 /// </summary>
 public readonly record struct PalierPoints(
-    int JusquAuTour,
+    int APartirDuTour,
     int Victoire,
     int Nul,
     int Defaite);
@@ -38,7 +43,7 @@ public readonly record struct PalierPoints(
 /// </summary>
 public class BaremePoints
 {
-    /// <summary>Points de base d'une victoire (au-delà du dernier palier).</summary>
+    /// <summary>Points de base d'une victoire (avant le premier palier).</summary>
     public int Victoire { get; init; } = 3;
 
     /// <summary>Points de base d'un match nul.</summary>
@@ -55,9 +60,9 @@ public class BaremePoints
     public int ParAgression { get; init; } = 0;
 
     /// <summary>
-    /// Paliers de la ligue, éventuellement vides. Le premier palier (par ordre
-    /// croissant de <see cref="PalierPoints.JusquAuTour"/>) dont le seuil est
-    /// atteint ou dépassé par le nombre de tours du match s'applique.
+    /// Paliers de la ligue, éventuellement vides. C'est le palier au <b>plus grand
+    /// seuil atteint</b> par le nombre de tours du match qui s'applique ; en
+    /// dessous du plus petit seuil, ce sont les points de base.
     /// </summary>
     public IReadOnlyList<PalierPoints> Paliers { get; init; } = [];
 
@@ -103,8 +108,8 @@ public class BaremePoints
                 ParDeviation    = ligue.PointsParDeviation,
                 ParAgression    = ligue.PointsParAgression,
                 Paliers         = ligue.PaliersPoints
-                    .OrderBy(p => p.JusquAuTour)
-                    .Select(p => new PalierPoints(p.JusquAuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
+                    .OrderBy(p => p.APartirDuTour)
+                    .Select(p => new PalierPoints(p.APartirDuTour, p.PointsVictoire, p.PointsNul, p.PointsDefaite))
                     .ToList()
             };
 
@@ -145,6 +150,10 @@ public class BaremePoints
     /// <paramref name="tours"/> null (feuille saisie avant les paliers, ou ligue
     /// sans palier) ⇒ ce sont les points de BASE qui s'appliquent.
     /// </summary>
+    /// <example>
+    /// Barème de l'association : base 3000 / 1500 / 0, palier « à partir du tour
+    /// 13 » → 2000 / 1500 / 1000. Une victoire au 11e tour vaut 3000, au 13e 2000.
+    /// </example>
     public int PointsEquipe(int tdPour, int tdContre, int? tours, ActionsEquipe actions)
     {
         var (victoire, nul, defaite) = TripletApplicable(tours);
@@ -168,8 +177,11 @@ public class BaremePoints
         if (tours is not int t || Paliers.Count == 0)
             return (Victoire, Nul, Defaite);
 
-        foreach (var p in Paliers.OrderBy(p => p.JusquAuTour))
-            if (t <= p.JusquAuTour)
+        // Le palier au plus GRAND seuil atteint l'emporte : avec « à partir de 8 »
+        // et « à partir de 13 », un match en 14 tours relève du second.
+        // Décroissant + premier trouvé = ce comportement, sans cas particulier.
+        foreach (var p in Paliers.OrderByDescending(p => p.APartirDuTour))
+            if (t >= p.APartirDuTour)
                 return (p.Victoire, p.Nul, p.Defaite);
 
         return (Victoire, Nul, Defaite);

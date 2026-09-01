@@ -105,16 +105,20 @@ public class BaremePointsLigueTests : IDisposable
         await svc.SaisirFeuilleMatchAsync(matchId, feuille, records, CommissaireId);
     }
 
+    /// <summary>
+    /// Barème de l'association : la BASE est le cas normal (match décidé tôt),
+    /// le palier décrit la dégradation à partir du 13e tour.
+    /// </summary>
     private static BaremePoints BaremeReference() => new()
     {
-        Victoire = 2000, Nul = 1500, Defaite = 1000,
+        Victoire = 3000, Nul = 1500, Defaite = 0,
         ParTouchdown = 5, ParElimination = 2, ParInterception = 1,
         ParPasse = 1, ParDeviation = 1, ParAgression = 1
     };
 
     private static List<PalierPointsLigue> PalierReference() =>
     [
-        new() { JusquAuTour = 12, PointsVictoire = 3000, PointsNul = 1500, PointsDefaite = 0 }
+        new() { APartirDuTour = 13, PointsVictoire = 2000, PointsNul = 1500, PointsDefaite = 1000 }
     ];
 
     // ── 1. Non-régression : le défaut reproduit l'ancien calcul en dur ────────
@@ -182,10 +186,10 @@ public class BaremePointsLigueTests : IDisposable
             filExt = (await db.Teams.FindAsync(extId))!.PointsLigue;
         }
 
-        // Victoire avant le 13e = 3000, + 3 TD×5 + 2 élim×2 + 1 int + 4 passes
-        // + 2 déviations + 5 agressions = 3000 + 15 + 4 + 1 + 4 + 2 + 5 = 3031
+        // Victoire avant le 13e tour = 3000 (points de base), + 3 TD×5 + 2 élim×2
+        // + 1 int + 4 passes + 2 déviations + 5 agressions = 3000 + 31 = 3031
         Assert.Equal(3031, filDom);
-        // Défaite avant le 13e = 0, + 5 + 2 + 0 + 2 + 1 + 4 = 14
+        // Défaite avant le 13e tour = 0, + 5 + 2 + 0 + 2 + 1 + 4 = 14
         Assert.Equal(14, filExt);
 
         await using (var db = _factory.CreateContext())
@@ -243,10 +247,11 @@ public class BaremePointsLigueTests : IDisposable
 
         await using (var db = _factory.CreateContext())
         {
-            // 2000 (base) + 31 de bonus, et non 3000 + 31
-            Assert.Equal(2031, (await db.Teams.FindAsync(domId))!.PointsLigue);
-            // 1000 (défaite de base) + 14
-            Assert.Equal(1014, (await db.Teams.FindAsync(extId))!.PointsLigue);
+            // Points de BASE (3000) + 31 de bonus : sans nombre de tours, le
+            // palier « à partir du 13e » ne peut pas s'appliquer.
+            Assert.Equal(3031, (await db.Teams.FindAsync(domId))!.PointsLigue);
+            // Défaite de base = 0, + 14 de bonus
+            Assert.Equal(14, (await db.Teams.FindAsync(extId))!.PointsLigue);
         }
     }
 
@@ -291,8 +296,8 @@ public class BaremePointsLigueTests : IDisposable
         await using var db = _factory.CreateContext();
         List<PalierPointsLigue> doublon =
         [
-            new() { JusquAuTour = 12, PointsVictoire = 3000, PointsNul = 1500, PointsDefaite = 0 },
-            new() { JusquAuTour = 12, PointsVictoire = 100, PointsNul = 50, PointsDefaite = 0 }
+            new() { APartirDuTour = 12, PointsVictoire = 3000, PointsNul = 1500, PointsDefaite = 0 },
+            new() { APartirDuTour = 12, PointsVictoire = 100, PointsNul = 50, PointsDefaite = 0 }
         ];
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -328,7 +333,7 @@ public class BaremePointsLigueTests : IDisposable
             Assert.Equal(budgetAvant, l.BudgetDepart);
             Assert.Equal(xpTdAvant, l.XpParTouchdown);
             Assert.Equal(statutAvant, l.Statut);
-            Assert.Equal(2000, l.PointsVictoire);
+            Assert.Equal(3000, l.PointsVictoire);
         }
     }
 
@@ -344,14 +349,14 @@ public class BaremePointsLigueTests : IDisposable
         await using (var db = _factory.CreateContext())
             await CreateLeagueService(db).ModifierBaremePointsAsync(
                 ligueId, BaremeReference(),
-                [new PalierPointsLigue { JusquAuTour = 8, PointsVictoire = 5000, PointsNul = 2000, PointsDefaite = 0 }],
+                [new PalierPointsLigue { APartirDuTour = 8, PointsVictoire = 500, PointsNul = 200, PointsDefaite = 0 }],
                 CommissaireId);
 
         await using (var db = _factory.CreateContext())
         {
             var paliers = await db.PaliersPointsLigue.Where(p => p.LeagueId == ligueId).ToListAsync();
             Assert.Single(paliers);
-            Assert.Equal(8, paliers[0].JusquAuTour);
+            Assert.Equal(8, paliers[0].APartirDuTour);
         }
     }
 
