@@ -41,6 +41,8 @@ else
             {
                 <MudSwitch T="bool" Value="_vueCommissaire" ValueChanged="BasculerVue"
                            Color="Color.Primary" Size="Size.Small"
+                           ThumbIcon="@(_vueCommissaire ? Icons.Material.Filled.Shield : Icons.Material.Filled.Person)"
+                           ThumbIconColor="Color.Surface"
                            Label="@(_vueCommissaire ? "Vue commissaire" : "Vue coach")" />
             }
             @if (_estCommissaire)
@@ -120,12 +122,24 @@ else
                            OnClick="OuvrirBaremePoints">
                     Barème du classement
                 </MudButton>
+                @* Bouton et NON interrupteur : un second MudSwitch dans cette
+                   barre se confondait avec la bascule vue coach / vue commissaire
+                   juste à côté, alors que les deux n'ont rien à voir — celle-là
+                   ne change que MON affichage, celui-ci est un réglage de ligue
+                   qui s'applique à TOUS les coaches.
+                   ⚠️ title HTML et non MudTooltip : ce dernier casse le circuit
+                   Blazor en InteractiveServer. *@
                 @if (!DisplayHelpers.SansCalendrier(_ligue.Format))
                 {
-                    <MudTooltip Text="Les coaches ne voient que leur prochain match et les matchs déjà joués.">
-                        <MudSwitch T="bool" Value="_ligue.ModeBrouillard" ValueChanged="BasculerBrouillard"
-                                   Color="Color.Error" Size="Size.Small" Label="Mode brouillard" />
-                    </MudTooltip>
+                    <MudButton Variant="@(_ligue.ModeBrouillard ? Variant.Filled : Variant.Outlined)"
+                               Color="Color.Error" Size="Size.Small"
+                               StartIcon="@(_ligue.ModeBrouillard ? Icons.Material.Filled.VisibilityOff : Icons.Material.Filled.Visibility)"
+                               OnClick="@(() => BasculerBrouillard(!_ligue.ModeBrouillard))"
+                               title="@(_ligue.ModeBrouillard
+                                        ? "Actuellement ACTIF : les coaches ne voient que leur prochain match et les matchs déjà joués. Cliquez pour désactiver."
+                                        : "Actuellement inactif : tout le calendrier est visible des coaches. Cliquez pour activer.")">
+                        @(_ligue.ModeBrouillard ? "Brouillard actif" : "Brouillard")
+                    </MudButton>
                 }
             }
             @* Phase de repos : accessible aux COACHES, donc hors du bloc
