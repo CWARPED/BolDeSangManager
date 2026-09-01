@@ -330,6 +330,122 @@ public class AjoutJoueurFeuilleTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task GainsCorriges_SontAppliquesALaTresorerie()
+    {
+        // Les gains sont SAISIS, pas calculés : l'estimation ne connaît pas
+        // l'affluence. Les corriger doit reporter l'écart sur la trésorerie —
+        // l'ancienne valeur est d'abord déduite, la nouvelle ajoutée.
+        var (_, matchId, domId, _, jSaisi, _, jExt) = await SetupAsync();
+
+        await using (var db = _factory.CreateContext())
+            await CreateMatchService(db).SaisirFeuilleMatchAsync(matchId,
+                new MatchSheet
+                {
+                    MatchId = matchId, SaisiParId = CommissaireId,
+                    TouchdownsDomicile = 3, TouchdownsExterieur = 1,
+                    GainsDomicile = 70_000, GainsExterieur = 50_000
+                },
+                [
+                    new MatchPlayerRecord { TeamPlayerId = jSaisi, EstCoteDomicile = true, Touchdowns = 3 },
+                    new MatchPlayerRecord { TeamPlayerId = jExt, EstCoteDomicile = false, Touchdowns = 1 }
+                ],
+                CommissaireId);
+
+        int tresorerieApresSaisie;
+        await using (var db = _factory.CreateContext())
+            tresorerieApresSaisie = (await db.Teams.FindAsync(domId))!.Tresorerie;
+
+        // Le commissaire corrige : 70 000 → 120 000
+        await using (var db = _factory.CreateContext())
+            await CreateMatchService(db).ModifierFeuilleAsync(matchId,
+                new MatchSheet
+                {
+                    TouchdownsDomicile = 3, TouchdownsExterieur = 1,
+                    GainsDomicile = 120_000, GainsExterieur = 50_000
+                },
+                [
+                    new MatchPlayerRecord { TeamPlayerId = jSaisi, EstCoteDomicile = true, Touchdowns = 3 },
+                    new MatchPlayerRecord { TeamPlayerId = jExt, EstCoteDomicile = false, Touchdowns = 1 }
+                ]);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var f = await db.MatchSheets.FirstAsync(x => x.MatchId == matchId);
+            Assert.Equal(120_000, f.GainsDomicile);
+            Assert.Equal(50_000, f.GainsExterieur);
+
+            // +50 000 seulement, pas +120 000 : preuve que l'ancienne valeur a
+            // bien été déduite avant d'appliquer la nouvelle.
+            Assert.Equal(tresorerieApresSaisie + 50_000,
+                (await db.Teams.FindAsync(domId))!.Tresorerie);
+        }
+    }
+
+    // ── Le coach doit savoir que sa feuille a été corrigée ───────────────────
+
+    [Fact]
+    public async Task Correction_LaisseUneTraceEtRouvreLApresMatch()
+    {
+        // Une correction annule les choix d'après-match des DEUX coaches. Sans
+        // trace, le coach retrouve un écran vierge sans comprendre pourquoi.
+        var (_, matchId, _, _, jSaisi, jOublie, jExt) = await SetupAsync();
+        await SaisirFeuilleIncompleteAsync(matchId, jSaisi, jExt);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var f = await db.MatchSheets.FirstAsync(x => x.MatchId == matchId);
+            Assert.Null(f.CorrigeeLe);   // jamais corrigée à ce stade
+        }
+
+        await AjouterLeJoueurOublieAsync(matchId, jSaisi, jOublie, jExt, deviations: 2, agressions: 3);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var f = await db.MatchSheets.FirstAsync(x => x.MatchId == matchId);
+            Assert.NotNull(f.CorrigeeLe);
+            // L'ancien score est mémorisé pour être annoncé au coach.
+            Assert.Equal(3, f.ScoreAvantCorrectionDomicile);
+            Assert.Equal(1, f.ScoreAvantCorrectionExterieur);
+
+            // Et l'après-match est bien rouvert pour les deux.
+            Assert.False(f.ApresMatchDomicileValide);
+            Assert.False(f.ApresMatchExterieurValide);
+
+            var m = await db.Matches.FindAsync(matchId);
+            Assert.Equal(MatchStatus.ValidationCompetences, m!.Statut);
+        }
+    }
+
+    [Fact]
+    public async Task Correction_MemoriseLeScoreDAVANT_MemeSiLeScoreChange()
+    {
+        var (_, matchId, _, _, jSaisi, jOublie, jExt) = await SetupAsync();
+        await SaisirFeuilleIncompleteAsync(matchId, jSaisi, jExt);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var match = await db.Matches.Include(m => m.Feuille).FirstAsync(m => m.Id == matchId);
+            await CreateMatchService(db).ModifierFeuilleAsync(matchId,
+                new MatchSheet
+                {
+                    TouchdownsDomicile = 5, TouchdownsExterieur = 1,   // 3-1 → 5-1
+                    NombreDeTours = match.Feuille!.NombreDeTours
+                },
+                [
+                    new MatchPlayerRecord { TeamPlayerId = jSaisi, EstCoteDomicile = true, Touchdowns = 5 },
+                    new MatchPlayerRecord { TeamPlayerId = jExt, EstCoteDomicile = false, Touchdowns = 1 }
+                ]);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var f = await db.MatchSheets.FirstAsync(x => x.MatchId == matchId);
+            Assert.Equal(3, f.ScoreAvantCorrectionDomicile);   // l'ANCIEN
+            Assert.Equal(5, f.TouchdownsDomicile);             // le nouveau
+        }
+    }
+
     private class StubAuth : IAuthorizationService
     {
         public Task<bool> EstAdminAsync(string userId) => Task.FromResult(true);

@@ -25,6 +25,13 @@ else if (_equipe is null)
 }
 else if (DejaValide())
 {
+    @if (_match?.Feuille?.CorrigeeLe is DateTime corrigee)
+    {
+        <MudAlert Severity="Severity.Info" Class="mb-3" Icon="@Icons.Material.Filled.EditNote">
+            Feuille corrigée par un commissaire le
+            @corrigee.ToLocalTime().ToString("dd/MM/yyyy à HH'h'mm").
+        </MudAlert>
+    }
     <MudAlert Severity="Severity.Success" Icon="@Icons.Material.Filled.CheckCircle">
         Vous avez déjà validé votre après-match.
         @if (_match.Statut == MatchStatus.Termine)
@@ -40,6 +47,35 @@ else if (DejaValide())
 }
 else
 {
+@if (_match?.Feuille?.CorrigeeLe is DateTime corrigeeLe)
+        {
+            @* Le coach arrive souvent par la liste des matchs, sans avoir lu son
+               mail : sans ce bandeau, il retrouve un après-match vierge et croit
+               à un bug — ou refait des choix en ignorant que les premiers ont
+               été annulés. *@
+            <MudAlert Severity="Severity.Warning" Class="mb-4" Icon="@Icons.Material.Filled.EditNote">
+                <b>Cette feuille a été corrigée par un commissaire</b>
+                le @corrigeeLe.ToLocalTime().ToString("dd/MM/yyyy à HH'h'mm").
+                @if (ScoreAChange())
+                {
+                    <span>
+                        Le score est passé de
+                        <b>@_match.Feuille.ScoreAvantCorrectionDomicile – @_match.Feuille.ScoreAvantCorrectionExterieur</b>
+                        à
+                        <b>@_match.Feuille.TouchdownsDomicile – @_match.Feuille.TouchdownsExterieur</b>.
+                    </span>
+                }
+                <br />
+                Vos choix d'après-match précédents ont été <b>annulés</b> et l'XP dépensée
+                vous a été rendue : refaites vos améliorations et vos recrutements.
+                @if (!string.IsNullOrWhiteSpace(_match.Feuille.NotesCommissaire))
+                {
+                    <br />
+                    <span>Note du commissaire : <i>@_match.Feuille.NotesCommissaire</i></span>
+                }
+            </MudAlert>
+        }
+
     <MudText Typo="Typo.h5" Color="Color.Error" Class="mb-1"><b>Après-match</b></MudText>
     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-4">
         @DisplayHelpers.RondeLabelCourt(_match.Ronde) —
@@ -410,6 +446,12 @@ else
     /// On ne réagit qu'au seul changement qui rend l'écran caduc — le passage
     /// à « Terminé » — et on redirige alors vers le détail du match.
     /// </summary>
+    /// <summary>Le score a-t-il changé lors de la dernière correction ?</summary>
+    bool ScoreAChange() =>
+        _match?.Feuille is { } f
+        && (f.ScoreAvantCorrectionDomicile != f.TouchdownsDomicile
+         || f.ScoreAvantCorrectionExterieur != f.TouchdownsExterieur);
+
     private async Task SurMatchModifieAsync(int matchId)
     {
         if (matchId != Id) return;

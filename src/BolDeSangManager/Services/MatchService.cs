@@ -296,6 +296,58 @@ public class MatchService(
         }
     }
 
+    /// <summary>
+    /// Prévient les DEUX coaches qu'un commissaire a corrigé la feuille. Envoyé
+    /// même à celui dont rien n'a changé : la correction a annulé son après-match
+    /// à lui aussi.
+    /// </summary>
+    private async Task EnvoyerEmailCorrectionAsync(
+        Match match, int matchId, int ancienDom, int ancienExt, string notes)
+    {
+        try
+        {
+            var urlBase = (await settings.GetAsync(SettingsService.CleUrlExterne) ?? "").TrimEnd('/');
+            if (string.IsNullOrEmpty(urlBase)) return;
+
+            var dom = match.EquipeDomicile?.Nom ?? "";
+            var ext = match.EquipeExterieur?.Nom ?? "";
+            var lien = $"{urlBase}/matchs/{matchId}/apres-match";
+
+            var scoreChange = ancienDom != match.ScoreDomicile || ancienExt != match.ScoreExterieur;
+            var texteScore = scoreChange
+                ? $"Le score passe de <b>{ancienDom} – {ancienExt}</b> à <b>{match.ScoreDomicile} – {match.ScoreExterieur}</b>."
+                : $"Le score reste <b>{match.ScoreDomicile} – {match.ScoreExterieur}</b>, mais le détail de la feuille a changé.";
+
+            var texteNotes = string.IsNullOrWhiteSpace(notes)
+                ? ""
+                : $"<br/><br/>Note du commissaire : <i>{System.Net.WebUtility.HtmlEncode(notes)}</i>";
+
+            var coachIds = new[] { match.EquipeDomicile?.CoachId, match.EquipeExterieur?.CoachId }
+                .Where(id => id is not null).ToList();
+            var coaches = await db.Users.Where(u => coachIds.Contains(u.Id)).ToListAsync();
+
+            foreach (var coach in coaches)
+            {
+                if (coach.Email is null) continue;
+                await emailSender.EnvoyerNotificationMatchAsync(
+                    coach.Email,
+                    $"Feuille corrigée par le commissaire ({dom} vs {ext})",
+                    "Votre feuille de match a été corrigée",
+                    $"Un commissaire a corrigé la feuille du match <b>{dom}</b> contre <b>{ext}</b>. "
+                    + texteScore
+                    + "<br/><br/><b>Vos choix d'après-match ont été annulés</b> (améliorations, "
+                    + "recrutements) et l'XP dépensée vous a été rendue : vous devez refaire "
+                    + "votre après-match."
+                    + texteNotes,
+                    lien, "Refaire mon après-match");
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Envoi du mail de correction impossible (match id={MatchId})", matchId);
+        }
+    }
+
     private async Task EnvoyerEmailApresMatchAsync(Match match, int matchId, string? excludeCoachId = null)
     {
         try
@@ -828,6 +880,15 @@ public class MatchService(
         db.MatchPlayerRecords.RemoveRange(feuille.RecordsJoueurs);
         await db.SaveChangesAsync();
 
+        // Traçabilité de la correction, AVANT d'écraser l'ancien score : c'est ce
+        // qui permet de dire au coach « 2-1 est devenu 3-1 » et de lui expliquer
+        // pourquoi son après-match est à refaire.
+        var ancienScoreDom = feuille.TouchdownsDomicile;
+        var ancienScoreExt = feuille.TouchdownsExterieur;
+        feuille.CorrigeeLe = DateTime.UtcNow;
+        feuille.ScoreAvantCorrectionDomicile  = ancienScoreDom;
+        feuille.ScoreAvantCorrectionExterieur = ancienScoreExt;
+
         // Appliquer la nouvelle feuille
         feuille.TouchdownsDomicile    = feuilleModifiee.TouchdownsDomicile;
         feuille.TouchdownsExterieur   = feuilleModifiee.TouchdownsExterieur;
@@ -863,7 +924,11 @@ public class MatchService(
         feuille.ApresMatchExterieurValide = false;
         await db.SaveChangesAsync();
 
-        await EnvoyerEmailApresMatchAsync(match, matchId);
+        // Mail DÉDIÉ : « Match confirmé » aurait été trompeur pour un coach qui
+        // avait déjà tout validé — il ne comprendrait ni pourquoi recommencer,
+        // ni ce qui a changé.
+        await EnvoyerEmailCorrectionAsync(match, matchId, ancienScoreDom, ancienScoreExt,
+                                          feuille.NotesCommissaire);
         logger.LogInformation("Feuille match id={MatchId} modifiée par commissaire", matchId);
         await NotifierMatchAsync(matchId);
     }

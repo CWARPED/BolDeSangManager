@@ -159,13 +159,21 @@ else
             <MudGrid>
                 <MudItem xs="12" sm="6">
                     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-1">@_match.EquipeDomicile?.Nom</MudText>
-                    <MudText>TDs : <b>@_editTdDom</b> | Gains : <b>@_editGainsDom.ToString("N0") po</b></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                        TDs : <b>@_editTdDom</b> — estimation : @_estimGainsDom.ToString("N0") po
+                    </MudText>
+                    <MudNumericField @bind-Value="_editGainsDom" Label="Gains (po)"
+                                     Variant="Variant.Outlined" Class="mt-1" Min="0" Max="1000000" />
                     <MudNumericField @bind-Value="_editVarFansDom" Label="Variation fans dévoués"
                                      Variant="Variant.Outlined" Class="mt-2" Min="-3" Max="3" />
                 </MudItem>
                 <MudItem xs="12" sm="6">
                     <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mb-1">@_match.EquipeExterieur?.Nom</MudText>
-                    <MudText>TDs : <b>@_editTdExt</b> | Gains : <b>@_editGainsExt.ToString("N0") po</b></MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+                        TDs : <b>@_editTdExt</b> — estimation : @_estimGainsExt.ToString("N0") po
+                    </MudText>
+                    <MudNumericField @bind-Value="_editGainsExt" Label="Gains (po)"
+                                     Variant="Variant.Outlined" Class="mt-1" Min="0" Max="1000000" />
                     <MudNumericField @bind-Value="_editVarFansExt" Label="Variation fans dévoués"
                                      Variant="Variant.Outlined" Class="mt-2" Min="-3" Max="3" />
                 </MudItem>
@@ -302,6 +310,14 @@ else
     List<PlayerEditData> _editExterieur = [];
     int? _mvpDomId;
     int? _mvpExtId;
+    /// <summary>
+    /// Gains RÉELLEMENT enregistrés, saisis à la main — comme sur la feuille
+    /// initiale. `CalculerGains` ne fournit qu'une estimation affichée à côté :
+    /// la recette dépend de l'affluence, que l'application ne connaît pas.
+    /// </summary>
+    int _editGainsDom;
+    int _editGainsExt;
+
     int _editVarFansDom;
     int _editVarFansExt;
     string _editNotes = "";
@@ -324,9 +340,9 @@ else
 
     int _editTdDom    => _editDomicile.Sum(r => r.Touchdowns);
     int _editTdExt    => _editExterieur.Sum(r => r.Touchdowns);
-    int _editGainsDom => MatchService.CalculerGains(_editTdDom, _editTdExt,
+    int _estimGainsDom => MatchService.CalculerGains(_editTdDom, _editTdExt,
         _match?.EquipeDomicile?.FansDevoues ?? 0, _match?.EquipeExterieur?.FansDevoues ?? 0).gainsDomicile;
-    int _editGainsExt => MatchService.CalculerGains(_editTdDom, _editTdExt,
+    int _estimGainsExt => MatchService.CalculerGains(_editTdDom, _editTdExt,
         _match?.EquipeDomicile?.FansDevoues ?? 0, _match?.EquipeExterieur?.FansDevoues ?? 0).gainsExterieur;
 
     protected override async Task OnInitializedAsync()
@@ -420,6 +436,8 @@ else
 
         _mvpDomId = records.FirstOrDefault(r =>  r.EstCoteDomicile && r.EstMVP)?.TeamPlayerId;
         _mvpExtId = records.FirstOrDefault(r => !r.EstCoteDomicile && r.EstMVP)?.TeamPlayerId;
+        _editGainsDom = _match.Feuille.GainsDomicile;
+        _editGainsExt = _match.Feuille.GainsExterieur;
         _editVarFansDom = _match.Feuille.VariationFansDomicile;
         _editVarFansExt = _match.Feuille.VariationFansExterieur;
         _editNotes = _match.Feuille.NotesCommissaire ?? "";

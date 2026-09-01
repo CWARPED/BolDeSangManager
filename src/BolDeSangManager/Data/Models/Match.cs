@@ -81,6 +81,22 @@ public class MatchSheet
     /// </summary>
     public int? NombreDeTours { get; set; }
 
+    /// <summary>
+    /// Date de la dernière correction de cette feuille par un commissaire, en UTC.
+    /// Null = jamais corrigée.
+    ///
+    /// Une correction ANNULE les choix d'après-match déjà faits par les deux
+    /// coaches (améliorations, XP dépensée, blessures) et les oblige à
+    /// recommencer. Sans cette trace, le coach reçoit un écran d'après-match
+    /// vierge sans comprendre pourquoi son travail a disparu : c'est elle qui
+    /// alimente le bandeau d'avertissement de l'écran d'après-match.
+    /// </summary>
+    public DateTime? CorrigeeLe { get; set; }
+
+    /// <summary>Score AVANT la dernière correction, pour l'annoncer au coach.</summary>
+    public int? ScoreAvantCorrectionDomicile { get; set; }
+    public int? ScoreAvantCorrectionExterieur { get; set; }
+
     // Inducements pré-match (JSON simple: {"entrainement": 2, "potDeVin": 1})
     public string InducementsDomicile { get; set; } = "{}";
     public string InducementsExterieur { get; set; } = "{}";
