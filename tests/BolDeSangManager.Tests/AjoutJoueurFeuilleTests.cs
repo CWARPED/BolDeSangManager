@@ -293,6 +293,43 @@ public class AjoutJoueurFeuilleTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task XpForceeALaMain_EstPersisteeTelleQuelle()
+    {
+        // Le barème n'est qu'une PROPOSITION : la valeur affichée dans le champ XP
+        // est celle qui compte, même si elle diverge (correction d'arbitrage).
+        var (_, matchId, _, _, jSaisi, jOublie, jExt) = await SetupAsync();
+        await SaisirFeuilleIncompleteAsync(matchId, jSaisi, jExt);
+
+        await using (var db = _factory.CreateContext())
+        {
+            var match = await db.Matches.Include(m => m.Feuille).FirstAsync(m => m.Id == matchId);
+            await CreateMatchService(db).ModifierFeuilleAsync(matchId,
+                new MatchSheet
+                {
+                    TouchdownsDomicile = 3, TouchdownsExterieur = 1,
+                    NombreDeTours = match.Feuille!.NombreDeTours
+                },
+                [
+                    new MatchPlayerRecord { TeamPlayerId = jSaisi, EstCoteDomicile = true, Touchdowns = 3 },
+                    // 1 TD vaudrait 3 XP au barème : le commissaire force 25.
+                    new MatchPlayerRecord
+                    {
+                        TeamPlayerId = jOublie, EstCoteDomicile = true,
+                        Touchdowns = 1, PspGagnes = 25
+                    },
+                    new MatchPlayerRecord { TeamPlayerId = jExt, EstCoteDomicile = false, Touchdowns = 1 }
+                ]);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            var f = await db.MatchSheets.Include(x => x.RecordsJoueurs).FirstAsync(x => x.MatchId == matchId);
+            Assert.Equal(25, f.RecordsJoueurs.Single(r => r.TeamPlayerId == jOublie).PspGagnes);
+            Assert.Equal(25, (await db.TeamPlayers.FindAsync(jOublie))!.PointsStarPlayer);
+        }
+    }
+
     private class StubAuth : IAuthorizationService
     {
         public Task<bool> EstAdminAsync(string userId) => Task.FromResult(true);
