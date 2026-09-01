@@ -29,10 +29,16 @@
                 <MudCard Elevation="2">
                     <MudCardHeader>
                         <CardHeaderContent>
-                            <MudText Typo="Typo.h6">
-                                <MudIcon Icon="@Icons.Material.Filled.SportsSoccer" Class="mr-2" />
-                                Mes Matchs
-                            </MudText>
+                            @* Le titre est lui-même le lien vers /matchs (issue #14) : l'icône
+                               OpenInNew rend l'affordance visible sans survol, donc utilisable
+                               au doigt sur téléphone. *@
+                            <MudLink Href="/matchs" Color="Color.Inherit" Underline="Underline.None">
+                                <MudText Typo="Typo.h6">
+                                    <MudIcon Icon="@Icons.Material.Filled.SportsSoccer" Class="mr-2" />
+                                    Mes Matchs
+                                    <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="ml-1" />
+                                </MudText>
+                            </MudLink>
                         </CardHeaderContent>
                     </MudCardHeader>
                     <MudCardContent>
