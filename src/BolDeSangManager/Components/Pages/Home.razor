@@ -29,17 +29,21 @@
                 <MudCard Elevation="2">
                     <MudCardHeader>
                         <CardHeaderContent>
-                            @* Le titre est lui-même le lien vers /matchs (issue #14) : l'icône
-                               OpenInNew rend l'affordance visible sans survol, donc utilisable
-                               au doigt sur téléphone. *@
+                            @* Le titre est lui-même un lien vers /matchs (issue #14). Le bouton
+                               OpenInNew à droite reprend à l'identique le motif de la carte
+                               « Ligues en cours » : même affordance sur toutes les cartes de
+                               l'accueil qui mènent à un écran complet. *@
                             <MudLink Href="/matchs" Color="Color.Inherit" Underline="Underline.None">
                                 <MudText Typo="Typo.h6">
                                     <MudIcon Icon="@Icons.Material.Filled.SportsSoccer" Class="mr-2" />
                                     Mes Matchs
-                                    <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" Class="ml-1" />
                                 </MudText>
                             </MudLink>
                         </CardHeaderContent>
+                        <CardHeaderActions>
+                            <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
+                                          Color="Color.Primary" Href="/matchs" />
+                        </CardHeaderActions>
                     </MudCardHeader>
                     <MudCardContent>
                         @if (_mesMatchs is null)
@@ -77,10 +81,13 @@
                 <MudCard Elevation="2">
                     <MudCardHeader>
                         <CardHeaderContent>
-                            <MudText Typo="Typo.h6">
-                                <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" />
-                                Ligues en cours
-                            </MudText>
+                            @* Symétrique de « Mes Matchs » : titre cliquable + bouton à droite. *@
+                            <MudLink Href="/ligues" Color="Color.Inherit" Underline="Underline.None">
+                                <MudText Typo="Typo.h6">
+                                    <MudIcon Icon="@Icons.Material.Filled.EmojiEvents" Class="mr-2" />
+                                    Ligues en cours
+                                </MudText>
+                            </MudLink>
                         </CardHeaderContent>
                         <CardHeaderActions>
                             <MudIconButton Icon="@Icons.Material.Filled.OpenInNew"
