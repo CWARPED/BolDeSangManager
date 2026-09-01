@@ -1,0 +1,52 @@
+@*
+    Sélecteur « Ajouter un joueur… » + bouton d'ajout, partagé par les deux
+    écrans qui composent une feuille de match :
+
+      • Matchs/Feuille.razor — saisie initiale par un coach ;
+      • Matchs/Detail.razor  — correction par un commissaire.
+
+    Extrait en composant parce que le second en était DÉPOURVU : un joueur oublié
+    à la saisie était impossible à rajouter après coup, et ses actions (TD,
+    éliminations, déviations, agressions) ne pouvaient donc jamais entrer dans le
+    classement ni dans son XP.
+*@
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-3">
+    <MudSelect T="JoueurDisponible?" @bind-Value="_selection" Label="Ajouter un joueur…"
+               Variant="Variant.Outlined" Margin="Margin.Dense"
+               Style="flex:1" Disabled="@(Disponibles.Count == 0)">
+        @foreach (var p in Disponibles)
+        {
+            <MudSelectItem T="JoueurDisponible?" Value="@p">#@p.Numero @p.Nom</MudSelectItem>
+        }
+    </MudSelect>
+    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
+                   Variant="Variant.Filled" Size="Size.Medium"
+                   Disabled="@(_selection is null)"
+                   OnClick="Ajouter" title="Ajouter" />
+</MudStack>
+
+@code {
+    /// <summary>Joueurs de l'équipe pas encore présents sur la feuille, triés par numéro.</summary>
+    [Parameter, EditorRequired] public List<JoueurDisponible> Disponibles { get; set; } = [];
+
+    /// <summary>Appelé avec le joueur choisi. À l'appelant d'ajouter sa ligne.</summary>
+    [Parameter] public EventCallback<JoueurDisponible> OnAjouter { get; set; }
+
+    JoueurDisponible? _selection;
+
+    async Task Ajouter()
+    {
+        if (_selection is null) return;
+        var choisi = _selection;
+        _selection = null;               // vider AVANT, sinon le select garde une
+                                         // entrée qui n'existe plus dans la liste
+        await OnAjouter.InvokeAsync(choisi);
+    }
+
+    /// <summary>
+    /// Joueur proposable. Un <c>record</c> : l'égalité par valeur est ce qui permet
+    /// au MudSelect de retrouver l'élément sélectionné après un re-rendu.
+    /// </summary>
+    public sealed record JoueurDisponible(int Id, int Numero, string Nom, string Position);
+}

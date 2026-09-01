@@ -182,21 +182,9 @@ else
                     <MudText Typo="Typo.subtitle1"><b>@_match.EquipeDomicile?.Nom</b></MudText>
                 </div>
 
-                <!-- Sélecteur joueur domicile -->
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-3">
-                    <MudSelect T="PlayerInfo?" @bind-Value="_selDomicile" Label="Ajouter un joueur…"
-                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                               Style="flex:1" Disabled="@(!_availableDomicile.Any())">
-                        @foreach (var p in _availableDomicile)
-                        {
-                            <MudSelectItem T="PlayerInfo?" Value="@p">#@p.Numero @p.Nom</MudSelectItem>
-                        }
-                    </MudSelect>
-                    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
-                                   Variant="Variant.Filled" Size="Size.Medium"
-                                   Disabled="@(_selDomicile is null)"
-                                   OnClick="AjouterDomicile" title="Ajouter" />
-                </MudStack>
+                <!-- Sélecteur joueur domicile (composant partagé avec l'édition commissaire) -->
+                <SelecteurJoueurMatch Disponibles="_availableDomicile"
+                                      OnAjouter="AjouterDomicile" />
 
                 @foreach (var r in _recordsDomicile)
                 {
@@ -254,21 +242,9 @@ else
                     <MudText Typo="Typo.subtitle1"><b>@_match.EquipeExterieur?.Nom</b></MudText>
                 </div>
 
-                <!-- Sélecteur joueur extérieur -->
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mb-3">
-                    <MudSelect T="PlayerInfo?" @bind-Value="_selExterieur" Label="Ajouter un joueur…"
-                               Variant="Variant.Outlined" Margin="Margin.Dense"
-                               Style="flex:1" Disabled="@(!_availableExterieur.Any())">
-                        @foreach (var p in _availableExterieur)
-                        {
-                            <MudSelectItem T="PlayerInfo?" Value="@p">#@p.Numero @p.Nom</MudSelectItem>
-                        }
-                    </MudSelect>
-                    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary"
-                                   Variant="Variant.Filled" Size="Size.Medium"
-                                   Disabled="@(_selExterieur is null)"
-                                   OnClick="AjouterExterieur" title="Ajouter" />
-                </MudStack>
+                <!-- Sélecteur joueur extérieur (composant partagé) -->
+                <SelecteurJoueurMatch Disponibles="_availableExterieur"
+                                      OnAjouter="AjouterExterieur" />
 
                 @foreach (var r in _recordsExterieur)
                 {
@@ -369,13 +345,10 @@ else
     Team? _equipeDomicile;
     Team? _equipeExterieur;
 
-    List<PlayerInfo> _availableDomicile  = [];
-    List<PlayerInfo> _availableExterieur = [];
+    List<SelecteurJoueurMatch.JoueurDisponible> _availableDomicile  = [];
+    List<SelecteurJoueurMatch.JoueurDisponible> _availableExterieur = [];
     List<PlayerMatchData> _recordsDomicile  = [];
     List<PlayerMatchData> _recordsExterieur = [];
-
-    PlayerInfo? _selDomicile;
-    PlayerInfo? _selExterieur;
 
     int _varFansDom;
     int _varFansExt;
@@ -397,45 +370,39 @@ else
 
     // ─── Sélection / retrait joueurs ─────────────────────────────────────────
 
-    void AjouterDomicile()
+    void AjouterDomicile(SelecteurJoueurMatch.JoueurDisponible p)
     {
-        if (_selDomicile is null) return;
-        var p = _selDomicile;
         _availableDomicile.Remove(p);
         _recordsDomicile.Add(new PlayerMatchData
         {
             TeamPlayerId = p.Id, Numero = p.Numero,
             NomJoueur = p.Nom, PositionNom = p.Position, EstCoteDomicile = true
         });
-        _selDomicile = null;
     }
 
     void RetirerDomicile(PlayerMatchData r)
     {
         _recordsDomicile.Remove(r);
         _blessuresOuvertes.Remove(r.TeamPlayerId);
-        _availableDomicile.Add(new PlayerInfo(r.TeamPlayerId, r.Numero, r.NomJoueur, r.PositionNom));
+        _availableDomicile.Add(new SelecteurJoueurMatch.JoueurDisponible(r.TeamPlayerId, r.Numero, r.NomJoueur, r.PositionNom));
         _availableDomicile = [.. _availableDomicile.OrderBy(p => p.Numero)];
     }
 
-    void AjouterExterieur()
+    void AjouterExterieur(SelecteurJoueurMatch.JoueurDisponible p)
     {
-        if (_selExterieur is null) return;
-        var p = _selExterieur;
         _availableExterieur.Remove(p);
         _recordsExterieur.Add(new PlayerMatchData
         {
             TeamPlayerId = p.Id, Numero = p.Numero,
             NomJoueur = p.Nom, PositionNom = p.Position, EstCoteDomicile = false
         });
-        _selExterieur = null;
     }
 
     void RetirerExterieur(PlayerMatchData r)
     {
         _recordsExterieur.Remove(r);
         _blessuresOuvertes.Remove(r.TeamPlayerId);
-        _availableExterieur.Add(new PlayerInfo(r.TeamPlayerId, r.Numero, r.NomJoueur, r.PositionNom));
+        _availableExterieur.Add(new SelecteurJoueurMatch.JoueurDisponible(r.TeamPlayerId, r.Numero, r.NomJoueur, r.PositionNom));
         _availableExterieur = [.. _availableExterieur.OrderBy(p => p.Numero)];
     }
 
@@ -596,14 +563,14 @@ else
             _availableDomicile = _equipeDomicile.Joueurs
                 .Where(j => !j.EstMort && !j.EstRetraite)
                 .OrderBy(j => j.Numero)
-                .Select(j => new PlayerInfo(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
+                .Select(j => new SelecteurJoueurMatch.JoueurDisponible(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
                 .ToList();
 
         if (_equipeExterieur is not null)
             _availableExterieur = _equipeExterieur.Joueurs
                 .Where(j => !j.EstMort && !j.EstRetraite)
                 .OrderBy(j => j.Numero)
-                .Select(j => new PlayerInfo(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
+                .Select(j => new SelecteurJoueurMatch.JoueurDisponible(j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))
                 .ToList();
     }
 
@@ -711,9 +678,7 @@ else
 
     // ─── Modèles locaux ───────────────────────────────────────────────────────
 
-    sealed record PlayerInfo(int Id, int Numero, string Nom, string Position);
-
-    sealed class PlayerMatchData
+        sealed class PlayerMatchData
     {
         public int           TeamPlayerId          { get; set; }
         public int           Numero                { get; set; }

@@ -2,6 +2,7 @@
 @rendermode InteractiveServer
 @attribute [Authorize]
 @inject MatchService MatchService
+@inject TeamService TeamService
 @inject AuthenticationStateProvider AuthProvider
 @inject BolDeSangManager.Services.IAuthorizationService Auth
 @inject ISnackbar Snackbar
@@ -103,6 +104,8 @@ else
             <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" Class="mr-1"/>
             <b>@_match.EquipeDomicile?.Nom</b>
         </MudText>
+        <SelecteurJoueurMatch Disponibles="_dispoDomicile" OnAjouter="AjouterDomicile" />
+
         <div style="overflow-x:auto" class="mb-4">
             <MudTable Items="@_editDomicile" Dense="true" Elevation="1">
                 <HeaderContent>
@@ -116,6 +119,7 @@ else
                     <MudTh Style="text-align:center;min-width:50px">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="min-width:160px">Blessure</MudTh>
                     <MudTh Style="min-width:120px">Stat</MudTh>
+                    <MudTh Style="width:48px"></MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
                     <MudTd DataLabel="N°">@r.Numero</MudTd>
@@ -151,6 +155,11 @@ else
                             </MudSelect>
                         }
                     </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       Color="Color.Error" title="Retirer ce joueur de la feuille"
+                                       OnClick="@(() => RetirerLigne(r))" />
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         </div>
@@ -160,6 +169,8 @@ else
             <MudIcon Icon="@Icons.Material.Filled.DirectionsBus" Size="Size.Small" Class="mr-1"/>
             <b>@_match.EquipeExterieur?.Nom</b>
         </MudText>
+        <SelecteurJoueurMatch Disponibles="_dispoExterieur" OnAjouter="AjouterExterieur" />
+
         <div style="overflow-x:auto" class="mb-4">
             <MudTable Items="@_editExterieur" Dense="true" Elevation="1">
                 <HeaderContent>
@@ -173,6 +184,7 @@ else
                     <MudTh Style="text-align:center;min-width:50px">@DisplayHelpers.LabelMvp</MudTh>
                     <MudTh Style="min-width:160px">Blessure</MudTh>
                     <MudTh Style="min-width:120px">Stat</MudTh>
+                    <MudTh Style="width:48px"></MudTh>
                 </HeaderContent>
                 <RowTemplate Context="r">
                     <MudTd DataLabel="N°">@r.Numero</MudTd>
@@ -207,6 +219,11 @@ else
                                 <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
                             </MudSelect>
                         }
+                    </MudTd>
+                    <MudTd>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       Color="Color.Error" title="Retirer ce joueur de la feuille"
+                                       OnClick="@(() => RetirerLigne(r))" />
                     </MudTd>
                 </RowTemplate>
             </MudTable>
@@ -366,6 +383,15 @@ else
     string _editNotes = "";
     int? _editNombreDeTours;
 
+    /// <summary>
+    /// Joueurs de chaque équipe pas encore présents sur la feuille. Alimente le
+    /// sélecteur d'ajout : un joueur oublié à la saisie doit pouvoir être ajouté
+    /// après coup, sinon ses actions n'entrent jamais ni dans son XP ni dans le
+    /// classement.
+    /// </summary>
+    List<SelecteurJoueurMatch.JoueurDisponible> _dispoDomicile = [];
+    List<SelecteurJoueurMatch.JoueurDisponible> _dispoExterieur = [];
+
     /// <summary>Barème d'XP de la ligue, pour l'aide de saisie (valeurs configurables).</summary>
     XpBareme _baremeXp = XpBareme.ParDefaut(GameType.BloodBowl);
 
@@ -449,13 +475,13 @@ else
 
     public void Dispose() => Notifications.MatchModifie -= SurMatchModifieAsync;
 
-    void ToggleEdition()
+    async Task ToggleEdition()
     {
         _modeEdition = !_modeEdition;
-        if (_modeEdition) InitEdition();
+        if (_modeEdition) await InitEditionAsync();
     }
 
-    void InitEdition()
+    async Task InitEditionAsync()
     {
         if (_match?.Feuille is null) return;
         var records = _match.Feuille.RecordsJoueurs.ToList();
@@ -474,6 +500,26 @@ else
         _editVarFansExt = _match.Feuille.VariationFansExterieur;
         _editNotes = _match.Feuille.NotesCommissaire ?? "";
         _editNombreDeTours = _match.Feuille.NombreDeTours;
+
+        // Joueurs proposables à l'ajout : le roster MOINS ceux déjà sur la
+        // feuille. Les morts et retraités sont exclus, comme à la saisie.
+        _dispoDomicile  = await ChargerDisponiblesAsync(_match.EquipeDomicileId,  _editDomicile);
+        _dispoExterieur = await ChargerDisponiblesAsync(_match.EquipeExterieurId, _editExterieur);
+    }
+
+    async Task<List<SelecteurJoueurMatch.JoueurDisponible>> ChargerDisponiblesAsync(
+        int equipeId, List<PlayerEditData> dejaPresents)
+    {
+        var equipe = await TeamService.GetEquipeAsync(equipeId);
+        if (equipe is null) return [];
+
+        var presents = dejaPresents.Select(r => r.TeamPlayerId).ToHashSet();
+
+        return [.. equipe.Joueurs
+            .Where(j => !j.EstMort && !j.EstRetraite && !presents.Contains(j.Id))
+            .OrderBy(j => j.Numero)
+            .Select(j => new SelecteurJoueurMatch.JoueurDisponible(
+                j.Id, j.Numero, j.Nom, j.PlayerPosition?.Nom ?? ""))];
     }
 
     static PlayerEditData ToEditData(MatchPlayerRecord r) => new()
@@ -491,6 +537,51 @@ else
         Blessure              = r.Blessure,
         StatAffectee          = r.StatAffectee,
     };
+
+    void AjouterDomicile(SelecteurJoueurMatch.JoueurDisponible p)
+    {
+        _dispoDomicile.Remove(p);
+        _editDomicile.Add(new PlayerEditData
+        {
+            TeamPlayerId = p.Id, Numero = p.Numero,
+            NomJoueur = p.Nom, EstCoteDomicile = true
+        });
+        _editDomicile = [.. _editDomicile.OrderBy(r => r.Numero)];
+    }
+
+    void AjouterExterieur(SelecteurJoueurMatch.JoueurDisponible p)
+    {
+        _dispoExterieur.Remove(p);
+        _editExterieur.Add(new PlayerEditData
+        {
+            TeamPlayerId = p.Id, Numero = p.Numero,
+            NomJoueur = p.Nom, EstCoteDomicile = false
+        });
+        _editExterieur = [.. _editExterieur.OrderBy(r => r.Numero)];
+    }
+
+    /// <summary>
+    /// Retire une ligne de la feuille et rend le joueur au sélecteur. Le service
+    /// supprime puis réécrit toutes les lignes : une ligne retirée ici disparaît
+    /// donc réellement, avec son XP et sa blessure.
+    /// </summary>
+    void RetirerLigne(PlayerEditData r)
+    {
+        var joueur = new SelecteurJoueurMatch.JoueurDisponible(r.TeamPlayerId, r.Numero, r.NomJoueur, "");
+
+        if (r.EstCoteDomicile)
+        {
+            _editDomicile.Remove(r);
+            if (_mvpDomId == r.TeamPlayerId) _mvpDomId = null;
+            _dispoDomicile = [.. _dispoDomicile.Append(joueur).OrderBy(p => p.Numero)];
+        }
+        else
+        {
+            _editExterieur.Remove(r);
+            if (_mvpExtId == r.TeamPlayerId) _mvpExtId = null;
+            _dispoExterieur = [.. _dispoExterieur.Append(joueur).OrderBy(p => p.Numero)];
+        }
+    }
 
     async Task SauvegarderEdition()
     {
