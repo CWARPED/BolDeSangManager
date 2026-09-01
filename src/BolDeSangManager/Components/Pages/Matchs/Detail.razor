@@ -12,6 +12,14 @@
 
 <PageTitle>Résultat du match — BolDeSang Manager</PageTitle>
 
+<style>
+    /* Mêmes cartes de saisie que Matchs/Feuille.razor : deux colonnes au doigt,
+       quatre sur grand écran. */
+    .stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px }
+    @@media (min-width:960px) { .stat-grid { grid-template-columns:repeat(3,1fr) } }
+    .stat-block { text-align:center; background:rgba(255,255,255,0.04); border-radius:8px; padding:8px 4px }
+</style>
+
 @if (_match is null)
 {
     <MudProgressLinear Color="Color.Error" Indeterminate="true" />
@@ -99,135 +107,51 @@ else
             PSP : TD=@_baremeXp.ParTouchdown pts | Passe=@_baremeXp.ParPasse pt | Interception=@_baremeXp.ParInterception pts | Élimination=@_baremeXp.ParElimination pts@(_baremeXp.ParDeviation > 0 ? $" | Déviation={_baremeXp.ParDeviation} pts" : "")@(_baremeXp.ParAgression > 0 ? $" | Agression={_baremeXp.ParAgression} pts" : "") | @DisplayHelpers.LabelMvp=@_baremeXp.BonusMvp pts
         </MudText>
 
-        <!-- Table domicile -->
+        @*
+            Cartes à steppers, identiques à la saisie initiale (Matchs/Feuille.razor).
+            Une MudTable était illisible ici : 11 colonnes ne tiennent pas sur un
+            écran de téléphone, et le nom du joueur s'affichait lettre par lettre
+            en vertical. Le même rendu aux deux endroits évite au commissaire de
+            réapprendre un écran.
+        *@
+
+        <!-- ─── Équipe domicile ─── -->
         <MudText Typo="Typo.subtitle1" Class="mb-2">
             <MudIcon Icon="@Icons.Material.Filled.Home" Size="Size.Small" Class="mr-1"/>
             <b>@_match.EquipeDomicile?.Nom</b>
         </MudText>
         <SelecteurJoueurMatch Disponibles="_dispoDomicile" OnAjouter="AjouterDomicile" />
 
-        <div style="overflow-x:auto" class="mb-4">
-            <MudTable Items="@_editDomicile" Dense="true" Elevation="1">
-                <HeaderContent>
-                    <MudTh>#</MudTh><MudTh>Joueur</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">TDs</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Passes</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Int</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Élim</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Dév</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Agr</MudTh>
-                    <MudTh Style="text-align:center;min-width:50px">@DisplayHelpers.LabelMvp</MudTh>
-                    <MudTh Style="min-width:160px">Blessure</MudTh>
-                    <MudTh Style="min-width:120px">Stat</MudTh>
-                    <MudTh Style="width:48px"></MudTh>
-                </HeaderContent>
-                <RowTemplate Context="r">
-                    <MudTd DataLabel="N°">@r.Numero</MudTd>
-                    <MudTd DataLabel="Joueur"><b>@r.NomJoueur</b></MudTd>
-                    <MudTd DataLabel="TDs"><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Passes"><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Interceptions"><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Éliminations"><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Déviations"><MudNumericField @bind-Value="r.Deviations" Min="0" Max="32" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Agressions"><MudNumericField @bind-Value="r.Agressions" Min="0" Max="32" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">
-                        <MudCheckBox Value="@(r.TeamPlayerId == _mvpDomId)" Color="Color.Warning"
-                                     ValueChanged="@((bool v) => { if (v) _mvpDomId = r.TeamPlayerId; else if (_mvpDomId == r.TeamPlayerId) _mvpDomId = null; })" />
-                    </MudTd>
-                    <MudTd DataLabel="Blessure">
-                        <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Text" Style="min-width:150px">
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">—</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate prochain match</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.BlessurePersistante)">Blessure persistante</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.RetraiteTemporaire)">Retraite temporaire</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort</MudSelectItem>
-                        </MudSelect>
-                    </MudTd>
-                    <MudTd DataLabel="Caractéristique">
-                        @if (r.Blessure == InjuryType.BlessurePersistante)
-                        {
-                            <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Variant="Variant.Text" Style="min-width:110px">
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Mouvement)">Mouvement</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Force)">Force</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Agilite)">Agilité</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.CapacitePasse)">CP</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
-                            </MudSelect>
-                        }
-                    </MudTd>
-                    <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                       Color="Color.Error" title="Retirer ce joueur de la feuille"
-                                       OnClick="@(() => RetirerLigne(r))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </div>
+        @foreach (var r in _editDomicile)
+        {
+            @CarteJoueur(r, true)
+        }
+        @if (_editDomicile.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4 d-block"
+                     Style="opacity:0.6;font-style:italic">
+                Aucun joueur sur la feuille — ajoutez ceux qui ont des stats à saisir.
+            </MudText>
+        }
 
-        <!-- Table extérieur -->
-        <MudText Typo="Typo.subtitle1" Class="mb-2">
+        <!-- ─── Équipe extérieure ─── -->
+        <MudText Typo="Typo.subtitle1" Class="mb-2 mt-4">
             <MudIcon Icon="@Icons.Material.Filled.DirectionsBus" Size="Size.Small" Class="mr-1"/>
             <b>@_match.EquipeExterieur?.Nom</b>
         </MudText>
         <SelecteurJoueurMatch Disponibles="_dispoExterieur" OnAjouter="AjouterExterieur" />
 
-        <div style="overflow-x:auto" class="mb-4">
-            <MudTable Items="@_editExterieur" Dense="true" Elevation="1">
-                <HeaderContent>
-                    <MudTh>#</MudTh><MudTh>Joueur</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">TDs</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Passes</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Int</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Élim</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Dév</MudTh>
-                    <MudTh Style="text-align:center;min-width:60px">Agr</MudTh>
-                    <MudTh Style="text-align:center;min-width:50px">@DisplayHelpers.LabelMvp</MudTh>
-                    <MudTh Style="min-width:160px">Blessure</MudTh>
-                    <MudTh Style="min-width:120px">Stat</MudTh>
-                    <MudTh Style="width:48px"></MudTh>
-                </HeaderContent>
-                <RowTemplate Context="r">
-                    <MudTd DataLabel="N°">@r.Numero</MudTd>
-                    <MudTd DataLabel="Joueur"><b>@r.NomJoueur</b></MudTd>
-                    <MudTd DataLabel="TDs"><MudNumericField @bind-Value="r.Touchdowns" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Passes"><MudNumericField @bind-Value="r.Passes" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Interceptions"><MudNumericField @bind-Value="r.Interceptions" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Éliminations"><MudNumericField @bind-Value="r.EliminationsInfligees" Min="0" Max="16" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Déviations"><MudNumericField @bind-Value="r.Deviations" Min="0" Max="32" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="Agressions"><MudNumericField @bind-Value="r.Agressions" Min="0" Max="32" Variant="Variant.Text" Style="width:55px" /></MudTd>
-                    <MudTd DataLabel="@DisplayHelpers.LabelMvp" Style="text-align:center">
-                        <MudCheckBox Value="@(r.TeamPlayerId == _mvpExtId)" Color="Color.Warning"
-                                     ValueChanged="@((bool v) => { if (v) _mvpExtId = r.TeamPlayerId; else if (_mvpExtId == r.TeamPlayerId) _mvpExtId = null; })" />
-                    </MudTd>
-                    <MudTd DataLabel="Blessure">
-                        <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Text" Style="min-width:150px">
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">—</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate prochain match</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.BlessurePersistante)">Blessure persistante</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.RetraiteTemporaire)">Retraite temporaire</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort</MudSelectItem>
-                        </MudSelect>
-                    </MudTd>
-                    <MudTd DataLabel="Caractéristique">
-                        @if (r.Blessure == InjuryType.BlessurePersistante)
-                        {
-                            <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Variant="Variant.Text" Style="min-width:110px">
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Mouvement)">Mouvement</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Force)">Force</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Agilite)">Agilité</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.CapacitePasse)">CP</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
-                            </MudSelect>
-                        }
-                    </MudTd>
-                    <MudTd>
-                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                       Color="Color.Error" title="Retirer ce joueur de la feuille"
-                                       OnClick="@(() => RetirerLigne(r))" />
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </div>
+        @foreach (var r in _editExterieur)
+        {
+            @CarteJoueur(r, false)
+        }
+        @if (_editExterieur.Count == 0)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-4 d-block"
+                     Style="opacity:0.6;font-style:italic">
+                Aucun joueur sur la feuille — ajoutez ceux qui ont des stats à saisir.
+            </MudText>
+        }
 
         <!-- Récap gains -->
         <MudPaper Elevation="1" Class="pa-4 mb-4">
@@ -537,6 +461,96 @@ else
         Blessure              = r.Blessure,
         StatAffectee          = r.StatAffectee,
     };
+
+    /// <summary>
+    /// Un joueur = une carte, avec des steppers +/− plutôt que des champs numériques
+    /// dans une table à 11 colonnes. Rendu identique à la saisie initiale.
+    /// </summary>
+    RenderFragment CarteJoueur(PlayerEditData r, bool domicile) =>
+        @<MudPaper Elevation="1" Class="mb-2"
+                   Style="@($"border-left:3px solid var(--mud-palette-{(domicile ? "primary" : "text-secondary")})")">
+            <div class="pa-3">
+                <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-2">
+                    <div>
+                        <MudText Style="line-height:1.3">
+                            <span style="color:var(--mud-palette-text-secondary);font-size:0.8rem">#@r.Numero</span>
+                            <b style="margin-left:5px">@r.NomJoueur</b>
+                        </MudText>
+                    </div>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="0">
+                        <MudIconButton Icon="@(EstMvp(r, domicile) ? Icons.Material.Filled.Star : Icons.Material.Outlined.StarBorder)"
+                                       Color="@(EstMvp(r, domicile) ? Color.Warning : Color.Default)"
+                                       Size="Size.Medium" title="@($"Désigner comme {DisplayHelpers.LabelMvpLong}")"
+                                       OnClick="@(() => BasculerMvp(r, domicile))" />
+                        <MudText Typo="Typo.caption"
+                                 Color="@(EstMvp(r, domicile) ? Color.Warning : Color.Secondary)"
+                                 Style="cursor:pointer"
+                                 @onclick="@(() => BasculerMvp(r, domicile))">
+                            @DisplayHelpers.LabelMvp
+                        </MudText>
+                        <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                       Color="Color.Error" title="Retirer ce joueur de la feuille"
+                                       OnClick="@(() => RetirerLigne(r))" />
+                    </MudStack>
+                </MudStack>
+
+                <div class="stat-grid">
+                    @StatBlock("TOUCHDOWNS", r.Touchdowns, v => r.Touchdowns = Math.Max(0, r.Touchdowns + v))
+                    @StatBlock("PASSES", r.Passes, v => r.Passes = Math.Max(0, r.Passes + v))
+                    @StatBlock("INTERCEPTIONS", r.Interceptions, v => r.Interceptions = Math.Max(0, r.Interceptions + v))
+                    @StatBlock("ÉLIMINATIONS", r.EliminationsInfligees, v => r.EliminationsInfligees = Math.Max(0, r.EliminationsInfligees + v))
+                    @StatBlock("DÉVIATIONS", r.Deviations, v => r.Deviations = Math.Max(0, r.Deviations + v))
+                    @StatBlock("AGRESSIONS", r.Agressions, v => r.Agressions = Math.Max(0, r.Agressions + v))
+                </div>
+
+                <div style="border-top:1px solid rgba(255,255,255,0.08);margin-top:8px;padding-top:8px">
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+                        <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Label="Blessure"
+                                   Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:190px">
+                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">Aucune</MudSelectItem>
+                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate prochain match</MudSelectItem>
+                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.BlessurePersistante)">Blessure persistante</MudSelectItem>
+                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.RetraiteTemporaire)">Retraite temporaire</MudSelectItem>
+                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort</MudSelectItem>
+                        </MudSelect>
+
+                        @if (r.Blessure == InjuryType.BlessurePersistante)
+                        {
+                            <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Label="Caractéristique"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:160px">
+                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Mouvement)">Mouvement</MudSelectItem>
+                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Force)">Force</MudSelectItem>
+                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Agilite)">Agilité</MudSelectItem>
+                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.CapacitePasse)">CP</MudSelectItem>
+                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
+                            </MudSelect>
+                        }
+                    </MudStack>
+                </div>
+            </div>
+        </MudPaper>;
+
+    RenderFragment StatBlock(string label, int value, Action<int> delta) =>
+        @<div class="stat-block">
+            <div style="font-size:0.62rem;letter-spacing:0.07em;color:var(--mud-palette-text-secondary);margin-bottom:6px">@label</div>
+            <div style="display:flex;align-items:center;justify-content:center;gap:2px">
+                <MudIconButton Icon="@Icons.Material.Filled.Remove" Size="Size.Small"
+                               Variant="Variant.Outlined" OnClick="@(() => delta(-1))" />
+                <span style="min-width:32px;text-align:center;font-size:1.6rem;font-weight:bold;line-height:1">@value</span>
+                <MudIconButton Icon="@Icons.Material.Filled.Add" Size="Size.Small"
+                               Variant="Variant.Outlined" Color="Color.Success" OnClick="@(() => delta(1))" />
+            </div>
+        </div>;
+
+    bool EstMvp(PlayerEditData r, bool domicile) =>
+        r.TeamPlayerId == (domicile ? _mvpDomId : _mvpExtId);
+
+    /// <summary>Un seul MVP par équipe : re-cliquer sur le même le retire.</summary>
+    void BasculerMvp(PlayerEditData r, bool domicile)
+    {
+        if (domicile) _mvpDomId = _mvpDomId == r.TeamPlayerId ? null : r.TeamPlayerId;
+        else          _mvpExtId = _mvpExtId == r.TeamPlayerId ? null : r.TeamPlayerId;
+    }
 
     void AjouterDomicile(SelecteurJoueurMatch.JoueurDisponible p)
     {
