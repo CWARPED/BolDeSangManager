@@ -75,7 +75,9 @@ src/BolDeSangManager/
 centralisés dans `DisplayHelpers.ParametresLigueEditables` / `ParametresStructurantsEditables`.
 
 1. Le **lancement de la saison** (`Statut >= EnCours`) ferme tout : le calendrier généré
-   dépend du format, les feuilles de match déjà saisies du barème d'XP.
+   dépend du format, les feuilles de match déjà saisies du barème d'XP. ⚠️ **Exception :
+   le barème de points du classement** reste modifiable — il a sa propre commande et
+   déclenche un recalcul complet (voir « Barème de points de classement »).
 2. La **première équipe inscrite** ferme en plus les paramètres *structurants* — jeu,
    version des règles, budget de départ, staff de ligue — parce que des lignes déjà
    écrites en dépendent :
@@ -93,7 +95,8 @@ trésorerie déjà figée. Le staff se règle depuis le formulaire de ligue, sou
 
 ⚠️ `Reglement` et `ModeBrouillard` ne passent **pas** par ce formulaire : ils ont leur
 propre commande sur `Ligues/Detail.razor` et restent modifiables en cours de saison.
-`ModifierLigueAsync` n'y touche jamais — un test le verrouille.
+`ModifierLigueAsync` n'y touche jamais — un test le verrouille. **Le barème de points du
+classement suit le même modèle** (`ModifierBaremePointsAsync`), pour la même raison.
 
 ⚠️ La route `/ligues/creer` n'a plus l'attribut `[Authorize(Roles = "Admin,GrandCommissaire")]`
 (un commissaire doit pouvoir éditer **sa** ligue). La garde de rôle en création est donc
@@ -139,7 +142,19 @@ Principe central : **une règle sans `Code` est purement DESCRIPTIVE** — elle 
 
 **Le commissaire n'est jamais requis pour jouer.** Ses actions sur un match sont toutes *optionnelles et correctives* : éditer une feuille erronée, et « Forcer la clôture » — explicitement décrit dans l'UI comme réservé au cas où un coach ne peut pas faire son après-match. Le bouton « Valider les XP » de `Matchs/Detail.razor` ouvre cette page corrective ; **il ne conditionne aucune progression**. Conséquence vérifiée en conditions réelles : une ligue dont le commissaire supprime son compte **continue normalement** — saisie, confirmation, après-match, classement, tout fonctionne entre coaches.
 
-**PSP (Points Star Player)** : calculés à la saisie de la feuille (TD×3, Completion×1, Interception×2, Élim×2, MVP+4). Les seuils ouvrent droit à une amélioration que **le coach choisit lui-même** pendant son après-match (`AppliquerAmeliorationAsync`) — aucune approbation d'un tiers n'est requise.
+**PSP (Points Star Player)** : calculés à la saisie de la feuille selon le **barème d'XP de la ligue** (`XpBareme`, défauts LRB : TD×3, Passe×1, Interception×2, Élim×2, MVP+4, **Déviation×0, Agression×0**). Les seuils ouvrent droit à une amélioration que **le coach choisit lui-même** pendant son après-match (`AppliquerAmeliorationAsync`) — aucune approbation d'un tiers n'est requise. ⚠️ Ne jamais réécrire ces valeurs en dur dans un écran : les bandeaux d'aide s'interpolent depuis le barème résolu.
+
+**Barème de points de classement** (`BaremePoints`, `Team.PointsLigue`) — le *seul* paramètre de ligue modifiable **saison lancée**, avec `Reglement` et `ModeBrouillard`. Deux niveaux, comme le barème d'XP : les valeurs plates (victoire / nul / défaite + 6 bonus par action) appartiennent à la `RulesVersion` et sont **copiées** sur la `League` à sa création ; les **paliers** (`PalierPointsLigue`, 0..N) n'existent qu'au niveau ligue — c'est un choix de format, pas une règle d'édition.
+
+- Un palier se lit « **jusqu'au tour N inclus**, une victoire vaut V… ». Au-delà du plus grand palier, ce sont les points de base de la ligue. Le seuil se compare à `MatchSheet.NombreDeTours`, **nullable** : non renseigné (feuilles antérieures) ⇒ points de base, jamais une exception ni un zéro. Le champ n'est proposé sur la feuille que si la ligue a des paliers.
+- Les bonus (TD, Élim, Int, Passe, **Déviation**, **Agression**) sont comptés **par équipe** — somme des lignes joueurs de son côté — et **s'additionnent** aux points de match dans le même total. Défaut 0 partout.
+- ⚠️ **Ne PAS passer par `ModifierLigueAsync`** : il lève dès `Statut >= EnCours`. La commande dédiée est `LeagueService.ModifierBaremePointsAsync` (garde `PeutGererLigueAsync`), qui enchaîne sur `RecalculerClassementAsync` — bouton « Barème du classement » sur `Ligues/Detail.razor`, `BaremePointsDialog` (mode **détaché** avec `LigueId = 0` pour la création, où il rend le barème sans rien écrire).
+- **Le recalcul est ce qui rend l'édition en cours de saison sûre.** `RecalculerClassementAsync` remet à zéro puis rejoue toutes les feuilles ; la mise à jour au fil de l'eau (`MatchService`) et lui appellent la **même fonction pure** `BaremePoints.PointsEquipe`. Un test prouve qu'ils convergent, un autre que le barème par défaut (3/1/0, aucun bonus) laisse les totaux **inchangés** — c'est la garantie de non-régression au déploiement. Contrairement à `Team.Tresorerie`, `PointsLigue` est intégralement reconstructible : d'où l'exception au verrou « valeur dérivée stockée ».
+- `CompterMatchsSansNombreDeToursAsync` alimente l'alerte de rattrapage sur la fiche de ligue (0 si la ligue n'a aucun palier). **Pas de départage** à égalité : tri sur les points seuls, l'association tranche à la main.
+- Migration `AddBaremePointsLigue`, purement additive. ⚠️ Le scaffolder EF écrit `defaultValue: 0` pour tout `int` non nullable et **ignore les initialiseurs C#** : `PointsVictoire` (3) et `PointsNul` (1) ont été corrigés **à la main** sur `RulesVersions` ET `Leagues`. Sans ça, toutes les ligues existantes passaient à 0 point par victoire, en silence.
+- Propagation obligatoire pour toute évolution : clonage de version, `GameDataExportService`, `LeagueExportService` (paliers compris) et `SupprimerLigueAsync` (`ExecuteDeleteAsync` ne cascade pas). Les champs sont **optionnels** dans les DTO et retombent sur `BaremePoints.ParDefaut()`, jamais sur `?? 0`.
+
+**Correction d'une feuille par un commissaire** (`Matchs/Detail.razor`) : on peut **ajouter et retirer des joueurs**, pas seulement éditer les lignes existantes — un joueur oublié à la saisie ne recevait sinon jamais son XP et ses actions n'entraient pas au classement. Le sélecteur « Ajouter un joueur… » est le composant partagé **`SelecteurJoueurMatch`**, commun avec `Matchs/Feuille.razor` : le modifier profite aux deux écrans. `ModifierFeuilleAsync` **inverse** l'ancienne feuille (points, PSP, gains, fans) puis réécrit tout : l'XP d'un joueur ajouté est donc **créditée**, et un joueur déjà présent n'est pas compté deux fois.
 
 **Gains de match** : saisis manuellement par le coach sur la feuille de match. `MatchService.CalculerGains` fournit une estimation (affluence × 10k × 0,5 + TDs × 10k) affichée en indication, mais la valeur saisie dans les champs `GainsDomicile` / `GainsExterieur` est celle persistée.
 
