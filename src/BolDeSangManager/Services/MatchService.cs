@@ -908,15 +908,6 @@ public class MatchService(
         await AnnulerVariationFansAsync(
             ext, feuille.VariationFansExterieurAppliquee ?? feuille.VariationFansExterieur);
 
-        // Inverser PSP des joueurs (chargement groupé)
-        var pspIds = feuille.RecordsJoueurs.Select(r => r.TeamPlayerId).Distinct().ToList();
-        var joueursPsp = await db.TeamPlayers.Where(j => pspIds.Contains(j.Id)).ToDictionaryAsync(j => j.Id);
-        foreach (var old in feuille.RecordsJoueurs)
-        {
-            if (joueursPsp.TryGetValue(old.TeamPlayerId, out var j))
-                j.PointsStarPlayer = Math.Max(0, j.PointsStarPlayer - old.PspGagnes);
-        }
-
         // Supprimer les Improvements liés à cette feuille et inverser la hausse de valeur
         var oldImprovements = await db.PlayerImprovements
             .Where(pi => pi.MatchSheetId == feuille.Id)
@@ -961,6 +952,21 @@ public class MatchService(
             }
         }
         db.PlayerImprovements.RemoveRange(oldImprovements);
+        await db.SaveChangesAsync();
+
+        // Inverser les PSP gagnés — APRÈS avoir rendu la dépense ci-dessus (#25).
+        // Dans l'ordre inverse, un joueur qui avait tout dépensé (stock 0) voyait
+        // « 0 − gains » écrêté à 0 : les gains n'étaient jamais retirés, puis
+        // ajoutés une seconde fois par la nouvelle feuille → PSP doublés.
+        // Les joueurs déjà suivis par le contexte gardent leur valeur en mémoire
+        // (dépense rendue) : EF n'écrase pas une entité suivie à la requête.
+        var pspIds = feuille.RecordsJoueurs.Select(r => r.TeamPlayerId).Distinct().ToList();
+        var joueursPsp = await db.TeamPlayers.Where(j => pspIds.Contains(j.Id)).ToDictionaryAsync(j => j.Id);
+        foreach (var old in feuille.RecordsJoueurs)
+        {
+            if (joueursPsp.TryGetValue(old.TeamPlayerId, out var j))
+                j.PointsStarPlayer = Math.Max(0, j.PointsStarPlayer - old.PspGagnes);
+        }
         await db.SaveChangesAsync();
 
         // Inverser blessures (chargement groupé)

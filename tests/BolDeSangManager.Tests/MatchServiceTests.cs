@@ -515,6 +515,66 @@ public class MatchServiceTests : IDisposable
         Assert.False(await db2.PlayerInjuries.AnyAsync());
     }
 
+    // ─── Ticket #25 : PSP doublés après une correction de feuille ───────────────
+    // Cas réel (base de prod, match 90) : le JPV gagne 6 PSP, les DÉPENSE tous
+    // à l'après-match (stock 0), puis le commissaire corrige la feuille.
+    // L'inversion soustrayait les gains AVANT de rendre la dépense, avec un
+    // plancher à 0 : 0 − 6 → 0 (6 PSP perdus dans le plancher), +6 rendus,
+    // +6 regagnés = 12 au lieu de 6.
+
+    private async Task<int> SaisirJpvPuisDepenserToutAsync(int joueurId, int matchId, string saisiParId)
+    {
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).SaisirFeuilleMatchAsync(matchId, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurId, EstCoteDomicile = true, EstMVP = true }], saisiParId);
+
+        await using var db2 = _factory.CreateContext();
+        var j = await db2.TeamPlayers.FindAsync(joueurId);
+        var feuille = await db2.MatchSheets.SingleAsync(f => f.MatchId == matchId);
+        var gagnes = j!.PointsStarPlayer;
+        Assert.True(gagnes > 0);
+        // Après-match : tout le stock part dans une amélioration.
+        db2.PlayerImprovements.Add(new PlayerImprovement
+        {
+            TeamPlayerId = joueurId, MatchSheetId = feuille.Id, Palier = 1, PspDepensee = gagnes
+        });
+        j.PointsStarPlayer = 0;
+        await db2.SaveChangesAsync();
+        return gagnes;
+    }
+
+    [Fact]
+    public async Task ModifierFeuille_JoueurAyantToutDepense_NeDoublePasSesPsp()
+    {
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+        var gagnes = await SaisirJpvPuisDepenserToutAsync(joueurDom.Id, match.Id, saisiPar.Id);
+
+        // Correction sans rien changer aux lignes joueurs (ex. nombre de tours).
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).ModifierFeuilleAsync(match.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, EstMVP = true }]);
+
+        await using var db2 = _factory.CreateContext();
+        // L'amélioration est annulée (dépense rendue) et les gains comptés UNE fois.
+        Assert.Equal(gagnes, (await db2.TeamPlayers.FindAsync(joueurDom.Id))!.PointsStarPlayer);
+        Assert.False(await db2.PlayerImprovements.AnyAsync(i => i.TeamPlayerId == joueurDom.Id));
+    }
+
+    [Fact]
+    public async Task ModifierFeuille_RetirerLeJoueurAyantToutDepense_RemetSesPspAZero()
+    {
+        // Le symptôme exact du ticket : « même en les retirant de la saisie,
+        // leurs PSP ne retombent pas à 0 ».
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+        await SaisirJpvPuisDepenserToutAsync(joueurDom.Id, match.Id, saisiPar.Id);
+
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).ModifierFeuilleAsync(match.Id, FeuilleNulle(), []);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.Equal(0, (await db2.TeamPlayers.FindAsync(joueurDom.Id))!.PointsStarPlayer);
+    }
+
     [Fact]
     public async Task ModifierFeuille_SequelleSansCaracteristique_EstRefuseeAvantToutRetourArriere()
     {
