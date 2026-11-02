@@ -98,58 +98,120 @@ public class CapitaineTests
         Assert.Null(CapitaineHelper.CompetenceOfferte(capitaine, tt));
     }
 
-    // ── Désignation en base ──────────────────────────────────────────────────
+    // ── Désignation en base : édition de la ligne du joueur ──────────────────
+
+    /// <summary>
+    /// Le capitaine se désigne depuis l'édition de la ligne d'un joueur (crayon
+    /// en bout de ligne, page de l'équipe) : case « Capitaine » envoyée avec le
+    /// nom et les Haines.
+    /// </summary>
+    private static Task Designer(TestDbFactory factory, int joueurId, string userId, bool capitaine,
+        bool commissaire = false)
+    {
+        var db = factory.CreateContext();
+        return Async();
+        async Task Async()
+        {
+            using (db)
+            {
+                var nom = (await db.TeamPlayers.AsNoTracking().FirstAsync(p => p.Id == joueurId)).Nom;
+                await new JoueurEditionService(db, new StubAuth(commissaire), NullLogger<JoueurEditionService>.Instance)
+                    .ModifierJoueurAsync(joueurId, userId, nom, [], capitaine);
+            }
+        }
+    }
 
     [Fact]
     public async Task DesignerUnCapitaineRetireLePrecedent()
     {
         using var factory = new TestDbFactory();
-        var (equipeId, j1, j2) = await SeedEquipeAsync(factory);
+        var (equipeId, j1, j2, coach) = await SeedEquipeAvecRegleAsync(factory);
 
-        using (var db = factory.CreateContext())
-            await Svc(db).DefinirCapitaineAsync(equipeId, j1);
+        await Designer(factory, j1, coach, true);
+        await Designer(factory, j2, coach, true);
 
-        using (var db = factory.CreateContext())
-            await Svc(db).DefinirCapitaineAsync(equipeId, j2);
-
-        using (var db = factory.CreateContext())
-        {
-            var joueurs = await db.TeamPlayers.Where(p => p.TeamId == equipeId).ToListAsync();
-            Assert.Single(joueurs.Where(p => p.EstCapitaine));
-            Assert.True(joueurs.First(p => p.Id == j2).EstCapitaine);
-        }
+        using var db = factory.CreateContext();
+        var joueurs = await db.TeamPlayers.Where(p => p.TeamId == equipeId).ToListAsync();
+        Assert.Single(joueurs.Where(p => p.EstCapitaine));
+        Assert.True(joueurs.First(p => p.Id == j2).EstCapitaine);
     }
 
     [Fact]
     public async Task OnPeutRetirerLeCapitaineSansEnDesignerUnAutre()
     {
         using var factory = new TestDbFactory();
-        var (equipeId, j1, _) = await SeedEquipeAsync(factory);
+        var (equipeId, j1, _, coach) = await SeedEquipeAvecRegleAsync(factory);
 
-        using (var db = factory.CreateContext())
-            await Svc(db).DefinirCapitaineAsync(equipeId, j1);
+        await Designer(factory, j1, coach, true);
+        await Designer(factory, j1, coach, false);
 
-        using (var db = factory.CreateContext())
-            await Svc(db).DefinirCapitaineAsync(equipeId, null);
+        using var db = factory.CreateContext();
+        Assert.Empty(await db.TeamPlayers.Where(p => p.TeamId == equipeId && p.EstCapitaine).ToListAsync());
+    }
 
-        using (var db = factory.CreateContext())
-            Assert.Empty(await db.TeamPlayers.Where(p => p.TeamId == equipeId && p.EstCapitaine).ToListAsync());
+    /// <summary>Le commissaire de la ligue peut aussi désigner ; un autre coach non.</summary>
+    [Fact]
+    public async Task CommissaireOui_AutreCoachNon()
+    {
+        using var factory = new TestDbFactory();
+        var (_, j1, j2, _) = await SeedEquipeAvecRegleAsync(factory);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Designer(factory, j1, "intrus", true));
+        await Designer(factory, j2, "commissaire", true, commissaire: true);
+
+        using var db = factory.CreateContext();
+        Assert.False((await db.TeamPlayers.FindAsync(j1))!.EstCapitaine);
+        Assert.True((await db.TeamPlayers.FindAsync(j2))!.EstCapitaine);
     }
 
     /// <summary>
-    /// Un joueur d'une AUTRE équipe ne peut pas être désigné : l'écran propose,
-    /// le service fait autorité.
+    /// Refus AVANT toute écriture : race sans la règle, joueur mort ou retraité.
+    /// Le nom, envoyé dans la même requête, ne doit pas être enregistré non plus.
     /// </summary>
     [Fact]
-    public async Task UnJoueurEtrangerALEquipeEstRefuse()
+    public async Task RaceSansRegle_OuJoueurMort_EstRefuse()
     {
         using var factory = new TestDbFactory();
-        var (equipeId, _, _) = await SeedEquipeAsync(factory);
-        var (_, autreJoueur, _) = await SeedEquipeAsync(factory, "Les Autres");
+        var (_, sansRegle, _) = await SeedEquipeAsync(factory, "Sans capitaine");
+        string coachSans;
+        using (var db = factory.CreateContext())
+            coachSans = (await db.TeamPlayers.Include(p => p.Team).FirstAsync(p => p.Id == sansRegle)).Team.CoachId;
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => Designer(factory, sansRegle, coachSans, true));
+        Assert.Contains("capitaine", ex.Message);
 
-        using var db = factory.CreateContext();
-        await Assert.ThrowsAsync<InvalidOperationException>(
-            () => Svc(db).DefinirCapitaineAsync(equipeId, autreJoueur));
+        var (_, j1, _, coach) = await SeedEquipeAvecRegleAsync(factory);
+        using (var db = factory.CreateContext())
+        {
+            (await db.TeamPlayers.FindAsync(j1))!.EstMort = true;
+            await db.SaveChangesAsync();
+        }
+        using (var db = factory.CreateContext())
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                new JoueurEditionService(db, new StubAuth(false), NullLogger<JoueurEditionService>.Instance)
+                    .ModifierJoueurAsync(j1, coach, "Nouveau nom", [], true));
+
+        using (var db = factory.CreateContext())
+        {
+            var j = await db.TeamPlayers.FindAsync(j1);
+            Assert.False(j!.EstCapitaine);
+            Assert.Equal("A", j.Nom);
+        }
+    }
+
+    /// <summary><c>capitaine: null</c> = ne pas toucher au titre (renommer seulement).</summary>
+    [Fact]
+    public async Task SansCaseCapitaine_LeTitreEstConserve()
+    {
+        using var factory = new TestDbFactory();
+        var (_, j1, _, coach) = await SeedEquipeAvecRegleAsync(factory);
+        await Designer(factory, j1, coach, true);
+
+        using (var db = factory.CreateContext())
+            await new JoueurEditionService(db, new StubAuth(false), NullLogger<JoueurEditionService>.Instance)
+                .ModifierJoueurAsync(j1, coach, "Marcus", [], capitaine: null);
+
+        using var verif = factory.CreateContext();
+        Assert.True((await verif.TeamPlayers.FindAsync(j1))!.EstCapitaine);
     }
 
     /// <summary>
@@ -163,7 +225,10 @@ public class CapitaineTests
         var (equipeId, j1, _) = await SeedEquipeAsync(factory);
 
         using (var db = factory.CreateContext())
-            await Svc(db).DefinirCapitaineAsync(equipeId, j1);
+        {
+            (await db.TeamPlayers.FindAsync(j1))!.EstCapitaine = true;
+            await db.SaveChangesAsync();
+        }
 
         using (var db = factory.CreateContext())
         {
@@ -251,6 +316,32 @@ public class CapitaineTests
     }
 
     // ── Fixture ──────────────────────────────────────────────────────────────
+
+    private sealed class StubAuth(bool commissaire) : IAuthorizationService
+    {
+        public Task<bool> EstAdminAsync(string userId) => Task.FromResult(false);
+        public Task<bool> EstGrandCommissaireAsync(string userId) => Task.FromResult(false);
+        public Task<bool> EstCommissaireDeLigueAsync(string userId, int ligueId) => Task.FromResult(commissaire);
+        public Task<bool> PeutGererLigueAsync(string userId, int ligueId) => Task.FromResult(commissaire);
+        public Task<bool> PeutEditerDonneesAsync(string userId) => Task.FromResult(false);
+        public Task<bool> PeutGererSettingsAsync(string userId) => Task.FromResult(false);
+    }
+
+    /// <summary>Équipe dont la race porte la règle « Capitaine » (compétence : Pro).</summary>
+    private static async Task<(int equipeId, int j1, int j2, string coachId)> SeedEquipeAvecRegleAsync(
+        TestDbFactory factory)
+    {
+        var (equipeId, j1, j2) = await SeedEquipeAsync(factory);
+        using var db = factory.CreateContext();
+        var equipe = await db.Teams.Include(t => t.TeamType).FirstAsync(t => t.Id == equipeId);
+        var regle = new SpecialRule { Nom = "Capitaine", Code = SpecialRuleCodes.CompetenceAuCapitaine,
+            RulesVersionId = equipe.TeamType.RulesVersionId };
+        db.SpecialRules.Add(regle);
+        await db.SaveChangesAsync();
+        db.Add(new TeamTypeSpecialRule { TeamTypeId = equipe.TeamTypeId, SpecialRuleId = regle.Id, OptionsChoix = "Pro" });
+        await db.SaveChangesAsync();
+        return (equipeId, j1, j2, equipe.CoachId);
+    }
 
     private static async Task<(int equipeId, int j1, int j2)> SeedEquipeAsync(
         TestDbFactory factory, string nom = "Les Testeurs")

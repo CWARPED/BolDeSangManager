@@ -124,35 +124,19 @@ else
                             }
                         }
 
-                        @* Capitaine : c'est le COACH qui désigne, contrairement
-                           au dieu réservé au commissaire. *@
+                        @* Capitaine : désigné par le coach ou le commissaire de la
+                           ligue, dans l'édition de la ligne du joueur (crayon). *@
                         @if (lien.SpecialRule.Code == SpecialRuleCodes.CompetenceAuCapitaine)
                         {
-                            @if (_estCoach || _estCommissaire)
-                            {
-                                @* T="string" comme le sélecteur de divinité qui
-                                   fonctionne : avec T="int" ou "int?", MudBlazor
-                                   ne rendait AUCUN item (popover vide, constaté
-                                   à l'écran). "" = aucun capitaine. *@
-                                <MudSelect T="string" Value="@(CapitaineActuelId()?.ToString() ?? "")"
-                                           ValueChanged="DefinirCapitaine"
-                                           Label="Capitaine" Variant="Variant.Outlined"
-                                           Margin="Margin.Dense" Class="mt-3"
-                                           HelperText="@HelperCapitaine()">
-                                    <MudSelectItem Value="@("")">— aucun —</MudSelectItem>
-                                    @foreach (var j in JoueursEligiblesCapitaine())
-                                    {
-                                        <MudSelectItem Value="@j.Id.ToString()">@j.Numero. @j.Nom</MudSelectItem>
-                                    }
-                                </MudSelect>
-                            }
-                            else
-                            {
-                                var cap = _equipe.Joueurs.FirstOrDefault(p => p.EstCapitaine);
-                                <MudText Typo="Typo.caption" Class="mt-2 d-block" Color="Color.Secondary">
-                                    @(cap is null ? "Aucun capitaine désigné." : $"Capitaine : {cap.Nom}")
-                                </MudText>
-                            }
+                            var cap = _equipe.Joueurs.FirstOrDefault(p => p.EstCapitaine);
+                            <MudText Typo="Typo.caption" Class="mt-2 d-block" Color="Color.Secondary">
+                                @(cap is null ? "Aucun capitaine désigné." : $"Capitaine : {cap.Nom}.")
+                                @HelperCapitaine()
+                                @if (_peutEditerJoueurs)
+                                {
+                                    <text> Se désigne avec le crayon sur la ligne du joueur.</text>
+                                }
+                            </MudText>
                         }
                     </ChildContent>
                 </MudExpansionPanel>
@@ -215,7 +199,15 @@ else
                     <RowTemplate Context="j">
                         <MudTd DataLabel="N°">@j.Numero</MudTd>
                         <MudTd DataLabel="Nom">
-                            @if (_editionJoueurId == j.Id) { @ChampNom() } else { <b>@j.Nom</b> }
+                            @if (_editionJoueurId == j.Id) { @ChampNom(j) }
+                            else
+                            {
+                                <b>@j.Nom</b>
+                                @if (j.EstCapitaine)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Capitaine</MudChip>
+                                }
+                            }
                         </MudTd>
                         <MudTd DataLabel="Poste">
                             <div>@j.PlayerPosition?.Nom</div>
@@ -309,7 +301,7 @@ else
                         <RowTemplate Context="j">
                             <MudTd DataLabel="N°">@j.Numero</MudTd>
                             <MudTd DataLabel="Nom">
-                                @if (_editionJoueurId == j.Id) { @ChampNom() } else {
+                                @if (_editionJoueurId == j.Id) { @ChampNom(j) } else {
                                 <span style="text-decoration:line-through">@j.Nom</span> }
                                 @if (j.EstMort)
                                 {
@@ -476,10 +468,11 @@ else
     Dictionary<string, Skill> _traitsHaineCatalogue = new(StringComparer.OrdinalIgnoreCase);
 
     // Édition EN PLACE sur la ligne : le crayon passe la ligne en édition
-    // (nom + Haines), ✓ enregistre, ✕ annule. Une seule ligne à la fois.
+    // (nom, capitaine, Haines), ✓ enregistre, ✕ annule. Une ligne à la fois.
     int? _editionJoueurId;
     string _editionNom = "";
     List<string> _editionHaines = [];
+    bool _editionCapitaine;
     string? _editionSaisie;
     bool _editionEnCours;
     SelecteurHaine? _selecteurEdition;
@@ -497,11 +490,25 @@ else
                               title="Modifier le joueur" aria-label="Modifier le joueur"
                               OnClick="@(() => DemarrerEdition(j))" />;
 
-    RenderFragment ChampNom() =>
-        @<MudTextField T="string" Value="@_editionNom" ValueChanged="@(v => _editionNom = v)"
-                       Immediate="true" AutoFocus="true" Variant="Variant.Text" Margin="Margin.Dense"
-                       MaxLength="@JoueurEditionService.NomLongueurMax" Placeholder="Vide = numéro"
-                       Style="min-width:150px" OnKeyDown="ToucheEdition" />;
+    /// <summary>
+    /// Nom en édition, et la case « Capitaine » quand la race a la règle et que
+    /// le joueur est dans l'effectif (un mort ou un retraité ne l'est pas).
+    /// </summary>
+    RenderFragment ChampNom(TeamPlayer j) =>
+        @<div>
+            <MudTextField T="string" Value="@_editionNom" ValueChanged="@(v => _editionNom = v)"
+                          Immediate="true" AutoFocus="true" Variant="Variant.Text" Margin="Margin.Dense"
+                          MaxLength="@JoueurEditionService.NomLongueurMax" Placeholder="Vide = numéro"
+                          Style="min-width:150px" OnKeyDown="ToucheEdition" />
+            @if (CapitaineEditable(j))
+            {
+                <MudCheckBox T="bool" Value="_editionCapitaine" ValueChanged="@(v => _editionCapitaine = v)"
+                             Label="Capitaine" Size="Size.Small" Dense="true" Color="Color.Warning" />
+            }
+        </div>;
+
+    bool CapitaineEditable(TeamPlayer j) =>
+        CapitaineHelper.RaceAUnCapitaine(_equipe?.TeamType) && !j.EstMort && !j.EstRetraite;
 
     /// <summary>
     /// Haines de la ligne en édition : pastilles à croix + champ d'ajout (texte
@@ -532,6 +539,7 @@ else
         _editionJoueurId = j.Id;
         _editionNom = j.Nom;
         _editionHaines = HaineHelpers.Liste(j.Haines);
+        _editionCapitaine = j.EstCapitaine;
         _editionSaisie = null;
     }
 
@@ -571,7 +579,9 @@ else
         _editionEnCours = true;
         try
         {
-            await JoueurEdition.ModifierJoueurAsync(joueurId, _userId, _editionNom, haines);
+            var joueur = _equipe?.Joueurs.FirstOrDefault(p => p.Id == joueurId);
+            bool? capitaine = joueur is not null && CapitaineEditable(joueur) ? _editionCapitaine : null;
+            await JoueurEdition.ModifierJoueurAsync(joueurId, _userId, _editionNom, haines, capitaine);
             // Relire l'état réel : le service a pu substituer le numéro de
             // maillot à un nom vide, ou normaliser une Haine.
             _equipe = await TeamService.GetEquipeAsync(Id);
@@ -585,9 +595,6 @@ else
         finally { _editionEnCours = false; }
     }
 
-    int? CapitaineActuelId() =>
-        _equipe?.Joueurs.FirstOrDefault(p => p.EstCapitaine)?.Id;
-
     /// <summary>Compétence que le titre accorde, telle que paramétrée par race.</summary>
     string? CompetenceDuCapitaine()
     {
@@ -597,40 +604,13 @@ else
         return valeurs.Length > 0 ? valeurs[0] : null;
     }
 
-    /// <summary>
-    /// Morts et retraités exclus : proposer un joueur absent de l'effectif
-    /// n'aurait pas de sens.
-    /// </summary>
-    IEnumerable<TeamPlayer> JoueursEligiblesCapitaine() =>
-        (_equipe?.Joueurs ?? [])
-            .Where(p => !p.EstMort && !p.EstRetraite)
-            .OrderBy(p => p.Numero);
-
-    async Task DefinirCapitaine(string joueurIdTexte)
-    {
-        if (_equipe is null) return;
-        try
-        {
-            // Chaîne vide = « aucun » côté écran, null côté service.
-            int? joueurId = string.IsNullOrEmpty(joueurIdTexte) ? null : int.Parse(joueurIdTexte);
-            await TeamService.DefinirCapitaineAsync(_equipe.Id, joueurId);
-            _equipe = await TeamService.GetEquipeAsync(Id);   // relit l'état réel
-            var nom = _equipe?.Joueurs.FirstOrDefault(p => p.EstCapitaine)?.Nom;
-            Snackbar.Add(nom is null ? "Capitaine retiré" : $"Capitaine : {nom}", Severity.Success);
-        }
-        catch (InvalidOperationException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Warning);
-        }
-    }
-
-    /// <summary>Aide du sélecteur : rappelle la compétence effectivement offerte.</summary>
+    /// <summary>Rappelle la compétence effectivement offerte au capitaine.</summary>
     string HelperCapitaine()
     {
         var c = CompetenceDuCapitaine();
         return c is null
             ? "Aucune compétence paramétrée par le commissaire."
-            : $"Le joueur désigné gagne « {c} ».";
+            : $"Le capitaine gagne « {c} ».";
     }
 
     /// <summary>Règles spéciales de la race, dans l'ordre d'affichage.</summary>

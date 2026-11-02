@@ -464,32 +464,6 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     }
 
     /// <summary>
-    /// Désigne le capitaine de l'équipe (règle « Capitaine »), ou retire le
-    /// titre si <paramref name="joueurId"/> vaut <c>null</c>.
-    ///
-    /// Un seul capitaine par équipe : l'ancien perd le titre automatiquement.
-    /// Le joueur doit appartenir à l'équipe — l'écran propose, le service fait
-    /// autorité.
-    /// </summary>
-    public async Task DefinirCapitaineAsync(int teamId, int? joueurId)
-    {
-        var joueurs = await db.TeamPlayers
-            .Where(p => p.TeamId == teamId)
-            .ToListAsync();
-
-        if (joueurId is not null && joueurs.All(p => p.Id != joueurId))
-            throw new InvalidOperationException("Ce joueur n'appartient pas à cette équipe.");
-
-        foreach (var p in joueurs)
-            p.EstCapitaine = p.Id == joueurId;
-
-        await db.SaveChangesAsync();
-        logger.LogInformation(
-            "Capitaine de l'équipe id={TeamId} : {Joueur}", teamId,
-            joueurId is null ? "aucun" : $"joueur id={joueurId}");
-    }
-
-    /// <summary>
     /// Retire le titre à un capitaine mort ou retraité. Appelé après
     /// l'après-match : sans ça, la compétence resterait affichée sur un joueur
     /// absent de l'effectif.
