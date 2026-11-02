@@ -29,8 +29,11 @@ COPY --from=build /app/publish .
 
 # Polices Noto pour le rendu PDF (QuestPDF/SkiaSharp utilise les polices système sur Linux)
 # curl : requis par le healthcheck du docker-compose (absent de l'image aspnet de base)
+# tzdata : sans lui .NET ne trouve aucune définition de fuseau et reste en UTC,
+#          ce qui décale les dates de match affichées (stockées UTC, rendues via
+#          ToLocalTime() côté serveur). Requis pour que TZ=Europe/Paris fonctionne.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-extra curl \
+ && apt-get install -y --no-install-recommends fonts-noto-core fonts-noto-extra curl tzdata \
  && rm -rf /var/lib/apt/lists/*
 
 # Volume pour la base SQLite (monter un volume nommé ou un répertoire hôte)
@@ -40,6 +43,7 @@ VOLUME ["/data"]
 ENV APP_VERSION=$APP_VERSION \
     ASPNETCORE_ENVIRONMENT=Production \
     ASPNETCORE_URLS=http://+:8080 \
+    TZ=Europe/Paris \
     ConnectionStrings__DefaultConnection="Data Source=/data/boldesang.db;Cache=Shared" \
     DataProtection__KeysPath=/data/DataProtection-Keys \
     BolDeSang__AdminEmail=commissaire@boldesang.fr \
