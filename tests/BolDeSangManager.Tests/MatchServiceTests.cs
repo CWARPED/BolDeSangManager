@@ -400,33 +400,148 @@ public class MatchServiceTests : IDisposable
         Assert.True(joueur!.EstMort);
     }
 
+    // ─── Blessures (ticket #26 : BP ≠ Séquelle, toutes deux avec RPM) ─────────
+    // Tableau d'Élimination du LRB p.42 :
+    //   Amoché            → RPM
+    //   Blessure Sérieuse → BP + RPM  (aucun effet immédiat sur le profil)
+    //   Séquelle          → −1 carac + RPM
+
+    private static MatchSheet FeuilleNulle() => new()
+    {
+        TouchdownsDomicile = 0, TouchdownsExterieur = 0,
+        GainsDomicile = 0, GainsExterieur = 0
+    };
+
+    private static void AssertProfilIntact(TeamPlayer j)
+    {
+        Assert.Equal(0, j.ModMouvement);
+        Assert.Equal(0, j.ModForce);
+        Assert.Equal(0, j.ModAgilite);
+        Assert.Equal(0, j.ModCapacitePasse);
+        Assert.Equal(0, j.ModArmure);
+    }
+
     [Fact]
-    public async Task SaisirFeuille_BlessurePersistante_ReduitCaracteristique()
+    public async Task SaisirFeuille_Sequelle_ReduitCaracteristiqueEtPoseRpm()
     {
         var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
         await using var db = _factory.CreateContext();
         var svc = CreateService(db);
 
-        var feuille = new MatchSheet
-        {
-            TouchdownsDomicile = 0, TouchdownsExterieur = 0,
-            GainsDomicile = 0, GainsExterieur = 0
-        };
-        var records = new List<MatchPlayerRecord>
-        {
-            new()
-            {
-                TeamPlayerId = joueurDom.Id,
-                EstCoteDomicile = true,
-                Blessure = InjuryType.BlessurePersistante,
-                StatAffectee = AffectedStat.Mouvement
-            }
-        };
-        await svc.SaisirFeuilleMatchAsync(match.Id, feuille, records, saisiPar.Id);
+        await svc.SaisirFeuilleMatchAsync(match.Id, FeuilleNulle(),
+            [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true,
+                     Blessure = InjuryType.Sequelle, StatAffectee = AffectedStat.Mouvement }],
+            saisiPar.Id);
 
         await using var db2 = _factory.CreateContext();
         var joueur = await db2.TeamPlayers.FindAsync(joueurDom.Id);
         Assert.Equal(-1, joueur!.ModMouvement);
+        Assert.True(joueur.ManqueSuivantMatch);
+        var b = await db2.PlayerInjuries.SingleAsync(x => x.TeamPlayerId == joueurDom.Id);
+        Assert.Equal(InjuryType.Sequelle, b.Type);
+        Assert.Equal(AffectedStat.Mouvement, b.StatAffectee);
+    }
+
+    [Fact]
+    public async Task SaisirFeuille_BlessurePersistante_PoseRpmSansToucherAuProfil()
+    {
+        // Une BP ne retire RIEN sur le moment : elle donnera +1 aux futurs jets
+        // d'élimination. Une caractéristique envoyée par erreur est ignorée.
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        await svc.SaisirFeuilleMatchAsync(match.Id, FeuilleNulle(),
+            [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true,
+                     Blessure = InjuryType.BlessurePersistante, StatAffectee = AffectedStat.Force }],
+            saisiPar.Id);
+
+        await using var db2 = _factory.CreateContext();
+        var joueur = await db2.TeamPlayers.FindAsync(joueurDom.Id);
+        AssertProfilIntact(joueur!);
+        Assert.True(joueur!.ManqueSuivantMatch);
+        var b = await db2.PlayerInjuries.SingleAsync(x => x.TeamPlayerId == joueurDom.Id);
+        Assert.Equal(InjuryType.BlessurePersistante, b.Type);
+        Assert.Null(b.StatAffectee);
+    }
+
+    [Fact]
+    public async Task SaisirFeuille_SequelleSansCaracteristique_EstRefuseeSansRienEcrire()
+    {
+        // Avant #26, une « blessure persistante » sans caractéristique était
+        // enregistrée sans aucun effet ni message : saisie perdue en silence.
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+        await using var db = _factory.CreateContext();
+        var svc = CreateService(db);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.SaisirFeuilleMatchAsync(match.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true,
+                         Blessure = InjuryType.Sequelle }],
+                saisiPar.Id));
+        Assert.Contains("caractéristique", ex.Message);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.False(await db2.MatchSheets.AnyAsync(f => f.MatchId == match.Id));
+        Assert.False(await db2.PlayerInjuries.AnyAsync());
+    }
+
+    [Fact]
+    public async Task ModifierFeuille_AnnuleSequelleEtBlessurePersistanteAvecLeurRpm()
+    {
+        var (_, _, joueurDom, joueurExt, match, saisiPar) = await SetupMatchContextAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            await CreateService(db).SaisirFeuilleMatchAsync(match.Id, FeuilleNulle(),
+                [
+                    new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true,
+                            Blessure = InjuryType.Sequelle, StatAffectee = AffectedStat.Armure },
+                    new() { TeamPlayerId = joueurExt.Id, EstCoteDomicile = false,
+                            Blessure = InjuryType.BlessurePersistante }
+                ],
+                saisiPar.Id);
+        }
+
+        // Le commissaire corrige : plus aucune blessure sur la feuille.
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).ModifierFeuilleAsync(match.Id, FeuilleNulle(), []);
+
+        await using var db2 = _factory.CreateContext();
+        var dom = await db2.TeamPlayers.FindAsync(joueurDom.Id);
+        var ext = await db2.TeamPlayers.FindAsync(joueurExt.Id);
+        AssertProfilIntact(dom!);
+        Assert.False(dom!.ManqueSuivantMatch);
+        Assert.False(ext!.ManqueSuivantMatch);
+        Assert.False(await db2.PlayerInjuries.AnyAsync());
+    }
+
+    [Fact]
+    public async Task ModifierFeuille_SequelleSansCaracteristique_EstRefuseeAvantToutRetourArriere()
+    {
+        // La correction défait d'abord l'ancienne feuille : la validation doit
+        // passer AVANT, sinon un refus laisse la feuille à moitié inversée.
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            await CreateService(db).SaisirFeuilleMatchAsync(match.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true,
+                         Blessure = InjuryType.Sequelle, StatAffectee = AffectedStat.Force }],
+                saisiPar.Id);
+        }
+
+        await using (var db = _factory.CreateContext())
+        {
+            await Assert.ThrowsAsync<InvalidOperationException>(() =>
+                CreateService(db).ModifierFeuilleAsync(match.Id, FeuilleNulle(),
+                    [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true,
+                             Blessure = InjuryType.Sequelle }]));
+        }
+
+        await using var db2 = _factory.CreateContext();
+        var j = await db2.TeamPlayers.FindAsync(joueurDom.Id);
+        Assert.Equal(-1, j!.ModForce);          // la séquelle d'origine est toujours là
+        Assert.True(j.ManqueSuivantMatch);
+        Assert.Equal(1, await db2.PlayerInjuries.CountAsync());
     }
 
     [Fact]

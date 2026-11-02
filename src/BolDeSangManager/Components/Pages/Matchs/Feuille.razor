@@ -528,20 +528,20 @@ else
                 <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Outlined"
                            Margin="Margin.Dense" Placeholder="— aucune —">
                     <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">— aucune —</MudSelectItem>
-                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate le prochain match</MudSelectItem>
-                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.BlessurePersistante)">Blessure persistante (séquelle)</MudSelectItem>
-                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.RetraiteTemporaire)">Retraite temporaire</MudSelectItem>
-                    <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort au combat</MudSelectItem>
+                    @foreach (var t in BlessureHelpers.TypesSaisissables)
+                    {
+                        <MudSelectItem T="InjuryType?" Value="@((InjuryType?)t)">@BlessureHelpers.LibelleMenu(t)</MudSelectItem>
+                    }
                 </MudSelect>
-                @if (r.Blessure == InjuryType.BlessurePersistante)
+                @if (r.Blessure == InjuryType.Sequelle)
                 {
                     <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Variant="Variant.Outlined"
-                               Margin="Margin.Dense" Class="mt-2" Placeholder="Stat affectée">
-                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Mouvement)">Mouvement</MudSelectItem>
-                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Force)">Force</MudSelectItem>
-                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Agilite)">Agilité</MudSelectItem>
-                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.CapacitePasse)">Capacité de passe</MudSelectItem>
-                        <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
+                               Margin="Margin.Dense" Class="mt-2" Placeholder="Caractéristique −1"
+                               Error="@(!r.StatAffectee.HasValue)" ErrorText="À choisir">
+                        @foreach (var s in Enum.GetValues<AffectedStat>())
+                        {
+                            <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)s)">@BlessureHelpers.LibelleStat(s)</MudSelectItem>
+                        }
                     </MudSelect>
                 }
               </div>
@@ -690,7 +690,7 @@ else
                     Agressions            = r.Agressions,
                     EstMVP                = r.EstMVP,
                     Blessure              = r.Blessure,
-                    StatAffectee          = r.Blessure == InjuryType.BlessurePersistante ? r.StatAffectee : null,
+                    StatAffectee          = r.Blessure == InjuryType.Sequelle ? r.StatAffectee : null,
                     PspGagnes             = PspDe(r)
                 }).ToList();
 

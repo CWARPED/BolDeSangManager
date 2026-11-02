@@ -239,11 +239,11 @@ public class PdfService
                                     ? [$"{cap} (capitaine)"] : Array.Empty<string>())
                                 .Where(s => s != ""));
 
-                            bool hasSequel = joueur.Blessures.Any(b =>
-                                b.Type == InjuryType.BlessurePersistante);
+                            bool hasSequel = BlessureHelpers.ASequelle(joueur);
+                            int nbBp = BlessureHelpers.NombreBP(joueur);
 
                             Cell(table, bg, joueur.Numero.ToString(), center: true);
-                            CellNom(table, bg, joueur.Nom, joueur.ManqueSuivantMatch, hasSequel);
+                            CellNom(table, bg, joueur.Nom, joueur.ManqueSuivantMatch, hasSequel, nbBp);
                             // Poste + mots-clés
                             {
                                 var cell = table.Cell()
@@ -275,7 +275,12 @@ public class PdfService
                     col.Item().PaddingTop(4).Row(row =>
                     {
                         row.AutoItem().Text(t => IconLegend(t, "⚕", " Rate le prochain match", Colors.Grey.Darken2));
-                        row.AutoItem().PaddingLeft(12).Text(t => IconLegend(t, "✦", " Séquelle persistante", Colors.Red.Darken2));
+                        row.AutoItem().PaddingLeft(12).Text(t => IconLegend(t, "✦", " Séquelle", Colors.Red.Darken2));
+                        row.AutoItem().PaddingLeft(12).Text(t =>
+                        {
+                            t.Span("BP").Bold().FontSize(7).FontColor(Colors.Purple.Darken2);
+                            t.Span(" Blessure persistante (+1 au jet d'élimination)").FontSize(7).FontColor(Colors.Grey.Darken2);
+                        });
                         row.AutoItem().PaddingLeft(12).Text(t => IconLegend(t, "★", " ≥ 6 PSP : amélioration disponible", Colors.Orange.Darken3));
                         row.AutoItem().PaddingLeft(12)
                             .Background(Colors.Red.Lighten4)
@@ -679,7 +684,7 @@ public class PdfService
             content.Text(texte).FontSize(8);
     }
 
-    private static void CellNom(TableDescriptor table, string bg, string nom, bool mnm, bool sequel)
+    private static void CellNom(TableDescriptor table, string bg, string nom, bool mnm, bool sequel, int nbBp)
     {
         table.Cell()
             .Background(sequel ? Colors.Red.Lighten5 : bg)
@@ -692,6 +697,10 @@ public class PdfService
                     SymbolSpan(text, " ⚕", 7, Colors.Orange.Darken3, SymbolFont1);
                 if (sequel)
                     SymbolSpan(text, " ✦", 7, Colors.Red.Darken2, SymbolFont2);
+                // Blessures persistantes : en TEXTE, comme la colonne « BP » de
+                // la fiche d'équipe officielle — le compte compte (+1 par BP).
+                if (nbBp > 0)
+                    text.Span(" " + BlessureHelpers.MarqueBP(nbBp)).Bold().FontSize(7).FontColor(Colors.Purple.Darken2);
             });
     }
 

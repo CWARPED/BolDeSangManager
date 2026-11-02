@@ -551,21 +551,21 @@ else
                         <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Label="Blessure"
                                    Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:190px">
                             <MudSelectItem T="InjuryType?" Value="@((InjuryType?)null)">Aucune</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.ManqueSuivant)">Rate prochain match</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.BlessurePersistante)">Blessure persistante</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.RetraiteTemporaire)">Retraite temporaire</MudSelectItem>
-                            <MudSelectItem T="InjuryType?" Value="@((InjuryType?)InjuryType.Mort)">Mort</MudSelectItem>
+                            @foreach (var t in BlessureHelpers.TypesSaisissables)
+                            {
+                                <MudSelectItem T="InjuryType?" Value="@((InjuryType?)t)">@BlessureHelpers.LibelleMenu(t)</MudSelectItem>
+                            }
                         </MudSelect>
 
-                        @if (r.Blessure == InjuryType.BlessurePersistante)
+                        @if (r.Blessure == InjuryType.Sequelle)
                         {
-                            <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Label="Caractéristique"
-                                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:160px">
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Mouvement)">Mouvement</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Force)">Force</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Agilite)">Agilité</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.CapacitePasse)">CP</MudSelectItem>
-                                <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)AffectedStat.Armure)">Armure</MudSelectItem>
+                            <MudSelect @bind-Value="r.StatAffectee" T="AffectedStat?" Label="Caractéristique −1"
+                                       Variant="Variant.Outlined" Margin="Margin.Dense" Style="min-width:160px"
+                                       Error="@(!r.StatAffectee.HasValue)" ErrorText="À choisir">
+                                @foreach (var s in Enum.GetValues<AffectedStat>())
+                                {
+                                    <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)s)">@BlessureHelpers.LibelleStat(s)</MudSelectItem>
+                                }
                             </MudSelect>
                         }
                     </MudStack>
@@ -726,7 +726,7 @@ else
                 EstMVP                = ( r.EstCoteDomicile && r.TeamPlayerId == _mvpDomId)
                                      || (!r.EstCoteDomicile && r.TeamPlayerId == _mvpExtId),
                 Blessure     = r.Blessure,
-                StatAffectee = r.Blessure == InjuryType.BlessurePersistante ? r.StatAffectee : null,
+                StatAffectee = r.Blessure == InjuryType.Sequelle ? r.StatAffectee : null,
             }).ToList();
 
             await MatchService.ModifierFeuilleAsync(Id, feuilleModifiee, records);
@@ -741,14 +741,8 @@ else
         finally { _saving = false; }
     }
 
-    static string BlessureLabel(InjuryType? type, AffectedStat? stat) => type switch
-    {
-        InjuryType.ManqueSuivant      => "Rate prochain match",
-        InjuryType.BlessurePersistante => $"Séquelle : {stat?.ToString() ?? "?"}",
-        InjuryType.RetraiteTemporaire  => "Retraite",
-        InjuryType.Mort                => "Mort",
-        _                              => "—"
-    };
+    static string BlessureLabel(InjuryType? type, AffectedStat? stat) =>
+        type is { } t ? BlessureHelpers.Resume(t, stat) : "—";
 
     sealed class PlayerEditData
     {

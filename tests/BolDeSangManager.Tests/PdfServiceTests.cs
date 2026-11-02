@@ -36,7 +36,7 @@ public class PdfServiceTests
                 Nom = "Joueur Sequel",
                 ManqueSuivantMatch = false,
                 PointsStarPlayer = 0,
-                Blessures = [new PlayerInjury { Type = InjuryType.BlessurePersistante }] // → ✦
+                Blessures = [new PlayerInjury { Type = InjuryType.Sequelle, StatAffectee = AffectedStat.Force }] // → ✦
             },
             new TeamPlayer
             {
@@ -52,7 +52,7 @@ public class PdfServiceTests
                 Nom = "Joueur Toutes",
                 ManqueSuivantMatch = true,      // → ⚕
                 PointsStarPlayer = 8,           // → ★
-                Blessures = [new PlayerInjury { Type = InjuryType.BlessurePersistante }] // → ✦
+                Blessures = [new PlayerInjury { Type = InjuryType.Sequelle, StatAffectee = AffectedStat.Force }] // → ✦
             },
         ];
         return equipe;
@@ -308,6 +308,46 @@ public class PdfServiceTests
         var bytes = svc.GenererFeuilleEquipe(TeamAvecIcones(), inclureDescriptionsCompetences: false);
         Assert.NotNull(bytes);
         Assert.True(bytes.Length > 5_000, "PDF avec joueurs doit peser > 5 Ko");
+    }
+
+    // ─── Ticket #26 : la BP se distingue de la séquelle sur la feuille ──────
+
+    private static Team TeamAvecBlessures(int nbBp, bool sequelle)
+    {
+        var equipe = MinimalTeam("Team BP");
+        var blessures = Enumerable.Range(0, nbBp)
+            .Select(_ => new PlayerInjury { Type = InjuryType.BlessurePersistante })
+            .ToList();
+        if (sequelle)
+            blessures.Add(new PlayerInjury { Type = InjuryType.Sequelle, StatAffectee = AffectedStat.Armure });
+        equipe.Joueurs = [new TeamPlayer { Numero = 1, Nom = "Grognard", Blessures = blessures }];
+        return equipe;
+    }
+
+    private static string LireTextePdf(byte[] pdf)
+    {
+        using var doc = UglyToad.PdfPig.PdfDocument.Open(pdf);
+        return string.Join("\n", doc.GetPages().Select(p => p.Text));
+    }
+
+    private static int Occurrences(string texte, string motif) =>
+        System.Text.RegularExpressions.Regex.Matches(texte, System.Text.RegularExpressions.Regex.Escape(motif)).Count;
+
+    [Fact]
+    public void GenererFeuilleEquipe_JoueurAvecDeuxBP_AfficheLeCompteur()
+    {
+        var texte = LireTextePdf(new PdfService().GenererFeuilleEquipe(TeamAvecBlessures(2, false), false));
+        Assert.Contains("BP×2", texte);
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_UneBP_MarqueLeJoueur_EtUneSequelleSeuleNon()
+    {
+        // La légende contient « BP » une fois : on compte au-delà.
+        var avecBp   = LireTextePdf(new PdfService().GenererFeuilleEquipe(TeamAvecBlessures(1, false), false));
+        var sequelle = LireTextePdf(new PdfService().GenererFeuilleEquipe(TeamAvecBlessures(0, true), false));
+        Assert.Equal(Occurrences(sequelle, "BP") + 1, Occurrences(avecBp, "BP"));
+        Assert.DoesNotContain("BP×", avecBp);
     }
 
     [Fact]

@@ -45,12 +45,19 @@ public enum SkillCategory
     Scelerate   // S
 }
 
+/// <summary>
+/// Résultat d'un jet d'élimination (Tableau d'Élimination, LRB p.42).
+/// ⚠️ Persisté en int ET exporté par NOM (JsonStringEnumConverter) : ne jamais
+/// renommer ni réordonner ; toute nouvelle valeur s'ajoute à la fin.
+/// Libellés affichés : <see cref="BolDeSangManager.Helpers.BlessureHelpers"/>.
+/// </summary>
 public enum InjuryType
 {
-    ManqueSuivant,         // Rate le prochain match
-    BlessurePersistante,   // Blessure permanente (réduction de caractéristique)
-    RetraiteTemporaire,    // Réduction de caractéristique grave
-    Mort                   // Joueur mort
+    ManqueSuivant,         // « Amoché » : rate le prochain match (RPM)
+    BlessurePersistante,   // « Blessure sérieuse » : une BP (+1 aux futurs jets d'élimination) + RPM
+    RetraiteTemporaire,    // Hors tableau : retire le joueur de l'effectif (non conforme au LRB, sujet séparé)
+    Mort,                  // Joueur mort
+    Sequelle               // « Séquelle » : −1 sur une caractéristique (StatAffectee) + RPM — ajoutée par #26
 }
 
 public enum AffectedStat

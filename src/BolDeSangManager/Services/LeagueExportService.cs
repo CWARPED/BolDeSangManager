@@ -492,8 +492,13 @@ public class LeagueExportService(
                         db.TeamPlayerSkills.Add(new TeamPlayerSkill { TeamPlayerId = joueur.Id, SkillId = skill.Id, EstCompetenceDepart = false });
                 }
 
+                // Un export antérieur à #26 code une Séquelle en
+                // « BlessurePersistante + caractéristique » : NormaliserImport la relit.
                 foreach (var b in joueurDto.Blessures)
-                    db.PlayerInjuries.Add(new PlayerInjury { TeamPlayerId = joueur.Id, Type = b.Type, StatAffectee = b.StatAffectee, Description = b.Description, Date = DateTime.UtcNow });
+                {
+                    var (type, stat) = BlessureHelpers.NormaliserImport(b.Type, b.StatAffectee);
+                    db.PlayerInjuries.Add(new PlayerInjury { TeamPlayerId = joueur.Id, Type = type, StatAffectee = stat, Description = b.Description, Date = DateTime.UtcNow });
+                }
 
                 // Améliorations : sans ce rejeu, une ligue réimportée perdait tout
                 // l'historique de progression de ses joueurs. Champ optionnel :
@@ -604,8 +609,8 @@ public class LeagueExportService(
                             ?? (r.EquipeNom == matchDto.EquipeDomicileNom),
                         EstMVP = r.EstMVP,
                         PspGagnes = r.PspGagnes,
-                        Blessure = r.Blessure,
-                        StatAffectee = r.StatAffectee
+                        Blessure = r.Blessure is { } bl ? BlessureHelpers.NormaliserImport(bl, r.StatAffectee).type : null,
+                        StatAffectee = r.Blessure is { } bl2 ? BlessureHelpers.NormaliserImport(bl2, r.StatAffectee).stat : null
                     });
                 }
                 await db.SaveChangesAsync();

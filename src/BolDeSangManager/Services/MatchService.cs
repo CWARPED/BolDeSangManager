@@ -184,6 +184,8 @@ public class MatchService(
     public async Task<MatchSheet> SaisirFeuilleMatchAsync(int matchId, MatchSheet feuille,
         List<MatchPlayerRecord> records, string saisiParId)
     {
+        ValiderBlessures(records);
+
         var match = await db.Matches
             .Include(m => m.EquipeDomicile)
             .Include(m => m.EquipeExterieur)
@@ -661,22 +663,32 @@ public class MatchService(
                 Description = record.Blessure switch
                 {
                     InjuryType.ManqueSuivant       => "Rate le prochain match",
-                    InjuryType.BlessurePersistante => $"Blessure persistante : {record.StatAffectee}",
+                    InjuryType.BlessurePersistante => "Blessure persistante",
+                    InjuryType.Sequelle            => $"Séquelle : {record.StatAffectee}",
                     InjuryType.RetraiteTemporaire  => "Retraite temporaire",
                     InjuryType.Mort                => "Mort au combat",
                     _                              => ""
                 }
             });
 
+            // Tableau d'Élimination (LRB p.42) : Amoché, Blessure sérieuse et
+            // Séquelle font TOUS rater le prochain match.
             switch (record.Blessure)
             {
                 case InjuryType.ManqueSuivant:
                     joueur.ManqueSuivantMatch = true;
                     logger.LogInformation("Joueur {NomJoueur} (id={Id}) rate le prochain match", joueur.Nom, joueur.Id);
                     break;
-                case InjuryType.BlessurePersistante when record.StatAffectee.HasValue:
-                    AppliquerReductionCaracteristique(joueur, record.StatAffectee.Value);
-                    logger.LogWarning("Joueur {NomJoueur} (id={Id}) : séquelle sur {Stat}", joueur.Nom, joueur.Id, record.StatAffectee.Value);
+                case InjuryType.BlessurePersistante:
+                    // Aucun effet sur le profil : la BP donnera +1 aux futurs
+                    // jets d'élimination, elle est seulement comptée et affichée.
+                    joueur.ManqueSuivantMatch = true;
+                    logger.LogInformation("Joueur {NomJoueur} (id={Id}) : blessure persistante + RPM", joueur.Nom, joueur.Id);
+                    break;
+                case InjuryType.Sequelle:
+                    AppliquerReductionCaracteristique(joueur, record.StatAffectee!.Value);
+                    joueur.ManqueSuivantMatch = true;
+                    logger.LogWarning("Joueur {NomJoueur} (id={Id}) : séquelle sur {Stat} + RPM", joueur.Nom, joueur.Id, record.StatAffectee.Value);
                     break;
                 case InjuryType.RetraiteTemporaire:
                     joueur.EstRetraite = true;
@@ -699,6 +711,23 @@ public class MatchService(
             }
         }
         await db.SaveChangesAsync();
+    }
+
+    /// <summary>
+    /// Une Séquelle sans caractéristique n'aurait aucun effet : on refuse plutôt
+    /// que de perdre la saisie en silence (cas d'avant #26). Toute caractéristique
+    /// envoyée avec un autre type est effacée — seule la Séquelle en porte une.
+    /// </summary>
+    private static void ValiderBlessures(IEnumerable<MatchPlayerRecord> records)
+    {
+        foreach (var r in records)
+        {
+            if (r.Blessure == InjuryType.Sequelle && !r.StatAffectee.HasValue)
+                throw new InvalidOperationException(
+                    "Séquelle : choisissez la caractéristique réduite.");
+            if (r.Blessure != InjuryType.Sequelle)
+                r.StatAffectee = null;
+        }
     }
 
     private static void AppliquerReductionCaracteristique(TeamPlayer joueur, AffectedStat stat)
@@ -815,6 +844,10 @@ public class MatchService(
 
     public async Task ModifierFeuilleAsync(int matchId, MatchSheet feuilleModifiee, List<MatchPlayerRecord> nouveauxRecords)
     {
+        // AVANT toute inversion : un refus après coup laisserait la feuille
+        // à moitié défaite.
+        ValiderBlessures(nouveauxRecords);
+
         var match = await db.Matches
             .Include(m => m.EquipeDomicile)
             .Include(m => m.EquipeExterieur)
@@ -940,9 +973,14 @@ public class MatchService(
             switch (b.Type)
             {
                 case InjuryType.ManqueSuivant:      j.ManqueSuivantMatch = false; break;
+                case InjuryType.BlessurePersistante: j.ManqueSuivantMatch = false; break;
                 case InjuryType.RetraiteTemporaire: j.EstRetraite = false; break;
                 case InjuryType.Mort:               j.EstMort = false; break;
-                case InjuryType.BlessurePersistante when b.StatAffectee.HasValue:
+                // Séquelle : RPM + caractéristique. Le cas « BlessurePersistante
+                // avec caractéristique » ne peut plus exister après la migration
+                // SeparerBlessurePersistanteEtSequelle.
+                case InjuryType.Sequelle when b.StatAffectee.HasValue:
+                    j.ManqueSuivantMatch = false;
                     switch (b.StatAffectee.Value)
                     {
                         case AffectedStat.Mouvement:     j.ModMouvement++; break;

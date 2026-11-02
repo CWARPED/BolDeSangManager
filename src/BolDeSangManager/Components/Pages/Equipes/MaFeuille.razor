@@ -204,6 +204,13 @@ else
                             <MudIcon Icon="@Icons.Material.Filled.Warning" Color="Color.Warning"
                                     Size="Size.Small" title="Rate le prochain match" Class="ml-1" />
                         }
+                        @if (BlessureHelpers.NombreBP(j) is > 0 and var nbBp)
+                        {
+                            <MudChip T="string" Color="Color.Secondary" Size="Size.Small" Class="ml-1"
+                                     title="Blessure persistante : +1 au jet d'élimination par BP">
+                                @BlessureHelpers.MarqueBP(nbBp)
+                            </MudChip>
+                        }
                     </MudTd>
                     <MudTd DataLabel="Poste">
                         <div>@j.PlayerPosition?.Nom</div>

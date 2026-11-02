@@ -267,10 +267,17 @@ else
                             {
                                 <MudChip T="string" Color="Color.Warning" Size="Size.Small">Rate prochain</MudChip>
                             }
-                            @if (j.Blessures.Any(b => b.Type == InjuryType.BlessurePersistante))
+                            @if (BlessureHelpers.ASequelle(j))
                             {
                                 <MudChip T="string" Color="Color.Error" Size="Size.Small">
                                     Séquelles @SeqquellesSummary(j)
+                                </MudChip>
+                            }
+                            @if (BlessureHelpers.NombreBP(j) is > 0 and var nbBp)
+                            {
+                                <MudChip T="string" Color="Color.Secondary" Size="Size.Small"
+                                         title="Blessure persistante : +1 au jet d'élimination par BP">
+                                    @BlessureHelpers.MarqueBP(nbBp)
                                 </MudChip>
                             }
                         </MudTd>
