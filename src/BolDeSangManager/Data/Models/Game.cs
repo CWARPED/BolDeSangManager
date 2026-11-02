@@ -23,6 +23,13 @@ public class RulesVersion
     public int Ordre { get; set; }
 
     /// <summary>
+    /// Texte libre de présentation de la version (#22), mis en forme en
+    /// Markdown comme le règlement d'une ligue. Affiché en tête de la page
+    /// « Règles ». Suit la copie de version et l'export/import.
+    /// </summary>
+    public string Presentation { get; set; } = string.Empty;
+
+    /// <summary>
     /// Numéro de révision des données de cette version de règles (F3).
     /// Incrémenté à chaque export : c'est lui qui permet de dire quelle
     /// correction de l'asso se trouve dans quelle livraison, et d'avertir

@@ -1,0 +1,101 @@
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Services
+@inject DataEditService DataEditService
+@inject MarkdownService Markdown
+@inject ISnackbar Snackbar
+
+@* Texte de présentation d'une version de règles (#22), sur le modèle du
+   règlement de ligue : saisie Markdown + aperçu. Comme les barèmes, il vit
+   dans un onglet de /admin/donnees et suit le sélecteur de version du haut.
+   Affiché en lecture seule en tête de la page « Règles ». *@
+
+@if (Version is null)
+{
+    <MudText Typo="Typo.body2" Color="Color.Secondary">
+        Choisissez une version de règles.
+    </MudText>
+}
+else
+{
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
+        <MudText Typo="Typo.subtitle1"><b>@Version.Nom</b></MudText>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Save"
+                   OnClick="Enregistrer" Disabled="@(_enCours || !_modifie)">
+            @(_enCours ? "Enregistrement…" : "Enregistrer")
+        </MudButton>
+    </MudStack>
+
+    <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+        Visible par tous les membres dans le menu « Règles ». Mise en forme :
+        <code># Titre</code>, <code>- liste</code>, <code>**gras**</code>.
+    </MudAlert>
+
+    <MudGrid Spacing="2">
+        <MudItem xs="12" md="6">
+            <MudTextField T="string" Value="_brouillon" ValueChanged="SurSaisie"
+                          Label="Présentation" Variant="Variant.Outlined"
+                          Lines="20" AutoGrow="false" Immediate="true" />
+        </MudItem>
+        <MudItem xs="12" md="6">
+            <MudPaper Outlined="true" Class="pa-4" Style="min-height:200px">
+                <MudText Typo="Typo.overline" Color="Color.Secondary">Aperçu</MudText>
+                <div class="reglement-rendu">
+                    @((MarkupString)Markdown.VersHtml(_brouillon))
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code {
+    /// <summary>Version éditée — celle du sélecteur de la page.</summary>
+    [Parameter] public RulesVersion? Version { get; set; }
+
+    /// <summary>Prévient la page pour qu'elle recharge ses versions.</summary>
+    [Parameter] public EventCallback OnEnregistre { get; set; }
+
+    string _brouillon = "";
+    bool _modifie;
+    bool _enCours;
+
+    // Version réellement chargée dans le champ : sans ce garde-fou, changer de
+    // version dans le sélecteur laisserait le texte de la précédente — et un
+    // « Enregistrer » l'écrirait sur la nouvelle (même piège que les barèmes).
+    int _versionChargee = -1;
+
+    protected override void OnParametersSet()
+    {
+        if (Version is null || Version.Id == _versionChargee) return;
+        _brouillon = Version.Presentation ?? "";
+        _modifie = false;
+        _versionChargee = Version.Id;
+    }
+
+    void SurSaisie(string texte)
+    {
+        _brouillon = texte ?? "";
+        _modifie = _brouillon != (Version?.Presentation ?? "");
+    }
+
+    async Task Enregistrer()
+    {
+        if (Version is null) return;
+        _enCours = true;
+        try
+        {
+            await DataEditService.DefinirPresentationVersionAsync(Version.Id, _brouillon);
+            Snackbar.Add($"Présentation de « {Version.Nom} » enregistrée.", Severity.Success);
+            _modifie = false;
+            // La page recharge ses versions et nous renvoie une NOUVELLE
+            // instance : forcer la relecture plutôt que la croire « déjà chargée ».
+            _versionChargee = -1;
+            await OnEnregistre.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Erreur : {ex.Message}", Severity.Error);
+        }
+        finally { _enCours = false; }
+    }
+}

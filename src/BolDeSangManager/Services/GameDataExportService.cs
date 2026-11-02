@@ -162,7 +162,8 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
             PaliersAmelioration: paliersAmelioration.Select(p => new PalierAmeliorationGdDto(
                 p.Rang, p.CoutAleaPrincipale, p.CoutChoixPrincipale,
                 p.CoutSecondaire, p.CoutCaracteristique
-            )).ToList()
+            )).ToList(),
+            Presentation: version.Presentation
         );
 
         var json = JsonSerializer.SerializeToUtf8Bytes(dto, JsonOpts);
@@ -258,7 +259,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 HausseCapacitePasse = dto.HausseCapacitePasse ?? baremeDefaut.HausseCapacitePasse,
                 HausseAgilite       = dto.HausseAgilite       ?? baremeDefaut.HausseAgilite,
                 HausseForce         = dto.HausseForce         ?? baremeDefaut.HausseForce,
-                SurcoutElite        = dto.SurcoutElite        ?? baremeDefaut.SurcoutElite
+                SurcoutElite        = dto.SurcoutElite        ?? baremeDefaut.SurcoutElite,
+                // #22 — absent d'un export antérieur : pas de présentation.
+                Presentation        = dto.Presentation ?? string.Empty
             };
             db.RulesVersions.Add(version);
             await db.SaveChangesAsync();
@@ -1218,7 +1221,9 @@ record GameDataExportDto(
     int? HausseForce = null,
     int? SurcoutElite = null,
     // Coût en PSP par rang. Absent d'un export antérieur ⇒ tableau LRB.
-    List<PalierAmeliorationGdDto>? PaliersAmelioration = null
+    List<PalierAmeliorationGdDto>? PaliersAmelioration = null,
+    // Texte de présentation de la version (#22). Optionnel (rétrocompat).
+    string? Presentation = null
 );
 
 /// <summary>Coût en PSP d'une amélioration pour un rang donné (1 à 6).</summary>

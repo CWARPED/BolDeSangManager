@@ -98,6 +98,16 @@ propre commande sur `Ligues/Detail.razor` et restent modifiables en cours de sai
 `ModifierLigueAsync` n'y touche jamais — un test le verrouille. **Le barème de points du
 classement suit le même modèle** (`ModifierBaremePointsAsync`), pour la même raison.
 
+**Page « Règles »** (`/regles`, tickets #20 et #22) : consultation **en lecture seule** du
+contenu d'une version de règles, ouverte à **tous les membres connectés** (pas au public :
+les textes complets viennent du livre de règles et ne nous appartiennent pas). Sélecteur
+de version préréglé sur la version active de chaque jeu ; onglets Présentation, Races
+(« Collèges » en Dungeon Bowl), Compétences, Star players. Rien n'y est éditable : la
+saisie reste dans « Édition des données ». La **Présentation** est un texte libre mis en
+forme (`RulesVersion.Presentation`, même rendu Markdown que `League.Reglement`), saisi par
+admin / grand commissaire ; comme tout champ de version, il suit le **clonage** et
+l'**export/import de version**.
+
 ⚠️ La route `/ligues/creer` n'a plus l'attribut `[Authorize(Roles = "Admin,GrandCommissaire")]`
 (un commissaire doit pouvoir éditer **sa** ligue). La garde de rôle en création est donc
 **dans le code** d'`OnInitializedAsync` : ne pas la retirer en croyant l'attribut suffisant.

@@ -82,6 +82,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         var vDest   = await db.RulesVersions.FirstOrDefaultAsync(v => v.Id == destVersionId);
         if (vSource is not null && vDest is not null)
         {
+            vDest.Presentation       = vSource.Presentation;   // #22
             vDest.PspParTouchdown    = vSource.PspParTouchdown;
             vDest.PspParPasse        = vSource.PspParPasse;
             vDest.PspParInterception = vSource.PspParInterception;
@@ -456,6 +457,20 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         await db.SaveChangesAsync();
 
         logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types, {NbStaff} staff)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count, sourceStaff.Count);
+    }
+
+    /// <summary>
+    /// Texte de présentation d'une version (#22). Vide = aucune présentation.
+    /// Écran réservé aux admins / grands commissaires (« Édition des données »).
+    /// </summary>
+    public async Task DefinirPresentationVersionAsync(int versionId, string? texte)
+    {
+        var version = await db.RulesVersions.FindAsync(versionId)
+            ?? throw new InvalidOperationException("Version introuvable");
+        version.Presentation = texte ?? string.Empty;
+        await db.SaveChangesAsync();
+        logger.LogInformation("Version « {Nom} » (id={Id}) : présentation mise à jour ({Taille} caractères)",
+            version.Nom, versionId, version.Presentation.Length);
     }
 
     /// <summary>

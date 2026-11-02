@@ -1,0 +1,330 @@
+@page "/regles"
+@attribute [Authorize]
+@using BolDeSangManager.Data.Enums
+@using BolDeSangManager.Data.Models
+@using BolDeSangManager.Helpers
+@using BolDeSangManager.Services
+@inject ReglesConsultationService Consultation
+@inject MarkdownService Markdown
+
+@* Page « Règles » (#20, #22) : consultation EN LECTURE SEULE du contenu
+   d'une version, pour tous les membres connectés. Rien n'est éditable ici :
+   la saisie reste dans /admin/donnees. *@
+
+<PageTitle>Règles</PageTitle>
+
+<div class="page-regles">
+
+<MudStack Row="true" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+    <MudText Typo="Typo.h4">Règles</MudText>
+    @if (_versions.Count > 0)
+    {
+        <MudSelect T="int" Value="_versionId" ValueChanged="ChangerVersion"
+                   Label="Version" Dense="true" Variant="Variant.Outlined" Style="min-width:240px;max-width:420px">
+            @foreach (var v in _versions)
+            {
+                <MudSelectItem Value="v.Id">@v.Game.Nom — @v.Nom@(v.EstActive ? "" : " (inactive)")</MudSelectItem>
+            }
+        </MudSelect>
+    }
+</MudStack>
+
+@if (_contenu is null)
+{
+    @if (_charge)
+    {
+        <MudText Color="Color.Secondary">Aucune version de règles.</MudText>
+    }
+    else
+    {
+        <MudProgressLinear Indeterminate="true" />
+    }
+}
+else
+{
+    <MudTabs Elevation="0" Rounded="true" ApplyEffectsToContainer="true" PanelClass="pt-3"
+             @bind-ActivePanelIndex="_onglet">
+
+        @* ── Présentation (#22) ── *@
+        <MudTabPanel Text="Présentation">
+            @if (string.IsNullOrWhiteSpace(_contenu.Version.Presentation))
+            {
+                <MudText Color="Color.Secondary">Pas encore de présentation pour cette version.</MudText>
+            }
+            else
+            {
+                <MudPaper Outlined="true" Class="pa-4">
+                    <div class="reglement-rendu">@((MarkupString)Markdown.VersHtml(_contenu.Version.Presentation))</div>
+                </MudPaper>
+            }
+        </MudTabPanel>
+
+        @* ── Races / Collèges ── *@
+        <MudTabPanel Text="@TermeRaces">
+            <MudTextField @bind-Value="_filtreRace" Placeholder="Rechercher…" Immediate="true" Clearable="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Style="max-width:360px" />
+            <MudExpansionPanels MultiExpansion="true" Elevation="0">
+                @foreach (var race in RacesFiltrees)
+                {
+                    <MudExpansionPanel>
+                        <TitleContent>
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+                                <MudText><b>@race.Nom</b></MudText>
+                                @if (DisplayHelpers.CategorieLabel(race.Categorie) is { Length: > 0 } cat)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                             Color="@DisplayHelpers.CategorieColor(race.Categorie)">@cat</MudChip>
+                                }
+                            </MudStack>
+                        </TitleContent>
+                        <ChildContent>
+                            <MudText Typo="Typo.body2" Class="mb-2">Relance : @race.CoutRelance.ToString("N0") po</MudText>
+
+                            @if (race.ReglesSpecialesListe.Count > 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-1"><b>Règles spéciales :</b></MudText>
+                                <div class="mb-2">
+                                    @foreach (var r in race.ReglesSpecialesListe.Select(x => x.SpecialRule).OrderBy(r => r.Nom))
+                                    {
+                                        <span class="skill-link mr-2" @onclick="() => _regleAffichee = r">@r.Nom</span>
+                                    }
+                                </div>
+                            }
+                            @if (race.LiguesListe.Count > 0)
+                            {
+                                <MudText Typo="Typo.body2" Class="mb-2">
+                                    <b>Ligues :</b> @string.Join(", ", race.LiguesListe.Select(l => l.ThemedLeague.Nom).OrderBy(n => n))
+                                </MudText>
+                            }
+
+                            @* Postes en cartes : lisibles sur téléphone, où un tableau à
+                               10 colonnes déborde. *@
+                            @foreach (var p in race.Postes.OrderBy(p => p.Cout).ThenBy(p => p.Nom))
+                            {
+                                <MudPaper Outlined="true" Class="pa-3 mb-2">
+                                    <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                                        <MudText><b>@p.Nom</b> <span class="mud-text-secondary">0-@p.QuantiteMax</span></MudText>
+                                        <MudText>@p.Cout.ToString("N0") po</MudText>
+                                    </MudStack>
+                                    <MudText Typo="Typo.body2" Class="my-1" Style="font-family:monospace">
+                                        M @p.Mouvement · F @p.Force · AG @p.Agilite · CP @p.CapacitePasse · AR @p.Armure
+                                    </MudText>
+                                    <div>
+                                        @if (p.CompetencesDepart.Count == 0)
+                                        {
+                                            <MudText Typo="Typo.body2" Color="Color.Secondary">Aucune compétence</MudText>
+                                        }
+                                        @foreach (var c in p.CompetencesDepart.Select(c => c.Skill).OrderBy(s => s.Nom))
+                                        {
+                                            <span class="skill-link mr-2" @onclick="() => _competenceAffichee = c">@c.Nom</span>
+                                        }
+                                    </div>
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                        Principales : @Acces(p, true) · Secondaires : @Acces(p, false)
+                                    </MudText>
+                                </MudPaper>
+                            }
+                        </ChildContent>
+                    </MudExpansionPanel>
+                }
+            </MudExpansionPanels>
+        </MudTabPanel>
+
+        @* ── Compétences ── *@
+        <MudTabPanel Text="Compétences">
+            <MudTextField @bind-Value="_filtreCompetence" Placeholder="Rechercher…" Immediate="true" Clearable="true"
+                          Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
+                          Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Style="max-width:360px" />
+            @foreach (var groupe in CompetencesFiltrees.GroupBy(s => s.SkillCategoryDef?.Nom ?? "Autres").OrderBy(g => g.Key))
+            {
+                <MudText Typo="Typo.h6" Class="mt-3 mb-1">@groupe.Key</MudText>
+                <MudList T="string" Dense="true" Class="py-0">
+                    @foreach (var s in groupe)
+                    {
+                        <MudListItem T="string" OnClick="() => _competenceAffichee = s">
+                            <MudText>
+                                @s.Nom
+                                @if (s.EstElite) { <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Élite</MudChip> }
+                                @if (s.EstTrait) { <MudChip T="string" Size="Size.Small" Class="ml-1">Trait</MudChip> }
+                            </MudText>
+                        </MudListItem>
+                    }
+                </MudList>
+            }
+        </MudTabPanel>
+
+        @* ── Star players ── *@
+        <MudTabPanel Text="Star players">
+            <MudSelect T="int" @bind-Value="_raceStars" Label="Accessibles à…" Dense="true"
+                       Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3" Style="max-width:360px">
+                <MudSelectItem Value="0">Toutes les équipes</MudSelectItem>
+                @foreach (var r in _contenu.Races)
+                {
+                    <MudSelectItem Value="r.Id">@r.Nom</MudSelectItem>
+                }
+            </MudSelect>
+            @foreach (var s in StarsFiltres)
+            {
+                <MudPaper Outlined="true" Class="pa-3 mb-2">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap">
+                        <MudText><b>@s.Nom</b></MudText>
+                        <MudText>@s.Cout.ToString("N0") po</MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Class="my-1" Style="font-family:monospace">
+                        M @s.Mouvement · F @s.Force · AG @s.Agilite · CP @s.CapacitePasse · AR @s.Armure
+                    </MudText>
+                    <div>
+                        @foreach (var nom in s.CompetencesListe)
+                        {
+                            var comp = TrouverCompetence(nom);
+                            if (comp is null)
+                            {
+                                <span class="mr-2 regles-nom">@nom</span>
+                            }
+                            else
+                            {
+                                <span class="skill-link mr-2" @onclick="() => _competenceAffichee = comp">@nom</span>
+                            }
+                        }
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(s.ReglesSpeciales))
+                    {
+                        <MudText Typo="Typo.body2" Class="mt-1" Style="white-space:pre-line">@s.ReglesSpeciales</MudText>
+                    }
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">
+                        @(s.Ligues.Count == 0 ? "Toutes les équipes" : string.Join(", ", s.Ligues.Select(l => l.ThemedLeague.Nom).OrderBy(n => n)))
+                    </MudText>
+                </MudPaper>
+            }
+            @if (!StarsFiltres.Any())
+            {
+                <MudText Color="Color.Secondary">Aucun star player.</MudText>
+            }
+        </MudTabPanel>
+    </MudTabs>
+}
+
+</div>
+
+@* Fiche d'une compétence / règle spéciale — même panneau que le choix de race. *@
+@if (_competenceAffichee is { } comp)
+{
+    <div class="skill-overlay-backdrop" @onclick="Fermer">
+        <div class="skill-overlay-stop" @onclick:stopPropagation="true">
+            <MudPaper Class="skill-overlay-card" Elevation="8">
+                <div class="skill-overlay-head">
+                    <MudText Typo="Typo.h6"><b>@comp.Nom</b></MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="Fermer" />
+                </div>
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                    @string.Join(" · ", new[] { comp.SkillCategoryDef?.Nom, comp.EstTrait ? "Trait" : null, comp.EstElite ? "Élite" : null }.Where(x => !string.IsNullOrEmpty(x)))
+                </MudText>
+                <MudText Typo="Typo.body2" Class="skill-overlay-desc">@comp.Description</MudText>
+                <MudText Typo="Typo.caption" Class="skill-overlay-hint">Touchez à côté pour fermer</MudText>
+            </MudPaper>
+        </div>
+    </div>
+}
+@if (_regleAffichee is { } regle)
+{
+    <div class="skill-overlay-backdrop" @onclick="Fermer">
+        <div class="skill-overlay-stop" @onclick:stopPropagation="true">
+            <MudPaper Class="skill-overlay-card" Elevation="8">
+                <div class="skill-overlay-head">
+                    <MudText Typo="Typo.h6"><b>@regle.Nom</b></MudText>
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small" OnClick="Fermer" />
+                </div>
+                <MudText Typo="Typo.body2" Class="skill-overlay-desc">@regle.Description</MudText>
+                <MudText Typo="Typo.caption" Class="skill-overlay-hint">Touchez à côté pour fermer</MudText>
+            </MudPaper>
+        </div>
+    </div>
+}
+
+@code {
+    List<RulesVersion> _versions = [];
+    ContenuRegles? _contenu;
+    int _versionId;
+    bool _charge;
+    int _onglet;
+
+    string _filtreRace = "";
+    string _filtreCompetence = "";
+    int _raceStars;
+
+    Skill? _competenceAffichee;
+    SpecialRule? _regleAffichee;
+    Dictionary<string, Skill> _competencesParNom = new(StringComparer.OrdinalIgnoreCase);
+
+    string TermeRaces => _contenu?.Version.Game.Type == GameType.DungeonBowl ? "Collèges" : "Races";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _versions = await Consultation.GetVersionsAsync();
+        if (ReglesConsultationService.VersionParDefaut(_versions) is { } v)
+            await ChargerAsync(v.Id);
+        _charge = true;
+    }
+
+    async Task ChangerVersion(int id)
+    {
+        await ChargerAsync(id);
+    }
+
+    async Task ChargerAsync(int id)
+    {
+        _versionId = id;
+        _contenu = await Consultation.GetContenuAsync(id);
+        // Les races changent d'une version à l'autre : le filtre par race repart
+        // de zéro. Les recherches texte, elles, sont gardées (comparer « Blocage »
+        // entre deux versions).
+        _raceStars = 0;
+        // Les compétences des star players sont du texte libre : on relie
+        // celles qui existent au catalogue pour ouvrir leur description.
+        _competencesParNom = new(StringComparer.OrdinalIgnoreCase);
+        foreach (var s in _contenu?.Competences ?? [])
+            _competencesParNom.TryAdd(s.Nom, s);
+    }
+
+    IEnumerable<TeamType> RacesFiltrees => (_contenu?.Races ?? [])
+        .Where(r => string.IsNullOrWhiteSpace(_filtreRace)
+                    || r.Nom.Contains(_filtreRace, StringComparison.OrdinalIgnoreCase));
+
+    IEnumerable<Skill> CompetencesFiltrees => (_contenu?.Competences ?? [])
+        .Where(s => string.IsNullOrWhiteSpace(_filtreCompetence)
+                    || s.Nom.Contains(_filtreCompetence, StringComparison.OrdinalIgnoreCase));
+
+    IEnumerable<StarPlayer> StarsFiltres
+    {
+        get
+        {
+            if (_contenu is null) return [];
+            var race = _contenu.Races.FirstOrDefault(r => r.Id == _raceStars);
+            return race is null
+                ? _contenu.StarPlayers
+                : ReglesConsultationService.StarsAccessibles(_contenu.StarPlayers, race);
+        }
+    }
+
+    static string Acces(PlayerPosition p, bool principale)
+    {
+        var codes = p.AccesCategories.Where(a => a.EstPrincipale == principale)
+            .Select(a => a.SkillCategoryDef.Code).OrderBy(c => c).ToList();
+        return codes.Count == 0 ? "—" : string.Concat(codes);
+    }
+
+    // « Châtaigne (+1) » → cherche aussi « Châtaigne » : le catalogue ne porte pas les paramètres.
+    Skill? TrouverCompetence(string nom)
+    {
+        if (_competencesParNom.TryGetValue(nom, out var s)) return s;
+        var i = nom.IndexOf('(');
+        return i > 0 && _competencesParNom.TryGetValue(nom[..i].Trim(), out s) ? s : null;
+    }
+
+    void Fermer()
+    {
+        _competenceAffichee = null;
+        _regleAffichee = null;
+    }
+}

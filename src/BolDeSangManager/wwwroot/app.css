@@ -1251,3 +1251,11 @@ h1:focus {
 .mud-select .mud-input-outlined-border {
     border-top-color: transparent;
 }
+
+/* Page « Règles » : un nom de compétence (« Solitaire (4+) ») ne se coupe
+   jamais en fin de ligne — sur téléphone il passait à moitié à la ligne. */
+.page-regles .skill-link,
+.page-regles .regles-nom {
+    display: inline-block;
+    white-space: nowrap;
+}

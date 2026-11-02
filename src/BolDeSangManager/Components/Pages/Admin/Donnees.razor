@@ -571,6 +571,11 @@
                                  OnEnregistre="ChargerVersionsAsync" />
         </MudTabPanel>
 
+        <MudTabPanel Text="Présentation">
+            <PresentationVersionPanel Version="@_versionSelectionnee"
+                                      OnEnregistre="ChargerVersionsAsync" />
+        </MudTabPanel>
+
         <MudTabPanel Text="Versions">
             <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-2">
                 <MudText Typo="Typo.subtitle1"><b>@_versions.Count version(s)</b></MudText>

@@ -1081,6 +1081,10 @@ namespace BolDeSangManager.Migrations
                     b.Property<int>("PointsVictoire")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Presentation")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("PspBonusMvp")
                         .HasColumnType("INTEGER");
 
