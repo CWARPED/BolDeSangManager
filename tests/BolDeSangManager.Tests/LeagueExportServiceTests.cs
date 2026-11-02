@@ -443,6 +443,48 @@ public class LeagueExportServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task ExportImport_HainesDuJoueurEtDeLaFeuille_Voyagent()
+    {
+        // #28 — la Haine du joueur ET sa trace sur la ligne de feuille doivent
+        // survivre à l'aller-retour, sinon corriger la feuille d'une ligue
+        // réimportée ne retirerait plus la Haine qu'elle avait donnée.
+        var (ligue, commissaire) = await SetupLigueAvecEquipesAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var div = new Division { LeagueId = ligue.Id, Nom = "D1", Ordre = 1 };
+            db.Divisions.Add(div);
+            await db.SaveChangesAsync();
+
+            var equipes = await db.Teams.Where(t => t.LeagueId == ligue.Id).OrderBy(t => t.Nom).ToListAsync();
+            var match = await DataSeeder.SeedMatchAsync(db, equipes[0].Id, equipes[1].Id, div.Id);
+            var gromag = await db.TeamPlayers.SingleAsync(p => p.Nom == "Gromag");
+            gromag.Haines = "Orque,Nain";
+            var feuille = new MatchSheet { MatchId = match.Id, SaisiParId = commissaire.Id };
+            feuille.RecordsJoueurs.Add(new MatchPlayerRecord { TeamPlayerId = gromag.Id, EstCoteDomicile = true,
+                Blessure = InjuryType.ManqueSuivant, HaineCible = "Orque" });
+            db.MatchSheets.Add(feuille);
+            await db.SaveChangesAsync();
+        }
+
+        byte[] bytes;
+        await using (var dbExport = _factory.CreateContext())
+            bytes = await CreateService(dbExport).ExportAsync(ligue.Id);
+
+        League importee;
+        await using (var dbImport = _factory.CreateContext())
+        {
+            using var flux = new MemoryStream(bytes);
+            importee = await CreateService(dbImport).ImportAsync(flux, commissaire.Id);
+        }
+
+        await using var verif = _factory.CreateContext();
+        var joueur = await verif.TeamPlayers.SingleAsync(p => p.Nom == "Gromag" && p.Team.LeagueId == importee.Id);
+        Assert.Equal("Orque,Nain", joueur.Haines);
+        var record = await verif.MatchPlayerRecords.SingleAsync(r => r.TeamPlayerId == joueur.Id);
+        Assert.Equal("Orque", record.HaineCible);
+    }
+
+    [Fact]
     public async Task ExportImport_AmeliorationDeCompetence_RetrouveSaCompetenceParNom()
     {
         var (ligue, commissaire) = await SetupLigueAvecEquipesAsync();

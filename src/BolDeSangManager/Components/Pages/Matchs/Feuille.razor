@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject LeagueNotificationService Notifications
 @inject BolDeSangManager.Services.IAuthorizationService Auth
+@inject HaineService HaineService
 @implements IDisposable
 
 <PageTitle>Feuille de match — BolDeSang Manager</PageTitle>
@@ -386,6 +387,7 @@ else
     /// </summary>
     bool _estCommissaire;
     HashSet<int> _blessuresOuvertes = [];
+    List<string> _suggestionsHaine = [];
 
     int _tdDomicile    => _recordsDomicile.Sum(r => r.Touchdowns);
     int _tdExterieur   => _recordsExterieur.Sum(r => r.Touchdowns);
@@ -522,7 +524,7 @@ else
                         <MudIcon Icon="@Icons.Material.Outlined.LocalHospital" Size="Size.Small" Class="mr-1" />Blessure
                     </MudText>
                     <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                   OnClick="@(() => { r.Blessure = null; r.StatAffectee = null; _blessuresOuvertes.Remove(r.TeamPlayerId); })"
+                                   OnClick="@(() => { r.Blessure = null; r.StatAffectee = null; r.HaineCible = null; _blessuresOuvertes.Remove(r.TeamPlayerId); })"
                                    title="Effacer" />
                 </MudStack>
                 <MudSelect @bind-Value="r.Blessure" T="InjuryType?" Variant="Variant.Outlined"
@@ -543,6 +545,11 @@ else
                             <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)s)">@BlessureHelpers.LibelleStat(s)</MudSelectItem>
                         }
                     </MudSelect>
+                }
+                @if (BlessureHelpers.PermetHaine(r.Blessure))
+                {
+                    <SelecteurHaine Suggestions="_suggestionsHaine" Value="@r.HaineCible"
+                                    ValueChanged="@(v => r.HaineCible = v)" Class="mt-2" />
                 }
               </div>
             : @<MudButton Variant="Variant.Text" Color="Color.Default" FullWidth="true" Size="Size.Small"
@@ -573,6 +580,10 @@ else
             _match.Division?.League?.Game?.Type ?? GameType.BloodBowl);
 
         _ligueAvecPaliers = _match.Division?.League?.PaliersPoints.Count > 0;
+
+        // Suggestions de Haine (#28) : mots-clés de la version, saisie libre.
+        if (_match.Division?.League is { } ligueHaine)
+            _suggestionsHaine = await HaineService.GetSuggestionsAsync(ligueHaine.RulesVersionId);
 
         var estCoach = _match.EquipeDomicile?.CoachId == _userId || _match.EquipeExterieur?.CoachId == _userId;
         _estCoach = estCoach;
@@ -691,6 +702,7 @@ else
                     EstMVP                = r.EstMVP,
                     Blessure              = r.Blessure,
                     StatAffectee          = r.Blessure == InjuryType.Sequelle ? r.StatAffectee : null,
+                    HaineCible            = BlessureHelpers.PermetHaine(r.Blessure) ? r.HaineCible : null,
                     PspGagnes             = PspDe(r)
                 }).ToList();
 
@@ -758,6 +770,7 @@ else
         public int           Agressions            { get; set; }
         public InjuryType?   Blessure              { get; set; }
         public AffectedStat? StatAffectee          { get; set; }
+        public string?       HaineCible            { get; set; }
 
         /// <summary>PSP saisie par le coach (R4). null = suivre la valeur calculée.</summary>
         public int?          PspSaisie              { get; set; }

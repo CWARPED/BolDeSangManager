@@ -7,6 +7,7 @@
 @inject PdfService PdfService
 @inject SettingsService SettingsService
 @inject DataEditService DataEditService
+@inject HaineService HaineService
 @inject AuthenticationStateProvider AuthProvider
 @inject IJSRuntime JS
 @inject ISnackbar Snackbar
@@ -347,6 +348,8 @@ else
     async Task ChargerMatchProchain()
     {
         if (_equipeDetail is null) return;
+        // Appelée à chaque changement d'équipe : la version de règles peut changer.
+        await ChargerTraitsHaineAsync();
         var matchs = await MatchService.GetMatchsEquipeAsync(_equipeDetail.Id);
         var prochain = matchs
             .Where(m => m.Statut == MatchStatus.Programme || m.Statut == MatchStatus.AJouer)
@@ -400,7 +403,8 @@ else
                 _equipeDetail, _pdfDescriptions,
                 _matchProchain, _urlExterne, _pdfPaysage,
                 _pdfCoupsDePouce ? _coupsDePouce : null,
-                _pdfStarPlayers ? _starPlayers : null);
+                _pdfStarPlayers ? _starPlayers : null,
+                _traitsHaine);
             var suffixe = _pdfPaysage ? "-paysage" : "";
             var nom = $"feuille-{_equipeDetail.Nom.ToLower().Replace(" ", "-")}{suffixe}.pdf";
             var base64 = Convert.ToBase64String(bytes);
@@ -455,7 +459,34 @@ else
             builder.AddContent(9, offerte + " (capitaine)");
             builder.CloseElement();
         }
+
+        // Haines gagnées (#28) — même rendu que la page de l'équipe.
+        var haines = HaineHelpers.Liste(j.Haines);
+        for (int i = 0; i < haines.Count; i++)
+        {
+            if (skills.Count > 0 || offerte is not null || i > 0) builder.AddMarkupContent(10, ", ");
+            var libelle = HaineHelpers.Libelle(haines[i]);
+            builder.OpenElement(11, "span");
+            if (_traitsHaine.TryGetValue(libelle, out var trait))
+            {
+                builder.AddAttribute(12, "class", "skill-link");
+                builder.AddAttribute(13, "onclick",
+                    EventCallback.Factory.Create<MouseEventArgs>(this, () => OuvrirCompetence(trait)));
+            }
+            builder.AddContent(14, libelle);
+            builder.CloseElement();
+        }
     };
+
+    // Traits « Haine (…) » du catalogue (#28) : description d'une Haine gagnée,
+    // à l'écran comme dans le rappel des compétences du PDF. Vide en DB 2022.
+    Dictionary<string, Skill> _traitsHaine = new(StringComparer.OrdinalIgnoreCase);
+    async Task ChargerTraitsHaineAsync()
+    {
+        _traitsHaine = _equipeDetail?.TeamType is { } tt
+            ? await HaineService.GetTraitsCatalogueAsync(tt.RulesVersionId)
+            : new(StringComparer.OrdinalIgnoreCase);
+    }
 
     Skill? _competenceAffichee;
     void OuvrirCompetence(Skill s) => _competenceAffichee = s;

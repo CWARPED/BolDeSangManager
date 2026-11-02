@@ -152,6 +152,7 @@ public class LeagueExportService(
                 CompetencesAcquises: j.Competences
                     .Where(c => !c.EstCompetenceDepart)
                     .Select(c => c.Skill?.Nom ?? "").Where(n => n != "").ToList(),
+                Haines: HaineHelpers.Liste(j.Haines),
                 Blessures: j.Blessures
                     .Select(b => new BlessureExportDto(b.Type, b.StatAffectee, b.Description)).ToList(),
                 // Historique de progression. La compétence part par NOM : les ids
@@ -212,7 +213,8 @@ public class LeagueExportService(
                         EstMVP: r.EstMVP,
                         PspGagnes: r.PspGagnes,
                         Blessure: r.Blessure,
-                        StatAffectee: r.StatAffectee
+                        StatAffectee: r.StatAffectee,
+                        Haine: r.HaineCible   // #28
                     )).ToList()
                 )
             )).ToList();
@@ -475,6 +477,7 @@ public class LeagueExportService(
                     EstMort = joueurDto.EstMort,
                     EstRetraite = joueurDto.EstRetraite,
                     ManqueSuivantMatch = joueurDto.ManqueSuivantMatch,
+                    Haines = HaineHelpers.Joindre(joueurDto.Haines ?? []),   // #28
                     RecruteLe = DateTime.UtcNow
                 };
                 db.TeamPlayers.Add(joueur);
@@ -610,7 +613,8 @@ public class LeagueExportService(
                         EstMVP = r.EstMVP,
                         PspGagnes = r.PspGagnes,
                         Blessure = r.Blessure is { } bl ? BlessureHelpers.NormaliserImport(bl, r.StatAffectee).type : null,
-                        StatAffectee = r.Blessure is { } bl2 ? BlessureHelpers.NormaliserImport(bl2, r.StatAffectee).stat : null
+                        StatAffectee = r.Blessure is { } bl2 ? BlessureHelpers.NormaliserImport(bl2, r.StatAffectee).stat : null,
+                        HaineCible = r.Haine   // #28
                     });
                 }
                 await db.SaveChangesAsync();
@@ -719,7 +723,9 @@ record JoueurExportDto(
     /// ⚠️ <c>NombreAmeliorations</c> et <c>ValeurActuelle</c> restent dans le DTO :
     /// les retirer casserait la relecture des exports déjà produits.
     /// </summary>
-    List<AmeliorationExportDto>? Ameliorations = null
+    List<AmeliorationExportDto>? Ameliorations = null,
+    // Haines gagnées (#28), ex. ["Orque"]. Optionnelles (rétrocompat).
+    List<string>? Haines = null
 );
 
 /// <summary>
@@ -784,5 +790,8 @@ record RecordJoueurExportDto(
     int Agressions = 0,
     // Côté de l'équipe. Optionnel pour la rétrocompatibilité, mais nécessaire au
     // recalcul du classement : sans lui, tous les bonus tomberaient du même côté.
-    bool? EstCoteDomicile = null
+    bool? EstCoteDomicile = null,
+    // Cible de la Haine gagnée sur cette blessure (#28), ex. « Orque ».
+    // Optionnelle (rétrocompat).
+    string? Haine = null
 );

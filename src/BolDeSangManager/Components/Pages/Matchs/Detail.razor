@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @inject LeagueNotificationService Notifications
+@inject HaineService HaineService
 @implements IDisposable
 
 <PageTitle>Résultat du match — BolDeSang Manager</PageTitle>
@@ -272,7 +273,13 @@ else
                         }
                         else { <span>0</span> }
                     </MudTd>
-                    <MudTd DataLabel="Blessure">@BlessureLabel(r.Blessure, r.StatAffectee)</MudTd>
+                    <MudTd DataLabel="Blessure">
+                        @BlessureLabel(r.Blessure, r.StatAffectee)
+                        @if (!string.IsNullOrEmpty(r.HaineCible))
+                        {
+                            <div class="mud-text-secondary" style="font-size:0.8em">@HaineHelpers.Libelle(r.HaineCible)</div>
+                        }
+                    </MudTd>
                 </RowTemplate>
             </MudTable>
         }
@@ -314,6 +321,7 @@ else
     [Parameter] public int Id { get; set; }
 
     Match? _match;
+    List<string> _suggestionsHaine = [];
     bool _estCommissaire;
     bool _estCoachDuMatch;
     bool _modeEdition;
@@ -367,6 +375,10 @@ else
         _baremeXp = BaremePsp.DeLigue(_match?.Division?.League,
             _match?.Division?.League?.Game?.Type ?? GameType.BloodBowl);
         _ligueAvecPaliers = _match?.Division?.League?.PaliersPoints.Count > 0;
+
+        // Suggestions de Haine (#28) pour la correction : mots-clés de la version.
+        if (_match?.Division?.League is { } ligueHaine)
+            _suggestionsHaine = await HaineService.GetSuggestionsAsync(ligueHaine.RulesVersionId);
 
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
@@ -501,6 +513,7 @@ else
         Agressions            = r.Agressions,
         Blessure              = r.Blessure,
         StatAffectee          = r.StatAffectee,
+        HaineCible            = r.HaineCible,
     };
 
     /// <summary>
@@ -567,6 +580,12 @@ else
                                     <MudSelectItem T="AffectedStat?" Value="@((AffectedStat?)s)">@BlessureHelpers.LibelleStat(s)</MudSelectItem>
                                 }
                             </MudSelect>
+                        }
+
+                        @if (BlessureHelpers.PermetHaine(r.Blessure))
+                        {
+                            <SelecteurHaine Suggestions="_suggestionsHaine" Value="@r.HaineCible"
+                                            ValueChanged="@(v => r.HaineCible = v)" />
                         }
                     </MudStack>
                 </div>
@@ -727,6 +746,7 @@ else
                                      || (!r.EstCoteDomicile && r.TeamPlayerId == _mvpExtId),
                 Blessure     = r.Blessure,
                 StatAffectee = r.Blessure == InjuryType.Sequelle ? r.StatAffectee : null,
+                HaineCible   = BlessureHelpers.PermetHaine(r.Blessure) ? r.HaineCible : null,
             }).ToList();
 
             await MatchService.ModifierFeuilleAsync(Id, feuilleModifiee, records);
@@ -765,5 +785,6 @@ else
 
         public InjuryType? Blessure { get; set; }
         public AffectedStat? StatAffectee { get; set; }
+        public string? HaineCible { get; set; }
     }
 }

@@ -523,6 +523,9 @@ namespace BolDeSangManager.Migrations
                     b.Property<bool>("EstMVP")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("HaineCible")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Interceptions")
                         .HasColumnType("INTEGER");
 
@@ -1432,6 +1435,10 @@ namespace BolDeSangManager.Migrations
 
                     b.Property<bool>("EstRetraite")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Haines")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
 
                     b.Property<bool>("ManqueSuivantMatch")
                         .HasColumnType("INTEGER");

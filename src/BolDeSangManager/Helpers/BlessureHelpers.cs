@@ -20,6 +20,14 @@ public static class BlessureHelpers
         InjuryType.Mort,
     ];
 
+    /// <summary>
+    /// « Prendre sa revanche » (LRB S3 p.42, #28) : seules les éliminations qui
+    /// font rater le prochain match — Amoché, Blessure sérieuse, Séquelle —
+    /// ouvrent le jet de Haine. Ni la Mort, ni l'absence de blessure.
+    /// </summary>
+    public static bool PermetHaine(InjuryType? type) =>
+        type is InjuryType.ManqueSuivant or InjuryType.BlessurePersistante or InjuryType.Sequelle;
+
     public static string Libelle(InjuryType type) => type switch
     {
         InjuryType.ManqueSuivant       => "Amoché",

@@ -161,5 +161,15 @@ public class MatchPlayerRecord
     // Blessure subie (si applicable)
     public InjuryType? Blessure { get; set; }
     public AffectedStat? StatAffectee { get; set; }
+
+    /// <summary>
+    /// #28 — Haine gagnée sur cette blessure (LRB S3 p.42, « Prendre sa
+    /// revanche ») : la CIBLE seule, ex. « Orque ». Renseignée SEULEMENT si la
+    /// feuille a réellement ajouté la Haine au joueur : s'il l'avait déjà, elle
+    /// reste null, pour que corriger la feuille ne lui retire pas une Haine
+    /// antérieure au match.
+    /// </summary>
+    public string? HaineCible { get; set; }
+
     public bool AManqueLeMatch { get; set; } = false; // Absent avant le match
 }

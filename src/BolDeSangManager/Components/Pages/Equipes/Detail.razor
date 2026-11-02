@@ -7,6 +7,8 @@
 @inject IDialogService DialogService
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
+@inject HaineService HaineService
+@inject BolDeSangManager.Services.IAuthorizationService Auth
 
 <PageTitle>@(_equipe?.Nom ?? "Équipe") — BolDeSang Manager</PageTitle>
 
@@ -247,7 +249,14 @@ else
                         <MudTd DataLabel="Passe" Style="@InjuryCellStyle(j.ModCapacitePasse)">@StatStr(j.PlayerPosition?.CapacitePasse ?? "-", j.ModCapacitePasse, false)</MudTd>
                         <MudTd DataLabel="Armure" Style="@InjuryCellStyle(j.ModArmure)">@StatStr(j.PlayerPosition?.Armure ?? "-", j.ModArmure, true)</MudTd>
                         <MudTd DataLabel="Compétences">
+                            @* Un seul bloc : en vue téléphone, MudTd aligne ses enfants
+                               en ligne, ce qui écrasait compétences, menu et accès. *@
+                            <div>
                             <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
+                            @if (_peutGererHaine)
+                            {
+                                @MenuHaine(j)
+                            }
                             @if (j.PlayerPosition?.AccesCategories.Any() == true)
                             {
                                 <div style="font-size:10px; margin-top:2px">
@@ -258,6 +267,7 @@ else
                                     }
                                 </div>
                             }
+                            </div>
                         </MudTd>
                         <MudTd DataLabel="PSP" Style="text-align:center">@j.PointsStarPlayer</MudTd>
                         <MudTd DataLabel="Améliorations" Style="text-align:center">@j.Improvements.Count</MudTd>
@@ -470,6 +480,78 @@ else
     /// <summary>Vrai si l'utilisateur courant est le coach de cette équipe.</summary>
     bool _estCoach;
 
+    // Haine (#28). Suggestions et menu : coach de l'équipe et commissaire de la
+    // ligue. Traits du catalogue : pour tout le monde, juste pour la description.
+    bool _peutGererHaine;
+    List<string> _suggestionsHaine = [];
+    Dictionary<string, Skill> _traitsHaineCatalogue = new(StringComparer.OrdinalIgnoreCase);
+    int? _haineAjoutJoueurId;
+    string? _haineSaisie;
+
+    /// <summary>
+    /// Petit menu « Haine » sous les compétences d'un joueur : retirer une
+    /// Haine (perdue hors saison) ou en ajouter une (« Prendre sa revanche »,
+    /// LRB p.42) — l'ajout ouvre un champ texte avec suggestions sous le menu.
+    /// La Haine du profil d'un poste (Tueur de Trolls) n'y figure pas.
+    /// </summary>
+    RenderFragment MenuHaine(TeamPlayer j)
+    {
+        var haines = HaineHelpers.Liste(j.Haines);
+        return @<div>
+            <MudMenu Label="Haine" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small"
+                     Variant="Variant.Text" Dense="true" Class="menu-haine">
+                @foreach (var h in haines)
+                {
+                    <MudMenuItem Icon="@Icons.Material.Filled.Close" IconColor="Color.Error"
+                                 OnClick="@(() => RetirerHaine(j.Id, h))">Retirer @HaineHelpers.Libelle(h)</MudMenuItem>
+                }
+                @if (haines.Count > 0)
+                {
+                    <MudDivider />
+                }
+                <MudMenuItem Icon="@Icons.Material.Filled.Add"
+                             OnClick="@(() => { _haineAjoutJoueurId = j.Id; _haineSaisie = null; })">Ajouter une Haine…</MudMenuItem>
+            </MudMenu>
+            @if (_haineAjoutJoueurId == j.Id)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
+                    <SelecteurHaine Suggestions="_suggestionsHaine" Value="@_haineSaisie"
+                                    ValueChanged="@(v => _haineSaisie = v)" Label="Haine contre…" AutoFocus="true"
+                                    OnEntree="@(() => AjouterHaine(j.Id))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                                   aria-label="Valider" OnClick="@(() => AjouterHaine(j.Id))" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                   aria-label="Annuler" OnClick="@(() => _haineAjoutJoueurId = null)" />
+                </MudStack>
+            }
+        </div>;
+    }
+
+    async Task AjouterHaine(int joueurId)
+    {
+        if (await ModifierHaine(() => HaineService.AjouterAsync(joueurId, _haineSaisie, _userId), "Haine ajoutée."))
+            _haineAjoutJoueurId = null;
+    }
+
+    async Task RetirerHaine(int joueurId, string cible) =>
+        await ModifierHaine(() => HaineService.RetirerAsync(joueurId, cible, _userId), "Haine retirée.");
+
+    async Task<bool> ModifierHaine(Func<Task> action, string message)
+    {
+        try
+        {
+            await action();
+            _equipe = await TeamService.GetEquipeAsync(Id);   // relit l'état réel
+            Snackbar.Add(message, Severity.Success);
+            return true;
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return false;
+        }
+    }
+
     int? CapitaineActuelId() =>
         _equipe?.Joueurs.FirstOrDefault(p => p.EstCapitaine)?.Id;
 
@@ -634,6 +716,16 @@ else
         // contrairement au Dieu du Chaos réservé au commissaire.
         _estCoach = _equipe?.CoachId == _userId;
 
+        // Haine (#28) : le coach, et le commissaire de la ligue pour corriger.
+        // Le service refait la vérification ; ceci ne fait qu'afficher le menu.
+        if (_equipe?.League is { } ligueHaine)
+        {
+            _traitsHaineCatalogue = await HaineService.GetTraitsCatalogueAsync(ligueHaine.RulesVersionId);
+            _peutGererHaine = _estCoach || await Auth.PeutGererLigueAsync(_userId, ligueHaine.Id);
+            if (_peutGererHaine)
+                _suggestionsHaine = await HaineService.GetSuggestionsAsync(ligueHaine.RulesVersionId);
+        }
+
         // Mode brouillard : masquer la fiche du prochain adversaire.
         if (_equipe?.League is { ModeBrouillard: true } ligue && !_estCommissaire)
         {
@@ -757,6 +849,24 @@ else
             builder.AddAttribute(7, "style", "color:var(--mud-palette-warning)");
             builder.AddAttribute(8, "title", "Accordée par le titre de capitaine");
             builder.AddContent(9, offerte + " (capitaine)");
+            builder.CloseElement();
+        }
+
+        // Haines gagnées (#28) : texte sur le joueur. Cliquable seulement si le
+        // catalogue de la version décrit ce Trait ; sinon simple texte.
+        var haines = HaineHelpers.Liste(j.Haines);
+        for (int i = 0; i < haines.Count; i++)
+        {
+            if (skills.Count > 0 || offerte is not null || i > 0) builder.AddMarkupContent(10, ", ");
+            var libelle = HaineHelpers.Libelle(haines[i]);
+            builder.OpenElement(11, "span");
+            if (_traitsHaineCatalogue.TryGetValue(libelle, out var trait))
+            {
+                builder.AddAttribute(12, "class", "skill-link");
+                builder.AddAttribute(13, "onclick",
+                    EventCallback.Factory.Create<MouseEventArgs>(this, () => OuvrirCompetence(trait)));
+            }
+            builder.AddContent(14, libelle);
             builder.CloseElement();
         }
     };

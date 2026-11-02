@@ -1,0 +1,47 @@
+@* #28 — « Prendre sa revanche » (LRB S3 p.42) : sur Amoché, Blessure sérieuse
+   ou Séquelle, un 4+ au D6 donne Haine (X). Champ TEXTE libre, avec en
+   suggestion les mots-clés de la version : il marche donc aussi en Dungeon
+   Bowl, que le catalogue ait des Traits « Haine (…) » ou non.
+   Partagé par la saisie de la feuille, la correction commissaire et la page
+   de l'équipe : les trois écrans proposent exactement le même champ.
+
+   ⚠️ Pas de MudAutocomplete : sa liste ouverte pose un calque invisible qui
+   AVALE le clic suivant (le ✓ de validation, « Enregistrer la feuille ») —
+   il fallait cliquer deux fois. Les suggestions passent par un <datalist>
+   natif, sans calque, qui marche aussi au doigt. *@
+
+<MudTextField T="string" Value="Value" ValueChanged="ValueChanged" Immediate="true"
+              Label="@Label" Placeholder="ex. Orque" MaxLength="40"
+              Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+              AutoFocus="AutoFocus" Class="@Class" Style="min-width:190px"
+              UserAttributes="_attributs" OnKeyDown="SurTouche" />
+<datalist id="@_id">
+    @foreach (var s in Suggestions)
+    {
+        <option value="@s"></option>
+    }
+</datalist>
+
+@code {
+    [Parameter] public IReadOnlyList<string> Suggestions { get; set; } = [];
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public string Label { get; set; } = "Haine gagnée (jet 4+)";
+    [Parameter] public bool AutoFocus { get; set; }
+    [Parameter] public string? Class { get; set; }
+
+    /// <summary>Touche Entrée : valider sans aller chercher le bouton.</summary>
+    [Parameter] public EventCallback OnEntree { get; set; }
+
+    readonly string _id = $"haines-{Guid.NewGuid():N}";
+    Dictionary<string, object> _attributs = [];
+
+    protected override void OnInitialized() =>
+        _attributs = new() { ["list"] = _id, ["autocomplete"] = "off" };
+
+    async Task SurTouche(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && OnEntree.HasDelegate)
+            await OnEntree.InvokeAsync();
+    }
+}

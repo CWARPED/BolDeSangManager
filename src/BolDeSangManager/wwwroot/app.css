@@ -1259,3 +1259,12 @@ h1:focus {
     display: inline-block;
     white-space: nowrap;
 }
+
+/* Menu « Haine » d'un joueur (#28) : petit, discret, jamais coupé en deux
+   lignes (« HAI / NE » sur téléphone). */
+.menu-haine .mud-button-root {
+    white-space: nowrap;
+    min-width: 0;
+    padding: 0 4px;
+    font-size: 0.7rem;
+}

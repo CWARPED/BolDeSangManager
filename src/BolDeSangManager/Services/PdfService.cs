@@ -84,9 +84,15 @@ public class PdfService
     /// Star players accessibles à cette équipe (recoupement déjà fait par
     /// l'appelant), ou <c>null</c> pour ne pas les inclure.
     /// </param>
+    /// <param name="traitsHaine">
+    /// #28 — Traits « Haine (…) » du catalogue de la version, par nom, pour
+    /// décrire dans le rappel des compétences les Haines gagnées qui y figurent.
+    /// Une Haine absente du catalogue (texte libre, Dungeon Bowl) n'est pas décrite.
+    /// </param>
     public byte[] GenererFeuilleEquipe(Team equipe, bool inclureDescriptionsCompetences,
         Match? matchProchain = null, string? urlExterne = null, bool paysage = false,
-        List<Inducement>? coupsDePouce = null, List<StarPlayer>? starPlayers = null)
+        List<Inducement>? coupsDePouce = null, List<StarPlayer>? starPlayers = null,
+        IReadOnlyDictionary<string, Skill>? traitsHaine = null)
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
@@ -237,6 +243,8 @@ public class PdfService
                                 // s'applique bel et bien en match.
                                 .Concat(CapitaineHelper.CompetenceOfferte(joueur, equipe.TeamType) is { } cap
                                     ? [$"{cap} (capitaine)"] : Array.Empty<string>())
+                                // Haines gagnées (#28) : texte sur le joueur, hors catalogue.
+                                .Concat(HaineHelpers.Liste(joueur.Haines).Select(HaineHelpers.Libelle))
                                 .Where(s => s != ""));
 
                             bool hasSequel = BlessureHelpers.ASequelle(joueur);
@@ -343,6 +351,10 @@ public class PdfService
                                 .Concat(j.Competences
                                     .Where(c => !c.EstCompetenceDepart)
                                     .Select(c => c.Skill)
+                                    .OfType<Skill>())
+                                // Haines gagnées décrites par le catalogue s'il les connaît (#28).
+                                .Concat(HaineHelpers.Liste(j.Haines)
+                                    .Select(h => traitsHaine?.GetValueOrDefault(HaineHelpers.Libelle(h)))
                                     .OfType<Skill>()))
                             .DistinctBy(s => s.Id)
                             .OrderBy(s => s.Categorie)

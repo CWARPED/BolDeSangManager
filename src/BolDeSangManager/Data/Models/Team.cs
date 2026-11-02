@@ -91,6 +91,14 @@ public class TeamPlayer
 
     // Statut
     public bool ManqueSuivantMatch { get; set; } = false;
+
+    /// <summary>
+    /// #28 — Haines gagnées (« Prendre sa revanche », LRB S3 p.42), séparées par
+    /// des virgules : « Orque,Nain ». Texte libre, indépendant du catalogue de
+    /// règles (Dungeon Bowl compris) ; affichées « Haine (Orque) » à la suite
+    /// des compétences. Sans effet sur la valeur. Voir HaineHelpers.
+    /// </summary>
+    public string Haines { get; set; } = string.Empty;
     public bool EstMort { get; set; } = false;
     public bool EstRetraite { get; set; } = false;
 

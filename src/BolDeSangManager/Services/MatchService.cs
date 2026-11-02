@@ -1,6 +1,7 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Helpers;
 using Microsoft.EntityFrameworkCore;
 
 namespace BolDeSangManager.Services;
@@ -700,6 +701,23 @@ public class MatchService(
                     break;
             }
 
+            // « Prendre sa revanche » (#28) : la Haine est un texte sur le joueur,
+            // indépendant du catalogue (Dungeon Bowl compris), sans effet sur sa
+            // valeur. Déjà possédée → rien n'est ajouté et on l'oublie sur la
+            // feuille, sinon une correction retirerait une Haine antérieure.
+            if (record.HaineCible is { } cible)
+            {
+                if (HaineHelpers.Contient(joueur.Haines, cible)
+                    || await HaineService.ALaHaineDansSonProfilAsync(db, joueur, cible))
+                    record.HaineCible = null;
+                else
+                {
+                    joueur.Haines = HaineHelpers.Ajouter(joueur.Haines, cible);
+                    logger.LogInformation("Joueur {NomJoueur} (id={Id}) gagne Haine ({Cible})",
+                        joueur.Nom, joueur.Id, cible);
+                }
+            }
+
             // Un capitaine mort ou parti perd son titre : sinon la compétence
             // qu'il accorde resterait affichée sur un joueur absent de
             // l'effectif. Le coach en redésigne un librement.
@@ -727,6 +745,12 @@ public class MatchService(
                     "Séquelle : choisissez la caractéristique réduite.");
             if (r.Blessure != InjuryType.Sequelle)
                 r.StatAffectee = null;
+            // Une Haine ne se gagne que sur Amoché / Blessure sérieuse / Séquelle.
+            // Normalisée ici (« Haine (Orque) » tapé en entier → « Orque ») et
+            // refusée si invalide — AVANT toute écriture ou inversion.
+            r.HaineCible = BlessureHelpers.PermetHaine(r.Blessure)
+                ? HaineHelpers.Normaliser(r.HaineCible)
+                : null;
         }
     }
 
@@ -999,6 +1023,15 @@ public class MatchService(
             }
         }
         db.PlayerInjuries.RemoveRange(anciennesBlessures);
+
+        // Haines gagnées sur l'ancienne feuille (#28). HaineSkillId n'est
+        // renseigné que si la feuille a réellement ajouté le Trait : une Haine
+        // que le joueur avait AVANT ce match n'est donc jamais retirée ici.
+        foreach (var old in feuille.RecordsJoueurs.Where(r => !string.IsNullOrEmpty(r.HaineCible)))
+        {
+            var j = await db.TeamPlayers.FindAsync(old.TeamPlayerId);
+            if (j is not null) j.Haines = HaineHelpers.Retirer(j.Haines, old.HaineCible!);
+        }
         db.MatchPlayerRecords.RemoveRange(feuille.RecordsJoueurs);
         await db.SaveChangesAsync();
 

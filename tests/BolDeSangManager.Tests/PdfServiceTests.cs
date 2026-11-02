@@ -330,6 +330,36 @@ public class PdfServiceTests
         return string.Join("\n", doc.GetPages().Select(p => p.Text));
     }
 
+    // ─── #28 Haine ────────────────────────────────────────────────────────────
+
+    private static Team EquipeAvecHaine()
+    {
+        var equipe = MinimalTeam("Les Rancuniers");
+        equipe.Joueurs = [new TeamPlayer { Numero = 1, Nom = "Rancunier", Haines = "Orque,Mort-Vivant", Blessures = [] }];
+        return equipe;
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_AfficheLesHainesAvecLesCompetences()
+    {
+        var texte = LireTextePdf(new PdfService().GenererFeuilleEquipe(EquipeAvecHaine(), false));
+        Assert.Contains("Haine (Orque)", texte);
+        Assert.Contains("Haine (Mort-Vivant)", texte);
+    }
+
+    [Fact]
+    public void GenererFeuilleEquipe_Glossaire_DecritLaHaineSiLeCatalogueLaConnait()
+    {
+        // Seule « Haine (Orque) » existe au catalogue : elle est décrite ;
+        // « Haine (Mort-Vivant) » (texte libre) n'a pas de description.
+        var traits = new Dictionary<string, Skill>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["Haine (Orque)"] = new Skill { Id = 900, Nom = "Haine (Orque)", Description = "Relance un dé de blocage contre un Orque." }
+        };
+        var texte = LireTextePdf(new PdfService().GenererFeuilleEquipe(EquipeAvecHaine(), true, traitsHaine: traits));
+        Assert.Contains("Relance un dé de blocage contre un Orque.", texte);
+    }
+
     private static int Occurrences(string texte, string motif) =>
         System.Text.RegularExpressions.Regex.Matches(texte, System.Text.RegularExpressions.Regex.Escape(motif)).Count;
 
