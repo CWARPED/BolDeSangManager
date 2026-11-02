@@ -1,6 +1,7 @@
 using BolDeSangManager.Data;
 using BolDeSangManager.Data.Enums;
 using BolDeSangManager.Data.Models;
+using BolDeSangManager.Helpers;
 using BolDeSangManager.Services;
 using BolDeSangManager.Tests.Helpers;
 using Microsoft.EntityFrameworkCore;
@@ -22,7 +23,9 @@ public class SaisieLibreTests : IDisposable
     private static TeamService Teams(ApplicationDbContext db) => new(db, NullLogger<TeamService>.Instance);
 
     private static SaisieLibreService Libre(ApplicationDbContext db, bool commissaire = false) =>
-        new(db, new StubAuth(commissaire), Teams(db), NullLogger<SaisieLibreService>.Instance);
+        new(db, new StubAuth(commissaire), Teams(db),
+            new JoueurEditionService(db, new StubAuth(commissaire), NullLogger<JoueurEditionService>.Instance),
+            NullLogger<SaisieLibreService>.Instance);
 
     private sealed class StubAuth(bool commissaire) : IAuthorizationService
     {
@@ -268,6 +271,257 @@ public class SaisieLibreTests : IDisposable
         var e = (await verif.Teams.FindAsync(teamId))!;
         Assert.Equal(9, e.NombreRelances);
         Assert.Equal(-100_000, e.Tresorerie);
+    }
+
+    // ── Lot 2 : progression d'un joueur à la main ───────────────────────────
+
+    private record Joueur(int Id, string Coach, int Blocage, int Meurtre);
+
+    /// <summary>Lineman (50 000 po, accès principal Générale), ligue lancée.</summary>
+    private async Task<Joueur> JoueurLibreAsync(bool libre = true)
+    {
+        var (coach, ligueId, ttId, posId, _) = await SetupAsync(libre, LeagueStatus.EnCours);
+        await using var db = _factory.CreateContext();
+        var (normal, elite) = await DataSeeder.SeedSkillsAsync(db);
+        db.PlayerPositionCategoryAccesses.Add(new PlayerPositionCategoryAccess
+        {
+            PlayerPositionId = posId, SkillCategoryDefId = normal.SkillCategoryDefId, EstPrincipale = true
+        });
+        var t = await DataSeeder.SeedTeamAsync(db, ligueId, coach, ttId);
+        var j = await DataSeeder.SeedPlayerAsync(db, t.Id, posId, "Grishnak", 5);
+        await db.SaveChangesAsync();
+        return new Joueur(j.Id, coach, normal.Id, elite.Id);
+    }
+
+    private static ProgressionLibre Vide(int psp = 0) => new(psp, false, [], [], []);
+
+    private async Task<TeamPlayer> RelireAsync(int id)
+    {
+        await using var db = _factory.CreateContext();
+        return await db.TeamPlayers
+            .Include(j => j.PlayerPosition)
+            .Include(j => j.Improvements).ThenInclude(i => i.Skill)
+            .Include(j => j.Competences)
+            .Include(j => j.Blessures)
+            .AsNoTracking().FirstAsync(j => j.Id == id);
+    }
+
+    [Fact]
+    public async Task Progression_Ajouts_CreentLesMemesLignesQuunApresMatch()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach, new ProgressionLibre(
+                Psp: 4, RateProchainMatch: true,
+                CompetencesAcquises: [j.Blocage, j.Meurtre],
+                Caracteristiques: [AffectedStat.Agilite, AffectedStat.Agilite],
+                Blessures: [new(null, InjuryType.Sequelle, AffectedStat.Armure), new(null, InjuryType.BlessurePersistante)]));
+
+        var r = await RelireAsync(j.Id);
+        Assert.Equal(4, r.PointsStarPlayer);
+        Assert.True(r.ManqueSuivantMatch);
+        Assert.Equal(ImprovementType.SelectionPrimaire, r.Improvements.Single(i => i.SkillId == j.Blocage).Type);
+        Assert.Equal(ImprovementType.SelectionSecondaire, r.Improvements.Single(i => i.SkillId == j.Meurtre).Type);
+        Assert.All(r.Improvements, i => Assert.Equal(0, i.PspDepensee));
+        Assert.Equal(2, r.Competences.Count(c => !c.EstCompetenceDepart));
+        Assert.Equal(2, r.ModAgilite);
+        Assert.Equal(-1, r.ModArmure);
+        Assert.Equal(2, r.Blessures.Count(b => b.MatchId == null));
+        Assert.Equal(1, BlessureHelpers.NombreBP(r));
+
+        // La valeur suit (décision 5) : poste + hausses du barème.
+        var bareme = BaremeAmelioration.DeVersion(null);
+        Assert.Equal(50_000
+                + bareme.Hausse(ImprovementType.SelectionPrimaire)
+                + bareme.Hausse(ImprovementType.SelectionSecondaire, null, estElite: true)
+                + 2 * bareme.Hausse(ImprovementType.AmeliorationCarac, AffectedStat.Agilite),
+            ValeurJoueurCalculator.Calculer(r, bareme));
+
+        await using var verif = _factory.CreateContext();
+        var histo = await Libre(verif).GetHistoriqueAsync(r.TeamId);
+        Assert.Equal(8, histo.Count);   // PSP, RPM, 2 compétences, 2 carac, 2 blessures
+        Assert.All(histo, h => Assert.Equal("#5 Grishnak", h.Sujet));
+        Assert.Contains(histo, h => h.Champ == "Compétence" && h.Apres == "Blocage");
+    }
+
+    [Fact]
+    public async Task Progression_Retraits_InversentLesEffets()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach, new ProgressionLibre(3, false,
+                [j.Blocage], [AffectedStat.Force], [new(null, InjuryType.Sequelle, AffectedStat.Mouvement)]));
+
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach, Vide(psp: 3));
+
+        var r = await RelireAsync(j.Id);
+        Assert.Empty(r.Improvements);
+        Assert.DoesNotContain(r.Competences, c => !c.EstCompetenceDepart);
+        Assert.Empty(r.Blessures);
+        Assert.Equal(0, r.ModForce);
+        Assert.Equal(0, r.ModMouvement);
+        Assert.Equal(3, r.PointsStarPlayer);
+    }
+
+    /// <summary>Deux +1 AG puis un seul voulu : un seul est retiré.</summary>
+    [Fact]
+    public async Task Progression_Caracteristiques_ComparaisonParNombre()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach,
+                new ProgressionLibre(0, false, [], [AffectedStat.Agilite, AffectedStat.Agilite], []));
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach,
+                new ProgressionLibre(0, false, [], [AffectedStat.Agilite], []));
+        var r = await RelireAsync(j.Id);
+        Assert.Equal(1, r.ModAgilite);
+        Assert.Single(r.Improvements);
+    }
+
+    /// <summary>Joueur sans nom (« #5 ») : le sujet n'est pas « #5 #5 ».</summary>
+    [Fact]
+    public async Task Historique_JoueurSansNom_SujetSansDoublon()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.TeamPlayers.FindAsync(j.Id))!.Nom = "#5";
+            await db.SaveChangesAsync();
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach, Vide(psp: 1));
+        }
+        await using var verif = _factory.CreateContext();
+        Assert.Equal("#5", Assert.Single(await verif.ModificationsLibres.ToListAsync()).Sujet);
+    }
+
+    [Fact]
+    public async Task Progression_Mort_PuisRetrait()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            (await db.TeamPlayers.FindAsync(j.Id))!.EstCapitaine = true;
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach,
+                new ProgressionLibre(0, false, [], [], [new(null, InjuryType.Mort)]));
+        var mort = await RelireAsync(j.Id);
+        Assert.True(mort.EstMort);
+        Assert.False(mort.EstCapitaine);
+
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach, Vide());
+        Assert.False((await RelireAsync(j.Id)).EstMort);
+    }
+
+    /// <summary>Les « Amoché » des feuilles ne sont pas dans la liste éditée : jamais retirés.</summary>
+    [Fact]
+    public async Task Progression_NeTouchePasAuxAmoches()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            db.PlayerInjuries.Add(new PlayerInjury { TeamPlayerId = j.Id, Type = InjuryType.ManqueSuivant });
+            await db.SaveChangesAsync();
+        }
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierProgressionAsync(j.Id, j.Coach, Vide());
+        Assert.Single((await RelireAsync(j.Id)).Blessures);
+    }
+
+    [Theory]
+    [InlineData("sequelle_sans_stat")]
+    [InlineData("competence_du_poste")]
+    [InlineData("competence_en_double")]
+    [InlineData("psp_negatifs")]
+    [InlineData("amoche_ajoute")]
+    [InlineData("deux_morts")]
+    public async Task Progression_Refus_RienNestEcrit(string cas)
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            db.TeamPlayerSkills.Add(new TeamPlayerSkill { TeamPlayerId = j.Id, SkillId = j.Blocage, EstCompetenceDepart = true });
+            await db.SaveChangesAsync();
+        }
+        var p = cas switch
+        {
+            "sequelle_sans_stat"   => new ProgressionLibre(7, false, [], [], [new(null, InjuryType.Sequelle)]),
+            "competence_du_poste"  => new ProgressionLibre(7, false, [j.Blocage], [], []),
+            "competence_en_double" => new ProgressionLibre(7, false, [j.Meurtre, j.Meurtre], [], []),
+            "psp_negatifs"         => new ProgressionLibre(-1, false, [], [], []),
+            "amoche_ajoute"        => new ProgressionLibre(7, false, [], [], [new(null, InjuryType.ManqueSuivant)]),
+            _                      => new ProgressionLibre(7, false, [], [], [new(null, InjuryType.Mort), new(null, InjuryType.Mort)]),
+        };
+        await using (var db = _factory.CreateContext())
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Libre(db).ModifierProgressionAsync(j.Id, j.Coach, p));
+        var r = await RelireAsync(j.Id);
+        Assert.Equal(0, r.PointsStarPlayer);
+        Assert.Empty(r.Improvements);
+        Assert.Empty(r.Blessures);
+    }
+
+    [Fact]
+    public async Task Progression_LigueClassique_Refusee()
+    {
+        var j = await JoueurLibreAsync(libre: false);
+        await using var db = _factory.CreateContext();
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Libre(db).ModifierProgressionAsync(j.Id, j.Coach, Vide(psp: 5)));
+    }
+
+    /// <summary>✓ de la ligne : nom et progression en une transaction, tout ou rien.</summary>
+    [Fact]
+    public async Task ModifierJoueur_ToutOuRien()
+    {
+        var j = await JoueurLibreAsync();
+        await using (var db = _factory.CreateContext())
+        {
+            var svc = Libre(db);
+            await Assert.ThrowsAsync<InvalidOperationException>(() => svc.ModifierJoueurAsync(j.Id, j.Coach,
+                "Nouveau nom", [], null, new ProgressionLibre(5, false, [], [], [new(null, InjuryType.Sequelle)])));
+            Assert.False(db.ChangeTracker.HasChanges());
+            // Le contexte vit avec le circuit : l'entité suivie ne doit pas
+            // garder le nom refusé, sinon l'écran l'afficherait.
+            Assert.Equal("Grishnak", (await db.TeamPlayers.FindAsync(j.Id))!.Nom);
+        }
+        Assert.Equal("Grishnak", (await RelireAsync(j.Id)).Nom);
+
+        await using (var db = _factory.CreateContext())
+            await Libre(db).ModifierJoueurAsync(j.Id, j.Coach, "Nouveau nom", ["Nain"], null, Vide(psp: 5));
+        var r = await RelireAsync(j.Id);
+        Assert.Equal("Nouveau nom", r.Nom);
+        Assert.Equal("Nain", r.Haines);
+        Assert.Equal(5, r.PointsStarPlayer);
+    }
+
+    // ── Lot 3 : historique lisible, réservé au commissaire ──────────────────
+
+    [Fact]
+    public async Task Historique_CommissaireSeulement_PseudoJamaisEmail()
+    {
+        var teamId = await EquipeEnCoursAsync(libre: true);
+        string coach;
+        await using (var db = _factory.CreateContext())
+        {
+            coach = (await db.Teams.FindAsync(teamId))!.CoachId;
+            (await db.Users.FindAsync(coach))!.PseudoCoach = "Gorbag";
+            await db.SaveChangesAsync();
+            await Libre(db).ModifierRessourcesEquipeAsync(teamId, coach, 1, new Dictionary<int, int>());
+            db.ModificationsLibres.Add(new ModificationLibre { TeamId = teamId, UserId = "disparu", Sujet = "Équipe", Champ = "Trésorerie" });
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Libre(db).GetHistoriqueAfficheAsync(teamId, coach));
+
+        await using var verif = _factory.CreateContext();
+        var lignes = await Libre(verif, commissaire: true).GetHistoriqueAfficheAsync(teamId, "commissaire");
+        Assert.Contains(lignes, l => l.auteur == "Gorbag" && l.modif.Champ == "Trésorerie");
+        Assert.Contains(lignes, l => l.auteur == "compte supprimé");
+        Assert.DoesNotContain(lignes, l => l.auteur.Contains('@'));
     }
 
     // ── Le mode ne change pas en cours de ligue ─────────────────────────────

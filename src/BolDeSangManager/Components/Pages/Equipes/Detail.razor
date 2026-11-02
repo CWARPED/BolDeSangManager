@@ -183,7 +183,10 @@ else
         </MudItem>
     </MudGrid>
 
-    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4" @bind-ActivePanelIndex="_ongletActif">
+    @* @key : l'onglet Historique apparaît après le premier rendu (droits lus en
+       asynchrone) ; sans recréation, le soulignement de l'onglet actif reste
+       calé sur l'ancienne liste d'onglets. *@
+    <MudTabs @key="_historiqueVisible" Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4" @bind-ActivePanelIndex="_ongletActif">
         <!-- Effectif -->
         <MudTabPanel Text="@($"Effectif ({_equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite)})")" Icon="@Icons.Material.Filled.Group">
             <div style="overflow-x:auto">
@@ -282,6 +285,12 @@ else
                             <MudTd Style="text-align:right">@CrayonJoueur(j)</MudTd>
                         }
                     </RowTemplate>
+                    <ChildRowContent Context="jl">
+                        @if (_editionJoueurId == jl.Id && _libre)
+                        {
+                            <MudTr><td colspan="20">@EditionLibre(jl)</td></MudTr>
+                        }
+                    </ChildRowContent>
                 </MudTable>
             </div>
 
@@ -344,6 +353,12 @@ else
                                 <MudTd Style="text-align:right">@CrayonJoueur(j)</MudTd>
                             }
                         </RowTemplate>
+                        <ChildRowContent Context="jl">
+                            @if (_editionJoueurId == jl.Id && _libre)
+                            {
+                                <MudTr><td colspan="20" style="opacity:1">@EditionLibre(jl)</td></MudTr>
+                            }
+                        </ChildRowContent>
                     </MudTable>
                 </div>
             }
@@ -448,6 +463,34 @@ else
                 </MudItem>
             </MudGrid>
         </MudTabPanel>
+
+        @* #29 — Saisie libre : qui a modifié quoi. Réservé au commissaire. *@
+        @if (_historiqueVisible)
+        {
+            <MudTabPanel Text="Historique" Icon="@Icons.Material.Filled.History">
+                @if (_historique.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Aucune modification libre.</MudText>
+                }
+                else
+                {
+                    <MudTable Items="_historique" Dense="true" Elevation="1" Breakpoint="Breakpoint.Sm">
+                        <HeaderContent>
+                            <MudTh>Date</MudTh>
+                            <MudTh>Par</MudTh>
+                            <MudTh>Quoi</MudTh>
+                            <MudTh>Avant → après</MudTh>
+                        </HeaderContent>
+                        <RowTemplate Context="h">
+                            <MudTd DataLabel="Date">@h.modif.Date.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</MudTd>
+                            <MudTd DataLabel="Par">@h.auteur</MudTd>
+                            <MudTd DataLabel="Quoi">@(h.modif.Sujet == "Équipe" ? h.modif.Champ : $"{h.modif.Sujet} · {h.modif.Champ}")</MudTd>
+                            <MudTd DataLabel="Avant → après">@h.modif.Avant → @h.modif.Apres</MudTd>
+                        </RowTemplate>
+                    </MudTable>
+                }
+            </MudTabPanel>
+        }
     </MudTabs>
 
     @* Fiche d'une compétence, ouverte au clic sur son nom. Un attribut `title`
@@ -587,6 +630,7 @@ else
         _editionHaines = HaineHelpers.Liste(j.Haines);
         _editionCapitaine = j.EstCapitaine;
         _editionSaisie = null;
+        if (_libre) DemarrerProgression(j);
     }
 
     void AnnulerEdition() => _editionJoueurId = null;
@@ -627,10 +671,16 @@ else
         {
             var joueur = _equipe?.Joueurs.FirstOrDefault(p => p.Id == joueurId);
             bool? capitaine = joueur is not null && CapitaineEditable(joueur) ? _editionCapitaine : null;
-            await JoueurEdition.ModifierJoueurAsync(joueurId, _userId, _editionNom, haines, capitaine);
+            if (_libre)
+                await SaisieLibre.ModifierJoueurAsync(joueurId, _userId, _editionNom, haines, capitaine, ProgressionVoulue());
+            else
+                await JoueurEdition.ModifierJoueurAsync(joueurId, _userId, _editionNom, haines, capitaine);
             // Relire l'état réel : le service a pu substituer le numéro de
-            // maillot à un nom vide, ou normaliser une Haine.
+            // maillot à un nom vide, ou normaliser une Haine. En saisie libre,
+            // la valeur du joueur (et donc la VEA) a pu changer.
             _equipe = await TeamService.GetEquipeAsync(Id);
+            if (_equipe is not null) _vea = TeamService.CalculerVEA(_equipe);
+            await ChargerHistoriqueAsync();
             _editionJoueurId = null;
             Snackbar.Add("Joueur modifié.", Severity.Success);
         }
@@ -727,6 +777,10 @@ else
             _peutEditerJoueurs = _estCoach || await Auth.PeutGererLigueAsync(_userId, ligueHaine.Id);
             if (_peutEditerJoueurs)
                 _suggestionsHaine = await HaineService.GetSuggestionsAsync(ligueHaine.RulesVersionId);
+            if (_peutEditerJoueurs && ligueHaine.SaisieLibre)
+                _competencesVersion = await TeamService.GetCompetencesAsync(null, ligueHaine.RulesVersionId);
+            _historiqueVisible = ligueHaine.SaisieLibre && await Auth.PeutGererLigueAsync(_userId, ligueHaine.Id);
+            await ChargerHistoriqueAsync();
         }
 
         // Mode brouillard : masquer la fiche du prochain adversaire.
@@ -879,7 +933,142 @@ else
     void FermerCompetence() => _competenceAffichee = null;
 
     // ── #29 Saisie libre : trésorerie et staff modifiables à tout moment ─────
-    bool _peutEditerLibre => _equipe?.League?.SaisieLibre == true && _peutEditerJoueurs;
+    bool _libre => _equipe?.League?.SaisieLibre == true;
+    bool _peutEditerLibre => _libre && _peutEditerJoueurs;
+
+    // Lot 2 : progression du joueur, dans le panneau ouvert sous la ligne en
+    // édition. Copie de travail ; rien n'est écrit avant ✓.
+    int _editionPsp;
+    bool _editionRpm;
+    List<int> _editionCompetences = [];
+    List<AffectedStat> _editionCarac = [];
+    List<BlessureLibre> _editionBlessures = [];
+    string? _saisieCompetence;
+    SelecteurHaine? _selecteurCompetence;
+    List<Skill> _competencesVersion = [];
+
+    static readonly AffectedStat[] Stats =
+        [AffectedStat.Mouvement, AffectedStat.Force, AffectedStat.Agilite, AffectedStat.CapacitePasse, AffectedStat.Armure];
+
+    void DemarrerProgression(TeamPlayer j)
+    {
+        _editionPsp = j.PointsStarPlayer;
+        _editionRpm = j.ManqueSuivantMatch;
+        _editionCompetences = j.Improvements.Where(i => i.SkillId is not null).Select(i => i.SkillId!.Value).ToList();
+        _editionCarac = j.Improvements.Where(i => i.SkillId is null && i.StatAmelioree is not null)
+            .Select(i => i.StatAmelioree!.Value).ToList();
+        _editionBlessures = j.Blessures.Where(b => SaisieLibreService.BlessuresDurables.Contains(b.Type))
+            .Select(b => new BlessureLibre(b.Id, b.Type, b.StatAffectee)).ToList();
+        _saisieCompetence = null;
+    }
+
+    ProgressionLibre ProgressionVoulue() =>
+        new(_editionPsp, _editionRpm, _editionCompetences, _editionCarac, _editionBlessures);
+
+    string NomCompetence(int id) => _competencesVersion.FirstOrDefault(s => s.Id == id)?.Nom ?? "?";
+
+    IReadOnlyList<string> SuggestionsCompetence(TeamPlayer j)
+    {
+        // Compétences du POSTE : GetEquipeAsync ne charge que les acquises dans
+        // j.Competences, on passe donc par le poste.
+        var exclues = (j.PlayerPosition?.CompetencesDepart.Select(c => c.SkillId) ?? [])
+            .Concat(_editionCompetences).ToHashSet();
+        return _competencesVersion.Where(s => !exclues.Contains(s.Id)).Select(s => s.Nom).ToList();
+    }
+
+    async Task AjouterCompetenceEdition()
+    {
+        var nom = _saisieCompetence?.Trim();
+        if (string.IsNullOrEmpty(nom)) return;
+        var skill = _competencesVersion.FirstOrDefault(s => string.Equals(s.Nom, nom, StringComparison.OrdinalIgnoreCase));
+        if (skill is null)
+        {
+            Snackbar.Add($"« {nom} » n'existe pas dans cette version des règles.", Severity.Warning);
+            return;
+        }
+        if (!_editionCompetences.Contains(skill.Id)) _editionCompetences.Add(skill.Id);
+        _saisieCompetence = null;
+        if (_selecteurCompetence is not null) await _selecteurCompetence.ViderAsync();
+    }
+
+    /// <summary>
+    /// Panneau de la saisie libre, sous la ligne en édition : ce que
+    /// l'après-match fait d'habitude, à la main. Retirer une pastille inverse
+    /// son effet (une Séquelle rend sa caractéristique, Mort ramène le joueur).
+    /// </summary>
+    RenderFragment EditionLibre(TeamPlayer j) =>
+        @<div class="pa-2 edition-libre">
+            <MudGrid Spacing="2">
+                <MudItem xs="12" sm="6" md="3">
+                    <MudNumericField T="int" @bind-Value="_editionPsp" Label="PSP disponibles" Min="0"
+                                     Max="@SaisieLibreService.PspMax" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                    <MudCheckBox T="bool" @bind-Value="_editionRpm" Label="Rate le prochain match"
+                                 Size="Size.Small" Dense="true" Color="Color.Warning" />
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Compétences acquises</MudText>
+                    <div>
+                        @foreach (var id in _editionCompetences.ToList())
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                     OnClose="@(_ => _editionCompetences.Remove(id))">@NomCompetence(id)</MudChip>
+                        }
+                    </div>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <SelecteurHaine @ref="_selecteurCompetence" Suggestions="SuggestionsCompetence(j)"
+                                        Value="@_saisieCompetence" ValueChanged="@(v => _saisieCompetence = v)"
+                                        Label="Ajouter une compétence" Placeholder="ex. Garde" OnEntree="AjouterCompetenceEdition" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Small"
+                                       title="Ajouter la compétence" aria-label="Ajouter la compétence" OnClick="AjouterCompetenceEdition" />
+                    </MudStack>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Caractéristiques</MudText>
+                    <div>
+                        @foreach (var (stat, i) in _editionCarac.Select((s, i) => (s, i)).ToList())
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
+                                     OnClose="@(_ => _editionCarac.RemoveAt(i))">+1 @BlessureHelpers.AbregeStat(stat)</MudChip>
+                        }
+                    </div>
+                    <div>
+                        @foreach (var st in Stats)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" Class="px-1" Style="min-width:0"
+                                       title="@($"+1 {BlessureHelpers.LibelleStat(st)}")"
+                                       OnClick="@(() => _editionCarac.Add(st))">+@BlessureHelpers.AbregeStat(st)</MudButton>
+                        }
+                    </div>
+                </MudItem>
+                <MudItem xs="12" sm="6" md="3">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Blessures</MudText>
+                    <div>
+                        @foreach (var (b, i) in _editionBlessures.Select((b, i) => (b, i)).ToList())
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                     OnClose="@(_ => _editionBlessures.RemoveAt(i))">@BlessureHelpers.Resume(b.Type, b.Stat)</MudChip>
+                        }
+                    </div>
+                    <div>
+                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="px-1" Style="min-width:0"
+                                   title="Blessure sérieuse : une BP"
+                                   OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.BlessurePersistante)))">+BP</MudButton>
+                        <span class="mud-typography-caption ml-1" style="color:var(--mud-palette-text-secondary)">Séquelle :</span>
+                        @foreach (var st in Stats)
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="px-1" Style="min-width:0"
+                                       title="@($"Séquelle : −1 {BlessureHelpers.LibelleStat(st)}")"
+                                       OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.Sequelle, st)))">−@BlessureHelpers.AbregeStat(st)</MudButton>
+                        }
+                        @if (!_editionBlessures.Any(b => b.Type == InjuryType.Mort))
+                        {
+                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="px-1" Style="min-width:0"
+                                       OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.Mort)))">+Mort</MudButton>
+                        }
+                    </div>
+                </MudItem>
+            </MudGrid>
+        </div>;
     bool _editionRessources;
     bool _editionRessourcesEnCours;
     int _editTresorerie;
@@ -887,6 +1076,13 @@ else
     List<LeagueStaffType> _staffLigue = [];
     int _ongletActif;
     const int OngletStaff = 1;
+    bool _historiqueVisible;
+    List<(ModificationLibre modif, string auteur)> _historique = [];
+
+    async Task ChargerHistoriqueAsync()
+    {
+        if (_historiqueVisible) _historique = await SaisieLibre.GetHistoriqueAfficheAsync(Id, _userId);
+    }
 
     async Task DemarrerRessources(bool versOnglet)
     {
@@ -910,6 +1106,7 @@ else
             await SaisieLibre.ModifierRessourcesEquipeAsync(Id, _userId, _editTresorerie, _editStaff);
             _equipe = await TeamService.GetEquipeAsync(Id);
             if (_equipe is not null) _vea = TeamService.CalculerVEA(_equipe);
+            await ChargerHistoriqueAsync();
             _editionRessources = false;
             Snackbar.Add("Trésorerie et staff enregistrés.", Severity.Success);
         }

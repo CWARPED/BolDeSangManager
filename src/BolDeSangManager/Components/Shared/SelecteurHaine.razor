@@ -11,7 +11,7 @@
    natif, sans calque, qui marche aussi au doigt. *@
 
 <MudTextField @key="_generation" @ref="_champ" T="string" Value="Value" ValueChanged="ValueChanged" Immediate="true"
-              Label="@Label" Placeholder="ex. Orque" MaxLength="40"
+              Label="@Label" Placeholder="@Placeholder" MaxLength="60"
               Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
               AutoFocus="AutoFocus" Class="@Class" Style="min-width:190px"
               UserAttributes="_attributs" OnKeyDown="SurTouche" />
@@ -27,6 +27,7 @@
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
     [Parameter] public string Label { get; set; } = "Haine gagnée (jet 4+)";
+    [Parameter] public string Placeholder { get; set; } = "ex. Orque";
     [Parameter] public bool AutoFocus { get; set; }
     [Parameter] public string? Class { get; set; }
 
