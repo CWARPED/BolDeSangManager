@@ -17,14 +17,50 @@ namespace BolDeSangManager.Tests;
 /// <c>ModifierEquipeAsync</c>, supprime et recrée tout le roster. Élargir SON
 /// verrou aurait détruit XP, compétences et blessures ; d'où une commande
 /// dédiée, et le test de préservation ci-dessous qui en est la preuve.
+/// Depuis #28, cette commande est <c>JoueurEditionService.ModifierJoueurAsync</c>
+/// (fenêtre « Modifier le joueur » : nom + Haines).
 /// </summary>
 public class RenommerJoueurTests : IDisposable
 {
     private readonly TestDbFactory _factory = new();
     public void Dispose() => _factory.Dispose();
 
-    private static TeamService Svc(ApplicationDbContext db) =>
-        new(db, NullLogger<TeamService>.Instance);
+    // Le renommage passe par la fenêtre « Modifier le joueur » (crayon en bout
+    // de ligne), qui enregistre aussi les Haines : ici, liste de Haines vide.
+    private static Renommeur Svc(ApplicationDbContext db, bool commissaire = false) => new(db, commissaire);
+
+    private sealed class Renommeur(ApplicationDbContext db, bool commissaire)
+    {
+        public Task RenommerJoueurAsync(int joueurId, string userId, string nom) =>
+            new JoueurEditionService(db, new StubAuth(commissaire), NullLogger<JoueurEditionService>.Instance)
+                .ModifierJoueurAsync(joueurId, userId, nom, []);
+    }
+
+    private sealed class StubAuth(bool commissaire) : IAuthorizationService
+    {
+        public Task<bool> EstAdminAsync(string userId) => Task.FromResult(false);
+        public Task<bool> EstGrandCommissaireAsync(string userId) => Task.FromResult(false);
+        public Task<bool> EstCommissaireDeLigueAsync(string userId, int ligueId) => Task.FromResult(commissaire);
+        public Task<bool> PeutGererLigueAsync(string userId, int ligueId) => Task.FromResult(commissaire);
+        public Task<bool> PeutEditerDonneesAsync(string userId) => Task.FromResult(false);
+        public Task<bool> PeutGererSettingsAsync(string userId) => Task.FromResult(false);
+    }
+
+    /// <summary>Décision produit : le commissaire de la ligue peut aussi renommer.</summary>
+    [Fact]
+    public async Task RenommerJoueur_ParLeCommissaireDeLaLigue_EstAutorise()
+    {
+        await using var db = _factory.CreateContext();
+        var (_, joueur, _) = await SeedAsync(db, LeagueStatus.EnCours);
+        var commissaire = DataSeeder.CreateUser("comm_renom");
+        db.Users.Add(commissaire);
+        await db.SaveChangesAsync();
+
+        await Svc(db, commissaire: true).RenommerJoueurAsync(joueur.Id, commissaire.Id, "Renommé par le commissaire");
+
+        await using var relecture = _factory.CreateContext();
+        Assert.Equal("Renommé par le commissaire", (await relecture.TeamPlayers.FirstAsync(p => p.Id == joueur.Id)).Nom);
+    }
 
     [Fact]
     public async Task RenommerJoueur_SaisonLancee_EnregistreLeNouveauNom()

@@ -14,7 +14,8 @@ namespace BolDeSangManager.Tests;
 /// sérieuse ou une Séquelle, le joueur peut gagner Haine (X). La Haine est un
 /// TEXTE sur le joueur (« Orque,Nain »), indépendant du catalogue de règles :
 /// elle marche en Dungeon Bowl, où aucune version n'a de Trait « Haine (…) ».
-/// Saisie sur la feuille de match ET sur la page de l'équipe.
+/// Saisie sur la feuille de match ET dans la fenêtre « Modifier le joueur »
+/// de la page de l'équipe.
 /// </summary>
 public class HaineTests : IDisposable
 {
@@ -80,8 +81,24 @@ public class HaineTests : IDisposable
             new GmailEmailSender(settings, NullLogger<GmailEmailSender>.Instance), settings);
     }
 
-    private static HaineService Haine(ApplicationDbContext db, bool estCommissaire = false) =>
-        new(db, new StubAuth(estCommissaire), NullLogger<HaineService>.Instance);
+    private static HaineService Haine(ApplicationDbContext db) => new(db);
+
+    /// <summary>Fenêtre « Modifier le joueur » : liste COMPLÈTE des Haines voulues.</summary>
+    private Task Editer(int joueurId, string userId, bool commissaire, params string[] haines)
+    {
+        var db = _factory.CreateContext();
+        return EditerAvec(db, joueurId, userId, commissaire, haines);
+    }
+
+    private static async Task EditerAvec(ApplicationDbContext db, int joueurId, string userId, bool commissaire, string[] haines)
+    {
+        await using (db)
+        {
+            var nom = (await db.TeamPlayers.AsNoTracking().FirstAsync(p => p.Id == joueurId)).Nom;
+            await new JoueurEditionService(db, new StubAuth(commissaire), NullLogger<JoueurEditionService>.Instance)
+                .ModifierJoueurAsync(joueurId, userId, nom, haines);
+        }
+    }
 
     private static MatchSheet FeuilleNulle() => new() { TouchdownsDomicile = 0, TouchdownsExterieur = 0 };
 
@@ -153,10 +170,10 @@ public class HaineTests : IDisposable
         Assert.Equal(["Orque", "Skaven"], await Haine(db).GetSuggestionsAsync(v.Id));
     }
 
-    // ─── Page de l'équipe ─────────────────────────────────────────────────────
+    // ─── Page de l'équipe : fenêtre « Modifier le joueur » ────────────────────
 
     [Fact]
-    public async Task Coach_AjouteUneHaineLibre_SansChangerLaValeur()
+    public async Task Coach_AjouteDesHainesLibres_SansChangerLaValeur()
     {
         var c = await SetupAsync();
         int valeurAvant;
@@ -168,11 +185,8 @@ public class HaineTests : IDisposable
         }
 
         // « Orque » n'est NI un Trait du catalogue NI un mot-clé de la version :
-        // la saisie reste libre.
-        await using (var db = _factory.CreateContext())
-            await Haine(db).AjouterAsync(c.JoueurDom, "Orque", _coachDom);
-        await using (var db = _factory.CreateContext())
-            await Haine(db).AjouterAsync(c.JoueurDom, "Haine (Nain)", _coachDom);
+        // la saisie reste libre. Doublon (casse près) et vide ignorés.
+        await Editer(c.JoueurDom, _coachDom, false, "Orque", "Haine (Nain)", "orque", " ");
 
         Assert.Equal("Orque,Nain", await HainesAsync(c.JoueurDom));
         await using (var db = _factory.CreateContext())
@@ -181,79 +195,55 @@ public class HaineTests : IDisposable
                 .SingleAsync(p => p.Id == c.JoueurDom);
             Assert.Equal(valeurAvant, ValeurJoueurCalculator.Calculer(j, BaremeAmelioration.DeVersion(null)));
             Assert.Empty(j.Improvements);
+            Assert.Equal("JD", j.Nom);
             Assert.False(await db.TeamPlayerSkills.AnyAsync(s => s.TeamPlayerId == c.JoueurDom));
         }
     }
 
     [Fact]
-    public async Task CommissaireDeLigue_PeutAjouter_UnAutreCoachNon()
+    public async Task CommissaireDeLigue_PeutModifier_UnAutreCoachNon()
     {
         var c = await SetupAsync();
-        await using (var db = _factory.CreateContext())
-        {
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                Haine(db, estCommissaire: false).AjouterAsync(c.JoueurDom, "Orque", _coachExt));
-            Assert.Contains("coach de l'équipe", ex.Message);
-        }
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            Editer(c.JoueurDom, _coachExt, false, "Orque"));
+        Assert.Contains("coach de l'équipe", ex.Message);
         Assert.Equal("", await HainesAsync(c.JoueurDom));
 
-        await using (var db = _factory.CreateContext())
-            await Haine(db, estCommissaire: true).AjouterAsync(c.JoueurDom, "Orque", _commissaire);
+        await Editer(c.JoueurDom, _commissaire, true, "Orque");
         Assert.Equal("Orque", await HainesAsync(c.JoueurDom));
     }
 
     [Fact]
-    public async Task Ajouter_RefuseDoublon_Vide_HaineDuProfil_EtJoueurMort()
+    public async Task Modifier_RefuseHaineDuProfil_TexteInvalide_EtNouvelleHaineDUnMort()
     {
         var c = await SetupAsync();
-        await using (var db = _factory.CreateContext())
-            await Haine(db).AjouterAsync(c.JoueurDom, "Orque", _coachDom);
+        await Editer(c.JoueurDom, _coachDom, false, "Orque");
 
-        await using (var db = _factory.CreateContext())
-        {
-            var svc = Haine(db);
-            var doublon = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                svc.AjouterAsync(c.JoueurDom, "orque", _coachDom));
-            Assert.Contains("déjà", doublon.Message);
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                svc.AjouterAsync(c.JoueurDom, "  ", _coachDom));
-            // Haine (Troll) est déjà dans le profil du Tueur.
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                svc.AjouterAsync(c.TueurId, "Troll", _coachDom));
-        }
+        // Haine (Troll) est déjà dans le profil du Tueur.
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Editer(c.TueurId, _coachDom, false, "Troll"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Editer(c.JoueurDom, _coachDom, false, "Orque, Nain"));
 
         await using (var db = _factory.CreateContext())
         {
             (await db.TeamPlayers.FindAsync(c.JoueurDom))!.EstMort = true;
             await db.SaveChangesAsync();
         }
-        await using (var db = _factory.CreateContext())
-            await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                Haine(db).AjouterAsync(c.JoueurDom, "Nain", _coachDom));
-
+        await Assert.ThrowsAsync<InvalidOperationException>(() => Editer(c.JoueurDom, _coachDom, false, "Orque", "Nain"));
         Assert.Equal("Orque", await HainesAsync(c.JoueurDom));
         Assert.Equal("", await HainesAsync(c.TueurId));
+
+        // Un mort garde le droit de PERDRE une Haine (correction d'historique).
+        await Editer(c.JoueurDom, _coachDom, false);
+        Assert.Equal("", await HainesAsync(c.JoueurDom));
     }
 
     [Fact]
-    public async Task Retirer_EnleveLaHaineGagnee_PasCelleDuProfil()
+    public async Task Modifier_ListeComplete_RetireCeQuiManque()
     {
         var c = await SetupAsync();
-        await using (var db = _factory.CreateContext())
-        {
-            await Haine(db).AjouterAsync(c.JoueurDom, "Orque", _coachDom);
-            await Haine(db).AjouterAsync(c.JoueurDom, "Nain", _coachDom);
-        }
-        await using (var db = _factory.CreateContext())
-            await Haine(db).RetirerAsync(c.JoueurDom, "Orque", _coachDom);
+        await Editer(c.JoueurDom, _coachDom, false, "Orque", "Nain");
+        await Editer(c.JoueurDom, _coachDom, false, "Nain");
         Assert.Equal("Nain", await HainesAsync(c.JoueurDom));
-
-        await using (var db = _factory.CreateContext())
-        {
-            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
-                Haine(db).RetirerAsync(c.TueurId, "Troll", _coachDom));
-            Assert.Contains("profil", ex.Message);
-        }
     }
 
     // ─── Feuille de match ─────────────────────────────────────────────────────
@@ -341,8 +331,7 @@ public class HaineTests : IDisposable
         // La feuille ne l'ajoute pas une 2e fois — et donc, corriger la feuille
         // ne doit pas lui retirer la Haine qu'il avait AVANT ce match.
         var c = await SetupAsync();
-        await using (var db = _factory.CreateContext())
-            await Haine(db).AjouterAsync(c.JoueurDom, "Orque", _coachDom);
+        await Editer(c.JoueurDom, _coachDom, false, "Orque");
 
         await using (var db = _factory.CreateContext())
             await Match(db).SaisirFeuilleMatchAsync(c.MatchId, FeuilleNulle(),

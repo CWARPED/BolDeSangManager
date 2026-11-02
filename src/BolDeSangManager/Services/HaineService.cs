@@ -11,14 +11,11 @@ namespace BolDeSangManager.Services;
 /// indépendant du catalogue : elle existe donc en Dungeon Bowl comme en Blood
 /// Bowl. Elle ne change pas la valeur du joueur (conforme au livre).
 ///
-/// Ce service porte la saisie depuis la page de l'équipe (oubli, perte hors
-/// saison) et les suggestions. La saisie sur la feuille de match passe par
-/// MatchService. Droits : le coach de l'équipe, et le commissaire de la ligue.
+/// Ce service ne fait que LIRE : suggestions de cibles et description d'un
+/// Trait du catalogue. La saisie passe par MatchService (feuille de match) et
+/// JoueurEditionService (fenêtre « Modifier le joueur » de la page d'équipe).
 /// </summary>
-public class HaineService(
-    ApplicationDbContext db,
-    IAuthorizationService auth,
-    ILogger<HaineService> logger)
+public class HaineService(ApplicationDbContext db)
 {
     private const string Prefixe = "Haine (";
 
@@ -59,40 +56,6 @@ public class HaineService(
         .GroupBy(s => s.Nom, StringComparer.OrdinalIgnoreCase)
         .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
 
-    public async Task AjouterAsync(int joueurId, string? saisie, string userId)
-    {
-        var joueur = await JoueurAutoriseAsync(joueurId, userId);
-        if (joueur.EstMort)
-            throw new InvalidOperationException("Ce joueur est mort.");
-
-        var cible = HaineHelpers.Normaliser(saisie)
-            ?? throw new InvalidOperationException("Indiquez contre qui (ex. Orque).");
-        if (HaineHelpers.Contient(joueur.Haines, cible) || await ALaHaineDansSonProfilAsync(db, joueur, cible))
-            throw new InvalidOperationException($"{joueur.Nom} a déjà {HaineHelpers.Libelle(cible)}.");
-
-        joueur.Haines = HaineHelpers.Ajouter(joueur.Haines, cible);
-        await db.SaveChangesAsync();
-        logger.LogInformation("Joueur {Nom} (id={Id}) gagne Haine ({Cible}) (page de l'équipe, par {UserId})",
-            joueur.Nom, joueur.Id, cible, userId);
-    }
-
-    public async Task RetirerAsync(int joueurId, string cible, string userId)
-    {
-        var joueur = await JoueurAutoriseAsync(joueurId, userId);
-        if (!HaineHelpers.Contient(joueur.Haines, cible))
-        {
-            if (await ALaHaineDansSonProfilAsync(db, joueur, cible))
-                throw new InvalidOperationException(
-                    "Cette Haine fait partie du profil du poste : elle ne se retire pas.");
-            throw new InvalidOperationException("Ce joueur n'a pas cette Haine.");
-        }
-
-        joueur.Haines = HaineHelpers.Retirer(joueur.Haines, cible);
-        await db.SaveChangesAsync();
-        logger.LogInformation("Joueur {Nom} (id={Id}) perd Haine ({Cible}) (page de l'équipe, par {UserId})",
-            joueur.Nom, joueur.Id, cible, userId);
-    }
-
     /// <summary>
     /// Le joueur a-t-il déjà « Haine (cible) » comme COMPÉTENCE — Haine (Troll)
     /// du Tueur de Trolls, ou Trait acquis autrement ? Partagé avec MatchService
@@ -103,18 +66,5 @@ public class HaineService(
         var nom = HaineHelpers.Libelle(cible).ToLower();
         return await db.TeamPlayerSkills.AnyAsync(s => s.TeamPlayerId == joueur.Id && s.Skill.Nom.ToLower() == nom)
             || await db.PlayerPositionSkills.AnyAsync(s => s.PlayerPositionId == joueur.PlayerPositionId && s.Skill.Nom.ToLower() == nom);
-    }
-
-    private async Task<TeamPlayer> JoueurAutoriseAsync(int joueurId, string userId)
-    {
-        var joueur = await db.TeamPlayers
-            .Include(p => p.Team)
-            .FirstOrDefaultAsync(p => p.Id == joueurId)
-            ?? throw new InvalidOperationException("Joueur introuvable");
-
-        if (joueur.Team.CoachId != userId && !await auth.PeutGererLigueAsync(userId, joueur.Team.LeagueId))
-            throw new InvalidOperationException(
-                "Seuls le coach de l'équipe et le commissaire de la ligue peuvent modifier les Haines.");
-        return joueur;
     }
 }

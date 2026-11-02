@@ -2,15 +2,15 @@
    ou Séquelle, un 4+ au D6 donne Haine (X). Champ TEXTE libre, avec en
    suggestion les mots-clés de la version : il marche donc aussi en Dungeon
    Bowl, que le catalogue ait des Traits « Haine (…) » ou non.
-   Partagé par la saisie de la feuille, la correction commissaire et la page
-   de l'équipe : les trois écrans proposent exactement le même champ.
+   Partagé par la saisie de la feuille, la correction commissaire et l'édition
+   d'un joueur sur la page de l'équipe : le même champ partout.
 
    ⚠️ Pas de MudAutocomplete : sa liste ouverte pose un calque invisible qui
    AVALE le clic suivant (le ✓ de validation, « Enregistrer la feuille ») —
    il fallait cliquer deux fois. Les suggestions passent par un <datalist>
    natif, sans calque, qui marche aussi au doigt. *@
 
-<MudTextField T="string" Value="Value" ValueChanged="ValueChanged" Immediate="true"
+<MudTextField @key="_generation" @ref="_champ" T="string" Value="Value" ValueChanged="ValueChanged" Immediate="true"
               Label="@Label" Placeholder="ex. Orque" MaxLength="40"
               Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
               AutoFocus="AutoFocus" Class="@Class" Style="min-width:190px"
@@ -35,9 +35,36 @@
 
     readonly string _id = $"haines-{Guid.NewGuid():N}";
     Dictionary<string, object> _attributs = [];
+    MudTextField<string>? _champ;
+    int _generation;
+    bool _refocus;
 
     protected override void OnInitialized() =>
         _attributs = new() { ["list"] = _id, ["autocomplete"] = "off" };
+
+    /// <summary>
+    /// Vide le champ À L'ÉCRAN et lui rend le focus, pour enchaîner une autre
+    /// saisie. Ni remettre <c>Value</c> à null, ni <c>MudTextField.Clear()</c>
+    /// ne vident un champ qui a le focus (validation par Entrée) : le texte
+    /// restait affiché et la saisie suivante s'y accolait (« OrqueNain »).
+    /// Changer la clé recrée l'input, vide par construction.
+    /// </summary>
+    public Task ViderAsync()
+    {
+        _generation++;
+        _refocus = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_refocus && _champ is not null)
+        {
+            _refocus = false;
+            await _champ.FocusAsync();
+        }
+    }
 
     async Task SurTouche(KeyboardEventArgs e)
     {

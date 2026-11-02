@@ -8,6 +8,7 @@
 @inject ISnackbar Snackbar
 @inject NavigationManager Nav
 @inject HaineService HaineService
+@inject JoueurEditionService JoueurEdition
 @inject BolDeSangManager.Services.IAuthorizationService Auth
 
 <PageTitle>@(_equipe?.Nom ?? "Équipe") — BolDeSang Manager</PageTitle>
@@ -206,33 +207,15 @@ else
                         <MudTh Style="text-align:center">Amél.</MudTh>
                         <MudTh Style="text-align:center">Valeur</MudTh>
                         <MudTh>Statut</MudTh>
+                        @if (_peutEditerJoueurs)
+                        {
+                            <MudTh></MudTh>
+                        }
                     </HeaderContent>
                     <RowTemplate Context="j">
                         <MudTd DataLabel="N°">@j.Numero</MudTd>
                         <MudTd DataLabel="Nom">
-                            @if (_renommageJoueurId == j.Id)
-                            {
-                                @* Édition en place (#16) : le nom n'entre dans aucun calcul,
-                                   donc pas de passage par l'écran de composition — qui, lui,
-                                   recrée tout le roster et détruirait PSP et compétences. *@
-                                <MudTextField T="string" Value="@_renommageValeur"
-                                              ValueChanged="@(v => _renommageValeur = v)"
-                                              Immediate="true" AutoFocus="true"
-                                              Variant="Variant.Text" Margin="Margin.Dense"
-                                              MaxLength="100" Style="min-width:150px"
-                                              OnKeyDown="@(e => OnToucheRenommage(e, j.Id))"
-                                              OnBlur="@(() => ValiderRenommage(j.Id))" />
-                            }
-                            else
-                            {
-                                <b>@j.Nom</b>
-                                @if (_estCoach)
-                                {
-                                    <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                   Class="ml-1" title="Renommer ce joueur"
-                                                   OnClick="@(() => DemarrerRenommage(j))" />
-                                }
-                            }
+                            @if (_editionJoueurId == j.Id) { @ChampNom() } else { <b>@j.Nom</b> }
                         </MudTd>
                         <MudTd DataLabel="Poste">
                             <div>@j.PlayerPosition?.Nom</div>
@@ -252,10 +235,10 @@ else
                             @* Un seul bloc : en vue téléphone, MudTd aligne ses enfants
                                en ligne, ce qui écrasait compétences, menu et accès. *@
                             <div>
-                            <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
-                            @if (_peutGererHaine)
+                            <MudText Typo="Typo.caption">@CompetencesJoueur(j, avecHaines: _editionJoueurId != j.Id)</MudText>
+                            @if (_editionJoueurId == j.Id)
                             {
-                                @MenuHaine(j)
+                                @EditionHaines(j)
                             }
                             @if (j.PlayerPosition?.AccesCategories.Any() == true)
                             {
@@ -291,6 +274,10 @@ else
                                 </MudChip>
                             }
                         </MudTd>
+                        @if (_peutEditerJoueurs)
+                        {
+                            <MudTd Style="text-align:right">@CrayonJoueur(j)</MudTd>
+                        }
                     </RowTemplate>
                 </MudTable>
             </div>
@@ -314,36 +301,20 @@ else
                             <MudTh>Statut</MudTh>
                             <MudTh>Compétences</MudTh>
                             <MudTh Style="text-align:center">Amél.</MudTh>
+                            @if (_peutEditerJoueurs)
+                            {
+                                <MudTh></MudTh>
+                            }
                         </HeaderContent>
                         <RowTemplate Context="j">
                             <MudTd DataLabel="N°">@j.Numero</MudTd>
                             <MudTd DataLabel="Nom">
-                                @if (_renommageJoueurId == j.Id)
+                                @if (_editionJoueurId == j.Id) { @ChampNom() } else {
+                                <span style="text-decoration:line-through">@j.Nom</span> }
+                                @if (j.EstMort)
                                 {
-                                    @* Un joueur mort ou retraité reste renommable : c'est de
-                                       l'historique (corriger une faute de frappe), pas du jeu. *@
-                                    <MudTextField T="string" Value="@_renommageValeur"
-                                                  ValueChanged="@(v => _renommageValeur = v)"
-                                                  Immediate="true" AutoFocus="true"
-                                                  Variant="Variant.Text" Margin="Margin.Dense"
-                                                  MaxLength="100" Style="min-width:150px"
-                                                  OnKeyDown="@(e => OnToucheRenommage(e, j.Id))"
-                                                  OnBlur="@(() => ValiderRenommage(j.Id))" />
-                                }
-                                else
-                                {
-                                    <span style="text-decoration:line-through">@j.Nom</span>
-                                    @if (j.EstMort)
-                                    {
-                                        <MudIcon Icon="@Icons.Material.Filled.Dangerous" Color="Color.Error"
-                                                 Size="Size.Small" Class="ml-1" title="Mort" />
-                                    }
-                                    @if (_estCoach)
-                                    {
-                                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
-                                                       Class="ml-1" title="Renommer ce joueur"
-                                                       OnClick="@(() => DemarrerRenommage(j))" />
-                                    }
+                                    <MudIcon Icon="@Icons.Material.Filled.Dangerous" Color="Color.Error"
+                                             Size="Size.Small" Class="ml-1" title="Mort" />
                                 }
                             </MudTd>
                             <MudTd DataLabel="Poste">@j.PlayerPosition?.Nom</MudTd>
@@ -357,8 +328,18 @@ else
                                     <MudChip T="string" Color="Color.Default" Size="Size.Small">Retraité</MudChip>
                                 }
                             </MudTd>
-                            <MudTd DataLabel="Compétences"><MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText></MudTd>
+                            <MudTd DataLabel="Compétences">
+                                <MudText Typo="Typo.caption">@CompetencesJoueur(j, avecHaines: _editionJoueurId != j.Id)</MudText>
+                                @if (_editionJoueurId == j.Id)
+                                {
+                                    @EditionHaines(j)
+                                }
+                            </MudTd>
                             <MudTd DataLabel="Améliorations" Style="text-align:center">@j.Improvements.Count</MudTd>
+                            @if (_peutEditerJoueurs)
+                            {
+                                <MudTd Style="text-align:right">@CrayonJoueur(j)</MudTd>
+                            }
                         </RowTemplate>
                     </MudTable>
                 </div>
@@ -480,76 +461,128 @@ else
     /// <summary>Vrai si l'utilisateur courant est le coach de cette équipe.</summary>
     bool _estCoach;
 
-    // Haine (#28). Suggestions et menu : coach de l'équipe et commissaire de la
-    // ligue. Traits du catalogue : pour tout le monde, juste pour la description.
-    bool _peutGererHaine;
+    // ── Modifier un joueur : crayon en bout de ligne, édition sur la ligne ───
+    //
+    // Volontairement DÉCORRÉLÉ de _peutEditer : celui-ci ouvre l'écran de
+    // composition, qui supprime et recrée tout le roster — d'où son verrou en
+    // phase Inscription. Le nom et les Haines n'entrent dans aucun calcul : ils
+    // se modifient à tout moment, y compris sur un joueur mort ou retraité.
+    // Coach de l'équipe et commissaire de la ligue ; le service le revérifie.
+    bool _peutEditerJoueurs;
     List<string> _suggestionsHaine = [];
+
+    // Traits « Haine (…) » du catalogue : pour tout le monde, juste pour
+    // rendre une Haine cliquable quand la version la décrit.
     Dictionary<string, Skill> _traitsHaineCatalogue = new(StringComparer.OrdinalIgnoreCase);
-    int? _haineAjoutJoueurId;
-    string? _haineSaisie;
+
+    // Édition EN PLACE sur la ligne : le crayon passe la ligne en édition
+    // (nom + Haines), ✓ enregistre, ✕ annule. Une seule ligne à la fois.
+    int? _editionJoueurId;
+    string _editionNom = "";
+    List<string> _editionHaines = [];
+    string? _editionSaisie;
+    bool _editionEnCours;
+    SelecteurHaine? _selecteurEdition;
+
+    RenderFragment CrayonJoueur(TeamPlayer j) =>
+        _editionJoueurId == j.Id
+            ? @<span style="white-space:nowrap">
+                  <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
+                                 title="Enregistrer" aria-label="Enregistrer" Disabled="@_editionEnCours"
+                                 OnClick="EnregistrerEdition" />
+                  <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
+                                 title="Annuler" aria-label="Annuler" OnClick="AnnulerEdition" />
+              </span>
+            : @<MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                              title="Modifier le joueur" aria-label="Modifier le joueur"
+                              OnClick="@(() => DemarrerEdition(j))" />;
+
+    RenderFragment ChampNom() =>
+        @<MudTextField T="string" Value="@_editionNom" ValueChanged="@(v => _editionNom = v)"
+                       Immediate="true" AutoFocus="true" Variant="Variant.Text" Margin="Margin.Dense"
+                       MaxLength="@JoueurEditionService.NomLongueurMax" Placeholder="Vide = numéro"
+                       Style="min-width:150px" OnKeyDown="ToucheEdition" />;
 
     /// <summary>
-    /// Petit menu « Haine » sous les compétences d'un joueur : retirer une
-    /// Haine (perdue hors saison) ou en ajouter une (« Prendre sa revanche »,
-    /// LRB p.42) — l'ajout ouvre un champ texte avec suggestions sous le menu.
-    /// La Haine du profil d'un poste (Tueur de Trolls) n'y figure pas.
+    /// Haines de la ligne en édition : pastilles à croix + champ d'ajout (texte
+    /// libre, suggestions des mots-clés de la version). Un mort peut en perdre,
+    /// pas en gagner.
     /// </summary>
-    RenderFragment MenuHaine(TeamPlayer j)
-    {
-        var haines = HaineHelpers.Liste(j.Haines);
-        return @<div>
-            <MudMenu Label="Haine" StartIcon="@Icons.Material.Filled.Add" Size="Size.Small"
-                     Variant="Variant.Text" Dense="true" Class="menu-haine">
-                @foreach (var h in haines)
-                {
-                    <MudMenuItem Icon="@Icons.Material.Filled.Close" IconColor="Color.Error"
-                                 OnClick="@(() => RetirerHaine(j.Id, h))">Retirer @HaineHelpers.Libelle(h)</MudMenuItem>
-                }
-                @if (haines.Count > 0)
-                {
-                    <MudDivider />
-                }
-                <MudMenuItem Icon="@Icons.Material.Filled.Add"
-                             OnClick="@(() => { _haineAjoutJoueurId = j.Id; _haineSaisie = null; })">Ajouter une Haine…</MudMenuItem>
-            </MudMenu>
-            @if (_haineAjoutJoueurId == j.Id)
+    RenderFragment EditionHaines(TeamPlayer j) =>
+        @<div class="mt-1">
+            @foreach (var h in _editionHaines)
             {
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
-                    <SelecteurHaine Suggestions="_suggestionsHaine" Value="@_haineSaisie"
-                                    ValueChanged="@(v => _haineSaisie = v)" Label="Haine contre…" AutoFocus="true"
-                                    OnEntree="@(() => AjouterHaine(j.Id))" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
-                                   aria-label="Valider" OnClick="@(() => AjouterHaine(j.Id))" />
-                    <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                   aria-label="Annuler" OnClick="@(() => _haineAjoutJoueurId = null)" />
+                <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
+                         OnClose="@(_ => _editionHaines.Remove(h))">@HaineHelpers.Libelle(h)</MudChip>
+            }
+            @if (!j.EstMort)
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <SelecteurHaine @ref="_selecteurEdition" Suggestions="_suggestionsHaine"
+                                    Value="@_editionSaisie" ValueChanged="@(v => _editionSaisie = v)"
+                                    Label="Ajouter une Haine" OnEntree="AjouterHaineEdition" />
+                    <MudIconButton Icon="@Icons.Material.Filled.Add" Color="Color.Primary" Size="Size.Small"
+                                   title="Ajouter la Haine" aria-label="Ajouter la Haine" OnClick="AjouterHaineEdition" />
                 </MudStack>
             }
         </div>;
-    }
 
-    async Task AjouterHaine(int joueurId)
+    void DemarrerEdition(TeamPlayer j)
     {
-        if (await ModifierHaine(() => HaineService.AjouterAsync(joueurId, _haineSaisie, _userId), "Haine ajoutée."))
-            _haineAjoutJoueurId = null;
+        _editionJoueurId = j.Id;
+        _editionNom = j.Nom;
+        _editionHaines = HaineHelpers.Liste(j.Haines);
+        _editionSaisie = null;
     }
 
-    async Task RetirerHaine(int joueurId, string cible) =>
-        await ModifierHaine(() => HaineService.RetirerAsync(joueurId, cible, _userId), "Haine retirée.");
+    void AnnulerEdition() => _editionJoueurId = null;
 
-    async Task<bool> ModifierHaine(Func<Task> action, string message)
+    async Task ToucheEdition(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") await EnregistrerEdition();
+        else if (e.Key == "Escape") AnnulerEdition();
+    }
+
+    /// <summary>Ajoute la saisie à la liste de la ligne ; rien n'est enregistré avant ✓.</summary>
+    async Task AjouterHaineEdition()
     {
         try
         {
-            await action();
-            _equipe = await TeamService.GetEquipeAsync(Id);   // relit l'état réel
-            Snackbar.Add(message, Severity.Success);
-            return true;
+            var cible = HaineHelpers.Normaliser(_editionSaisie);
+            if (cible is null) return;
+            if (!HaineHelpers.Contient(HaineHelpers.Joindre(_editionHaines), cible))
+                _editionHaines.Add(cible);
+            _editionSaisie = null;
+            // Remettre la valeur à null ne vide pas un champ qui a le focus.
+            if (_selecteurEdition is not null) await _selecteurEdition.ViderAsync();
         }
         catch (InvalidOperationException ex)
         {
             Snackbar.Add(ex.Message, Severity.Warning);
-            return false;
         }
+    }
+
+    async Task EnregistrerEdition()
+    {
+        if (_editionJoueurId is not int joueurId || _editionEnCours) return;
+        // Une Haine tapée mais pas encore ajoutée compte : sinon ✓ la perdrait.
+        var haines = string.IsNullOrWhiteSpace(_editionSaisie)
+            ? _editionHaines : _editionHaines.Append(_editionSaisie).ToList();
+        _editionEnCours = true;
+        try
+        {
+            await JoueurEdition.ModifierJoueurAsync(joueurId, _userId, _editionNom, haines);
+            // Relire l'état réel : le service a pu substituer le numéro de
+            // maillot à un nom vide, ou normaliser une Haine.
+            _equipe = await TeamService.GetEquipeAsync(Id);
+            _editionJoueurId = null;
+            Snackbar.Add("Joueur modifié.", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally { _editionEnCours = false; }
     }
 
     int? CapitaineActuelId() =>
@@ -613,62 +646,6 @@ else
         && _equipe.League is not null
         && DisplayHelpers.InscriptionOuverte(_equipe.League.Statut, _equipe.League.Format);
 
-    // ── Renommer un joueur (#16) ─────────────────────────────────────────────
-    //
-    // Volontairement DÉCORRÉLÉ de _peutEditer : celui-ci ouvre l'écran de
-    // composition, qui supprime et recrée tout le roster — d'où son verrou en
-    // phase Inscription. Un nom n'entre dans aucun calcul, donc il se corrige à
-    // tout moment, y compris saison lancée et sur un joueur mort ou retraité.
-
-    /// <summary>Joueur en cours d'édition de nom ; null = aucun.</summary>
-    int? _renommageJoueurId;
-    string _renommageValeur = "";
-
-    void DemarrerRenommage(TeamPlayer joueur)
-    {
-        _renommageJoueurId = joueur.Id;
-        _renommageValeur   = joueur.Nom;
-    }
-
-    /// <summary>Entrée valide, Échap annule — l'attendu sur un champ en place.</summary>
-    async Task OnToucheRenommage(KeyboardEventArgs e, int joueurId)
-    {
-        if (e.Key == "Enter")      await ValiderRenommage(joueurId);
-        else if (e.Key == "Escape") _renommageJoueurId = null;
-    }
-
-    /// <summary>
-    /// Enregistre le nouveau nom. Le service revalide le droit et la longueur :
-    /// l'écran propose, il ne fait pas autorité.
-    /// </summary>
-    async Task ValiderRenommage(int joueurId)
-    {
-        // OnBlur se déclenche aussi après une validation par Entrée : sans cette
-        // garde, le service serait appelé deux fois pour la même saisie.
-        if (_renommageJoueurId != joueurId) return;
-
-        var joueur = _equipe?.Joueurs.FirstOrDefault(p => p.Id == joueurId);
-        var saisi  = (_renommageValeur ?? "").Trim();
-        _renommageJoueurId = null;
-
-        if (joueur is null || saisi == joueur.Nom) return;   // rien à enregistrer
-
-        try
-        {
-            await TeamService.RenommerJoueurAsync(joueurId, _userId, saisi);
-
-            // Relire l'état réel, comme DefinirCapitaine : le service a pu
-            // substituer le numéro de maillot à un nom laissé vide, et c'est
-            // cette valeur-là qui doit s'afficher, pas la saisie.
-            _equipe = await TeamService.GetEquipeAsync(Id);
-            Snackbar.Add("Joueur renommé.", Severity.Success);
-        }
-        catch (InvalidOperationException ex)
-        {
-            Snackbar.Add(ex.Message, Severity.Warning);
-        }
-    }
-
     /// <summary>
     /// Choix du Dieu du Chaos par le commissaire. Le service revalide contre les
     /// options de la race : l'écran ne fait pas autorité.
@@ -716,13 +693,13 @@ else
         // contrairement au Dieu du Chaos réservé au commissaire.
         _estCoach = _equipe?.CoachId == _userId;
 
-        // Haine (#28) : le coach, et le commissaire de la ligue pour corriger.
-        // Le service refait la vérification ; ceci ne fait qu'afficher le menu.
+        // Crayon « Modifier le joueur » : le coach, et le commissaire de la ligue.
+        // Le service refait la vérification ; ceci ne fait qu'afficher le crayon.
         if (_equipe?.League is { } ligueHaine)
         {
             _traitsHaineCatalogue = await HaineService.GetTraitsCatalogueAsync(ligueHaine.RulesVersionId);
-            _peutGererHaine = _estCoach || await Auth.PeutGererLigueAsync(_userId, ligueHaine.Id);
-            if (_peutGererHaine)
+            _peutEditerJoueurs = _estCoach || await Auth.PeutGererLigueAsync(_userId, ligueHaine.Id);
+            if (_peutEditerJoueurs)
                 _suggestionsHaine = await HaineService.GetSuggestionsAsync(ligueHaine.RulesVersionId);
         }
 
@@ -818,7 +795,7 @@ else
     /// pendant un tournoi. Un clic ouvre la fiche, comme sur l'écran de choix
     /// de race qui règle déjà le problème de cette façon.
     /// </summary>
-    RenderFragment CompetencesJoueur(TeamPlayer j) => builder =>
+    RenderFragment CompetencesJoueur(TeamPlayer j, bool avecHaines = true) => builder =>
     {
         var skills = (j.PlayerPosition?.CompetencesDepart.Select(c => c.Skill) ?? [])
             .Concat(j.Competences.Where(c => !c.EstCompetenceDepart).Select(c => c.Skill))
@@ -854,7 +831,7 @@ else
 
         // Haines gagnées (#28) : texte sur le joueur. Cliquable seulement si le
         // catalogue de la version décrit ce Trait ; sinon simple texte.
-        var haines = HaineHelpers.Liste(j.Haines);
+        var haines = avecHaines ? HaineHelpers.Liste(j.Haines) : [];
         for (int i = 0; i < haines.Count; i++)
         {
             if (skills.Count > 0 || offerte is not null || i > 0) builder.AddMarkupContent(10, ", ");
