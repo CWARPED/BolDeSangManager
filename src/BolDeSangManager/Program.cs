@@ -144,6 +144,7 @@ builder.Services.AddScoped<DataEditService>();
 builder.Services.AddScoped<ReglesConsultationService>();
 builder.Services.AddScoped<HaineService>();
 builder.Services.AddScoped<JoueurEditionService>();
+builder.Services.AddScoped<SaisieLibreService>();
 builder.Services.AddScoped<StaffService>();
 builder.Services.AddScoped<UserAccountService>();
 builder.Services.AddScoped<PersonalDataExportService>();

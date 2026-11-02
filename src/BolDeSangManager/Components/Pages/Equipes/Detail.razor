@@ -9,6 +9,8 @@
 @inject NavigationManager Nav
 @inject HaineService HaineService
 @inject JoueurEditionService JoueurEdition
+@inject SaisieLibreService SaisieLibre
+@inject StaffService StaffService
 @inject BolDeSangManager.Services.IAuthorizationService Auth
 
 <PageTitle>@(_equipe?.Nom ?? "Équipe") — BolDeSang Manager</PageTitle>
@@ -149,7 +151,16 @@ else
         <MudItem xs="6" sm="3">
             <MudPaper Elevation="1" Class="pa-3 text-center">
                 <MudText Typo="Typo.caption" Color="Color.Secondary">Trésorerie</MudText>
-                <MudText Typo="Typo.h6" Color="Color.Success"><b>@_equipe.Tresorerie.ToString("N0") po</b></MudText>
+                <MudText Typo="Typo.h6" Color="@(_equipe.Tresorerie < 0 ? Color.Error : Color.Success)">
+                    <b>@_equipe.Tresorerie.ToString("N0") po</b>
+                    @if (_peutEditerLibre && !_editionRessources)
+                    {
+                        @* #29 — Saisie libre : ouvre l'édition dans l'onglet Staff. *@
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       title="Modifier la trésorerie et le staff" aria-label="Modifier la trésorerie"
+                                       OnClick="@(() => DemarrerRessources(versOnglet: true))" />
+                    }
+                </MudText>
             </MudPaper>
         </MudItem>
         <MudItem xs="6" sm="3">
@@ -172,7 +183,7 @@ else
         </MudItem>
     </MudGrid>
 
-    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4">
+    <MudTabs Elevation="1" Rounded="true" Class="tabs-compact" PanelClass="pt-4" @bind-ActivePanelIndex="_ongletActif">
         <!-- Effectif -->
         <MudTabPanel Text="@($"Effectif ({_equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite)})")" Icon="@Icons.Material.Filled.Group">
             <div style="overflow-x:auto">
@@ -340,17 +351,52 @@ else
 
         <!-- Staff -->
         <MudTabPanel Text="Staff" Icon="@Icons.Material.Filled.ManageAccounts">
-            <MudGrid>
-                @foreach (var (label, valeur) in StaffItems())
-                {
-                    <MudItem xs="6" sm="4" md="2">
-                        <MudPaper Elevation="1" Class="pa-3 text-center">
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText>
-                            <MudText Typo="Typo.h5"><b>@valeur</b></MudText>
-                        </MudPaper>
+            @if (_editionRessources)
+            {
+                @* #29 — Saisie libre : trésorerie et staff à la main, tracés. *@
+                <MudGrid Spacing="2">
+                    <MudItem xs="12" sm="4" md="3">
+                        <MudNumericField T="int" @bind-Value="_editTresorerie" Label="Trésorerie (po)"
+                                         Min="0" Max="@SaisieLibreRegles.TresorerieMax" Step="10000"
+                                         Variant="Variant.Outlined" Margin="Margin.Dense" />
                     </MudItem>
+                    @foreach (var st in _staffLigue)
+                    {
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudNumericField T="int" Value="@_editStaff.GetValueOrDefault(st.Id)"
+                                             ValueChanged="@(v => _editStaff[st.Id] = Math.Max(0, v))"
+                                             Label="@st.Nom" Min="0" Variant="Variant.Outlined" Margin="Margin.Dense" />
+                        </MudItem>
+                    }
+                </MudGrid>
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-2">
+                    <MudButton Variant="Variant.Text" OnClick="@(() => _editionRessources = false)">Annuler</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@_editionRessourcesEnCours"
+                               StartIcon="@Icons.Material.Filled.Check" OnClick="EnregistrerRessources">Enregistrer</MudButton>
+                </MudStack>
+            }
+            else
+            {
+                @if (_peutEditerLibre)
+                {
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Class="mb-1">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       title="Modifier la trésorerie et le staff" aria-label="Modifier le staff"
+                                       OnClick="@(() => DemarrerRessources(versOnglet: false))" />
+                    </MudStack>
                 }
-            </MudGrid>
+                <MudGrid>
+                    @foreach (var (label, valeur) in StaffItems())
+                    {
+                        <MudItem xs="6" sm="4" md="2">
+                            <MudPaper Elevation="1" Class="pa-3 text-center">
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">@label</MudText>
+                                <MudText Typo="Typo.h5"><b>@valeur</b></MudText>
+                            </MudPaper>
+                        </MudItem>
+                    }
+                </MudGrid>
+            }
         </MudTabPanel>
 
         <!-- Statistiques -->
@@ -831,6 +877,48 @@ else
     Skill? _competenceAffichee;
     void OuvrirCompetence(Skill s) => _competenceAffichee = s;
     void FermerCompetence() => _competenceAffichee = null;
+
+    // ── #29 Saisie libre : trésorerie et staff modifiables à tout moment ─────
+    bool _peutEditerLibre => _equipe?.League?.SaisieLibre == true && _peutEditerJoueurs;
+    bool _editionRessources;
+    bool _editionRessourcesEnCours;
+    int _editTresorerie;
+    Dictionary<int, int> _editStaff = [];
+    List<LeagueStaffType> _staffLigue = [];
+    int _ongletActif;
+    const int OngletStaff = 1;
+
+    async Task DemarrerRessources(bool versOnglet)
+    {
+        if (_equipe is null) return;
+        // Tout le staff proposé par la ligue, pas seulement celui détenu : on
+        // doit pouvoir passer un apothicaire de 0 à 1.
+        _staffLigue = await StaffService.GetStaffLigueAsync(_equipe.LeagueId, actifsSeulement: true);
+        _editStaff = _staffLigue.ToDictionary(s => s.Id,
+            s => _equipe.Staff.FirstOrDefault(x => x.LeagueStaffTypeId == s.Id)?.Quantite ?? 0);
+        _editTresorerie = _equipe.Tresorerie;
+        _editionRessources = true;
+        if (versOnglet) _ongletActif = OngletStaff;
+    }
+
+    async Task EnregistrerRessources()
+    {
+        if (_editionRessourcesEnCours) return;
+        _editionRessourcesEnCours = true;
+        try
+        {
+            await SaisieLibre.ModifierRessourcesEquipeAsync(Id, _userId, _editTresorerie, _editStaff);
+            _equipe = await TeamService.GetEquipeAsync(Id);
+            if (_equipe is not null) _vea = TeamService.CalculerVEA(_equipe);
+            _editionRessources = false;
+            Snackbar.Add("Trésorerie et staff enregistrés.", Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally { _editionRessourcesEnCours = false; }
+    }
 
     IEnumerable<(string, string)> StaffItems()
     {

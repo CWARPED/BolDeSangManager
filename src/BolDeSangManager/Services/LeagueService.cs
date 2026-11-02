@@ -224,6 +224,9 @@ public class LeagueService(
                 throw new InvalidOperationException(
                     "Des équipes sont déjà inscrites : le staff de la ligue ne peut plus changer. "
                     + "Supprimez les équipes, ou créez une nouvelle ligue.");
+            if (modifiee.SaisieLibre != ligue.SaisieLibre)
+                throw new InvalidOperationException(
+                    "Des équipes sont déjà inscrites : le mode « Saisie libre » ne peut plus changer.");
         }
 
         if (string.IsNullOrWhiteSpace(modifiee.Nom))
@@ -258,6 +261,7 @@ public class LeagueService(
             ligue.GameId         = modifiee.GameId;
             ligue.RulesVersionId = modifiee.RulesVersionId;
             ligue.BudgetDepart   = modifiee.BudgetDepart;
+            ligue.SaisieLibre    = modifiee.SaisieLibre;
         }
 
         await db.SaveChangesAsync();
@@ -903,11 +907,15 @@ public class LeagueService(
             var equipe = await db.Teams.Include(t => t.TeamType).FirstAsync(t => t.Id == teamId);
             var coutRelance = (equipe.TeamType?.CoutRelance ?? 50_000) * 2;
             var total = nouvellesRelances * coutRelance;
-            if (equipe.Tresorerie < total)
-                throw new InvalidOperationException("Fonds insuffisants pour acheter les relances.");
-            const int maxRelances = 8;
-            if (equipe.NombreRelances + nouvellesRelances > maxRelances)
-                throw new InvalidOperationException($"Maximum {maxRelances} relances par équipe.");
+            // Saisie libre (#29) : ni contrôle de fonds ni plafond, le débit reste.
+            if (!ligue.SaisieLibre)
+            {
+                if (equipe.Tresorerie < total)
+                    throw new InvalidOperationException("Fonds insuffisants pour acheter les relances.");
+                const int maxRelances = 8;
+                if (equipe.NombreRelances + nouvellesRelances > maxRelances)
+                    throw new InvalidOperationException($"Maximum {maxRelances} relances par équipe.");
+            }
             equipe.Tresorerie -= total;
             equipe.NombreRelances += nouvellesRelances;
         }
@@ -1330,6 +1338,7 @@ public class LeagueService(
         //    PhaseDeReposValidation → Team est en Restrict : l'oublier fait
         //    échouer toute la suppression.
         await db.PhaseDeReposValidations.Where(p => p.LeagueId == ligueId).ExecuteDeleteAsync();
+        await db.ModificationsLibres.Where(m => teamIds.Contains(m.TeamId)).ExecuteDeleteAsync();
         await db.TeamStaffs.Where(ts => teamIds.Contains(ts.TeamId)
                                      || staffIds.Contains(ts.LeagueStaffTypeId)).ExecuteDeleteAsync();
 

@@ -251,6 +251,7 @@ public class LeagueExportService(
                 .ToList(),
             ModeBrouillard: ligue.ModeBrouillard,
             Reglement: ligue.Reglement,
+            SaisieLibre: ligue.SaisieLibre,
             NombreEquipesPlayoff: ligue.NombreEquipesPlayoff,
             Equipes: equipes,
             Matchs: matchs
@@ -370,6 +371,7 @@ public class LeagueExportService(
             PointsParAgression    = dto.PointsParAgression    ?? 0,
             ModeBrouillard    = dto.ModeBrouillard    ?? false,
             Reglement         = dto.Reglement         ?? string.Empty,
+            SaisieLibre       = dto.SaisieLibre       ?? false,
             NombreEquipesPlayoff = dto.NombreEquipesPlayoff,
             Statut = LeagueStatus.Termine,
             CreeLe = DateTime.UtcNow
@@ -662,7 +664,8 @@ record LeagueExportDto(
     int? PointsParAgression = null,
     List<PalierPointsExportDto>? Paliers = null,
     bool? ModeBrouillard = null,
-    string? Reglement = null   // règlement markdown (R5), optionnel = rétrocompat
+    string? Reglement = null,  // règlement markdown (R5), optionnel = rétrocompat
+    bool? SaisieLibre = null   // #29, absent des anciens fichiers = ligue classique
 );
 
 record PalierPointsExportDto(

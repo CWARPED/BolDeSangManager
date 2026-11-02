@@ -837,11 +837,16 @@ public class MatchService(
                 .FirstAsync(t => t.Id == teamId);
             var coutRelance = (equipe.TeamType?.CoutRelance ?? 50_000) * 2; // règle ligue : double du prix normal
             var total = nouvellesRelances * coutRelance;
-            if (equipe.Tresorerie < total)
-                throw new InvalidOperationException("Fonds insuffisants pour acheter les relances.");
-            var maxRelances = 8;
-            if (equipe.NombreRelances + nouvellesRelances > maxRelances)
-                throw new InvalidOperationException($"Maximum {maxRelances} relances par équipe.");
+            // Saisie libre (#29) : ni contrôle de fonds ni plafond, le débit reste.
+            var libre = await db.Leagues.Where(l => l.Id == equipe.LeagueId).Select(l => l.SaisieLibre).FirstAsync();
+            if (!libre)
+            {
+                if (equipe.Tresorerie < total)
+                    throw new InvalidOperationException("Fonds insuffisants pour acheter les relances.");
+                var maxRelances = 8;
+                if (equipe.NombreRelances + nouvellesRelances > maxRelances)
+                    throw new InvalidOperationException($"Maximum {maxRelances} relances par équipe.");
+            }
             equipe.Tresorerie -= total;
             equipe.NombreRelances += nouvellesRelances;
             await db.SaveChangesAsync();

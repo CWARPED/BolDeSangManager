@@ -178,7 +178,11 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         var teamType = await GetTeamTypeAvecPostesAsync(equipe.TeamTypeId)
             ?? throw new InvalidOperationException("Type d'équipe introuvable");
 
-        ValiderRoster(teamType, joueurs);
+        // Saisie libre (#29) : les limites de composition ne sont qu'un
+        // avertissement, affiché par l'écran.
+        if (!ligue.SaisieLibre)
+            ValiderRoster(teamType, joueurs);
+        var tresorerieSaisie = equipe.Tresorerie;
 
         // « Favori de… » : quand la race n'autorise qu'une seule divinité, elle
         // est IMPOSÉE — on l'assigne sans rien demander (Pestiférés → Nurgle).
@@ -199,14 +203,24 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
 
         // Staff : validé contre les bornes de la ligue (min/max à la création).
         // Le coût retourné exclut les minimums, compris de base dans l'équipe.
-        var coutStaff = await AppliquerStaffAsync(equipe, staff ?? new Dictionary<int, int>(), aLaCreation: true);
+        var coutStaff = await AppliquerStaffAsync(equipe, staff ?? new Dictionary<int, int>(),
+            aLaCreation: true, libre: ligue.SaisieLibre);
 
         // Trésorerie recalculée par le SERVEUR : l'écran la propose, mais la
         // valeur postée ne fait pas foi (elle est modifiable côté client).
-        var coutJoueurs = joueurs.Sum(j => teamType.Postes.First(p => p.Id == j.positionId).Cout);
-        equipe.Tresorerie = ligue.BudgetDepart - coutJoueurs - coutStaff;
-        if (equipe.Tresorerie < 0)
-            throw new InvalidOperationException("Budget dépassé : le coût de l'équipe excède le budget de départ.");
+        // Saisie libre : c'est l'inverse, la trésorerie EST la saisie du coach
+        // (une équipe qui a déjà vécu arrive avec sa caisse).
+        if (ligue.SaisieLibre)
+        {
+            equipe.Tresorerie = SaisieLibreRegles.ValiderTresorerie(tresorerieSaisie);
+        }
+        else
+        {
+            var coutJoueurs = joueurs.Sum(j => teamType.Postes.First(p => p.Id == j.positionId).Cout);
+            equipe.Tresorerie = ligue.BudgetDepart - coutJoueurs - coutStaff;
+            if (equipe.Tresorerie < 0)
+                throw new InvalidOperationException("Budget dépassé : le coût de l'équipe excède le budget de départ.");
+        }
 
         foreach (var (positionId, nom, numero) in joueurs)
         {
@@ -263,8 +277,12 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     /// <paramref name="aLaCreation"/> est vrai, sinon 0. Voir
     /// <see cref="StaffService.UnitesFacturees"/>.
     /// </returns>
-    private async Task<int> AppliquerStaffAsync(
-        Team equipe, IReadOnlyDictionary<int, int> staff, bool aLaCreation)
+    /// <param name="libre">
+    /// Saisie libre (#29) : seuls le négatif et un staff absent de la ligue sont
+    /// refusés ; minimums, maximums et plafonds ne s'appliquent plus.
+    /// </param>
+    internal async Task<int> AppliquerStaffAsync(
+        Team equipe, IReadOnlyDictionary<int, int> staff, bool aLaCreation, bool libre = false)
     {
         var typesLigue = await db.LeagueStaffTypes
             .Where(l => l.LeagueId == equipe.LeagueId)
@@ -286,7 +304,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             if (!type.EstActif && voulu > 0)
                 throw new InvalidOperationException($"« {type.Nom} » n'est pas disponible dans cette ligue.");
 
-            if (aLaCreation)
+            if (aLaCreation && !libre)
             {
                 if (voulu < type.MinCreation)
                     throw new InvalidOperationException(
@@ -296,7 +314,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
                         $"« {type.Nom} » : maximum {type.MaxCreation} à la création de l'équipe.");
             }
 
-            if (type.MaxLigue is int plafond && voulu > plafond)
+            if (!libre && type.MaxLigue is int plafond && voulu > plafond)
                 throw new InvalidOperationException(
                     $"« {type.Nom} » : plafond de {plafond} atteint pour cette ligue.");
 
@@ -363,7 +381,11 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         var teamType = await GetTeamTypeAvecPostesAsync(equipe.TeamTypeId)
             ?? throw new InvalidOperationException("Type d'équipe introuvable");
 
-        ValiderRoster(teamType, joueurs);
+        var libre = equipe.League!.SaisieLibre;
+        if (!libre)
+            ValiderRoster(teamType, joueurs);
+        if (libre)
+            SaisieLibreRegles.ValiderTresorerie(tresorerie);
 
         // Supprimer l'ancien roster (compétences puis joueurs)
         var anciennesCompetences = equipe.Joueurs.SelectMany(j => j.Competences).ToList();
@@ -375,14 +397,22 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         equipe.Nom = nouveauNom;
         await db.SaveChangesAsync();
 
-        var coutStaff = await AppliquerStaffAsync(equipe, staff, aLaCreation: true);
+        var coutStaff = await AppliquerStaffAsync(equipe, staff, aLaCreation: true, libre: libre);
 
         // Même recalcul serveur qu'à la création (le paramètre tresorerie posté
         // par l'écran n'est qu'indicatif) : minimums de staff non facturés.
-        var coutJoueurs = joueurs.Sum(j => teamType.Postes.First(p => p.Id == j.positionId).Cout);
-        equipe.Tresorerie = equipe.League!.BudgetDepart - coutJoueurs - coutStaff;
-        if (equipe.Tresorerie < 0)
-            throw new InvalidOperationException("Budget dépassé : le coût de l'équipe excède le budget de départ.");
+        // Saisie libre : la trésorerie saisie fait foi.
+        if (libre)
+        {
+            equipe.Tresorerie = tresorerie;
+        }
+        else
+        {
+            var coutJoueurs = joueurs.Sum(j => teamType.Postes.First(p => p.Id == j.positionId).Cout);
+            equipe.Tresorerie = equipe.League!.BudgetDepart - coutJoueurs - coutStaff;
+            if (equipe.Tresorerie < 0)
+                throw new InvalidOperationException("Budget dépassé : le coût de l'équipe excède le budget de départ.");
+        }
 
 
         // Recréer le roster
@@ -603,17 +633,21 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .FirstOrDefaultAsync(p => p.Id == positionId)
             ?? throw new InvalidOperationException("Poste introuvable");
 
-        if (!gratuit && equipe.Tresorerie < position.Cout)
+        // Saisie libre (#29) : ni contrôle de fonds ni limite de composition ;
+        // le débit, lui, reste (la trésorerie se corrige à la main).
+        var libre = await db.Leagues.Where(l => l.Id == equipe.LeagueId).Select(l => l.SaisieLibre).FirstAsync();
+
+        if (!libre && !gratuit && equipe.Tresorerie < position.Cout)
             throw new InvalidOperationException("Fonds insuffisants.");
 
         var nbDejaPoste = await db.TeamPlayers
             .CountAsync(j => j.TeamId == teamId && j.PlayerPositionId == positionId
                           && !j.EstMort && !j.EstRetraite);
-        if (nbDejaPoste >= position.QuantiteMax)
+        if (!libre && nbDejaPoste >= position.QuantiteMax)
             throw new InvalidOperationException($"Limite atteinte : maximum {position.QuantiteMax} {position.Nom} par équipe.");
 
         // Limites par mot-clé
-        var limites = await db.Set<TeamTypeKeywordLimit>()
+        var limites = libre ? new List<TeamTypeKeywordLimit>() : await db.Set<TeamTypeKeywordLimit>()
             .Where(l => l.TeamTypeId == position.TeamTypeId)
             .ToListAsync();
 

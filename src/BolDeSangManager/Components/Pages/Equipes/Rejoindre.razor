@@ -102,13 +102,24 @@ else
             }
         </MudStack>
 
-        <div class="budget-sticky" style="@_budgetGauge">
-            <span class="budget-sticky-label">Budget restant</span>
-            <span class="budget-sticky-value@(_budgetNegatif ? " budget-neg" : "")">
-                @_budgetRestant.ToString("N0") po
-                <span class="budget-sticky-total">/ @_ligue.BudgetDepart.ToString("N0")</span>
-            </span>
-        </div>
+        @if (_libre)
+        {
+            @* #29 — Saisie libre : pas de budget, la caisse est saisie. *@
+            <MudNumericField T="int" @bind-Value="_tresorerieLibre" Label="Trésorerie (po)"
+                             Min="0" Max="@SaisieLibreRegles.TresorerieMax" Step="10000"
+                             Variant="Variant.Outlined" Class="mb-3" Style="max-width:260px"
+                             HelperText="Saisie libre : ce qu'il y a dans la caisse." />
+        }
+        else
+        {
+            <div class="budget-sticky" style="@_budgetGauge">
+                <span class="budget-sticky-label">Budget restant</span>
+                <span class="budget-sticky-value@(_budgetNegatif ? " budget-neg" : "")">
+                    @_budgetRestant.ToString("N0") po
+                    <span class="budget-sticky-total">/ @_ligue.BudgetDepart.ToString("N0")</span>
+                </span>
+            </div>
+        }
 
         <MudGrid>
             <!-- Formulaire principal -->
@@ -165,7 +176,7 @@ else
                                              Value="@QuantiteStaff(st.Id)"
                                              ValueChanged="@(v => DefinirStaff(st, v))"
                                              Label="@st.Nom"
-                                             Min="@st.MinCreation" Max="@st.MaxCreation"
+                                             Min="@(_libre ? 0 : st.MinCreation)" Max="@(_libre ? 99 : st.MaxCreation)"
                                              Variant="Variant.Outlined" Margin="Margin.Dense"
                                              HelperText="@LibelleCoutStaff(st)" />
                             @if (!string.IsNullOrWhiteSpace(st.Description))
@@ -183,7 +194,7 @@ else
                     <MudButton Href="@(_modeEdition ? $"/equipes/{TeamId}" : $"/ligues/{_ligue.Id}")" Variant="Variant.Text">Annuler</MudButton>
                     <MudButton Variant="Variant.Filled" Color="Color.Error"
                               StartIcon="@Icons.Material.Filled.Save"
-                              Disabled="@(_saving || _budgetRestant < 0 || string.IsNullOrWhiteSpace(_nomEquipe) || _slots.Count == 0)"
+                              Disabled="@(_saving || (!_libre && _budgetRestant < 0) || string.IsNullOrWhiteSpace(_nomEquipe) || _slots.Count == 0)"
                               OnClick="Soumettre">
                         @(_saving ? (_modeEdition ? "Enregistrement..." : "Création...") : (_modeEdition ? "Enregistrer" : "Créer l'équipe"))
                     </MudButton>
@@ -301,8 +312,14 @@ else
     {
         // Les bornes sont déjà posées sur le champ, mais une saisie clavier peut
         // les contourner : on reste dans l'intervalle autorisé à la création.
-        _staffQuantites[staff.Id] = Math.Clamp(valeur, staff.MinCreation, staff.MaxCreation);
+        _staffQuantites[staff.Id] = _libre
+            ? Math.Max(0, valeur)
+            : Math.Clamp(valeur, staff.MinCreation, staff.MaxCreation);
     }
+
+    // #29 — Saisie libre : trésorerie saisie, limites en simple avertissement.
+    bool _libre => _ligue?.SaisieLibre == true;
+    int _tresorerieLibre;
 
     /// <summary>
     /// Coût unitaire affiché sous le champ. Le prix des relances vient de la race.
@@ -362,6 +379,7 @@ else
 
             _ligue = equipe.League;
             LigueId = _ligue!.Id;
+            _tresorerieLibre = equipe.Tresorerie;
             _selectedType = await TeamService.GetTeamTypeAvecPostesAsync(equipe.TeamTypeId);
             _nomEquipe = equipe.Nom;
 
@@ -413,19 +431,26 @@ else
     void AjouterJoueur(PlayerPosition pos)
     {
         var countPoste = _slots.Count(s => s.PositionId == pos.Id);
+        // Saisie libre : la limite est signalée, pas imposée.
         if (countPoste >= pos.QuantiteMax)
         {
-            Snackbar.Add($"Limite atteinte : maximum {pos.QuantiteMax} {pos.Nom} par équipe.", Severity.Warning);
-            return;
+            Snackbar.Add(_libre
+                ? $"Au-delà de la limite : maximum {pos.QuantiteMax} {pos.Nom} d'habitude."
+                : $"Limite atteinte : maximum {pos.QuantiteMax} {pos.Nom} par équipe.", Severity.Warning);
+            if (!_libre) return;
         }
         if (DepasseLimiteMotCle(pos))
         {
             var limiteDepassee = _selectedType?.LimitesMotsCles.FirstOrDefault(l =>
                 pos.MotsCles.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                     .Any(k => k.Trim().Equals(l.MotCle, StringComparison.OrdinalIgnoreCase)));
-            Snackbar.Add($"Limite « {limiteDepassee?.MotCle} » atteinte : maximum {limiteDepassee?.Max} joueurs.", Severity.Warning);
-            return;
+            Snackbar.Add(_libre
+                ? $"Au-delà de la limite « {limiteDepassee?.MotCle} » : maximum {limiteDepassee?.Max} joueurs d'habitude."
+                : $"Limite « {limiteDepassee?.MotCle} » atteinte : maximum {limiteDepassee?.Max} joueurs.", Severity.Warning);
+            if (!_libre) return;
         }
+        if (_libre && _slots.Count >= 16)
+            Snackbar.Add("Au-delà de 16 joueurs.", Severity.Warning);
         var nextNum = _slots.Count == 0 ? 1 : Math.Min(_slots.Max(s => s.Numero) + 1, 99);
         _slots.Add(new PlayerSlot
         {
@@ -473,7 +498,7 @@ else
             if (_modeEdition)
             {
                 equipe = await TeamService.ModifierEquipeAsync(
-                    TeamId, _userId, _nomEquipe, _budgetRestant, _staffQuantites, joueurs);
+                    TeamId, _userId, _nomEquipe, _libre ? _tresorerieLibre : _budgetRestant, _staffQuantites, joueurs);
                 Snackbar.Add("Équipe modifiée avec succès !", Severity.Success);
             }
             else
@@ -484,7 +509,7 @@ else
                     CoachId = _userId,
                     LeagueId = LigueId,
                     TeamTypeId = _selectedType.Id,
-                    Tresorerie = _budgetRestant
+                    Tresorerie = _libre ? _tresorerieLibre : _budgetRestant
                 }, joueurs, _staffQuantites);
                 Snackbar.Add("Équipe créée avec succès !", Severity.Success);
             }
@@ -518,8 +543,8 @@ else
     @<text>
         @{
             var count = _slots.Count(s => s.PositionId == pos.Id);
-            var complet = count >= pos.QuantiteMax || DepasseLimiteMotCle(pos);
-            var sansFonds = _budgetRestant < pos.Cout;
+            var complet = !_libre && (count >= pos.QuantiteMax || DepasseLimiteMotCle(pos));
+            var sansFonds = !_libre && _budgetRestant < pos.Cout;
         }
         <MudPaper Elevation="0" Class="pa-2 mb-2"
                   Style="@($"border:1px solid {(complet ? "rgba(255,255,255,0.06)" : "rgba(229,57,53,0.35)")}; border-radius:4px; opacity:{(complet ? "0.45" : "1")}")">

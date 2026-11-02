@@ -45,6 +45,7 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<StarPlayer> StarPlayers => Set<StarPlayer>();
     public DbSet<ThemedLeague> ThemedLeagues => Set<ThemedLeague>();
     public DbSet<TeamTypeSpecialRule> TeamTypeSpecialRules => Set<TeamTypeSpecialRule>();
+    public DbSet<ModificationLibre> ModificationsLibres => Set<ModificationLibre>();
 
     protected override void OnModelCreating(ModelBuilder builder)
     {

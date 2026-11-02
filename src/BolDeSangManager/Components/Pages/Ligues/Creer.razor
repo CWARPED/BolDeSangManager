@@ -127,11 +127,23 @@ else
                     }
                 </MudText>
 
-                <MudNumericField T="int" @bind-Value="_budget" Label="Budget de départ (po)"
-                                 Variant="Variant.Outlined" Class="mb-3"
-                                 Min="500000" Max="2000000" Step="50000"
-                                 Disabled="@(!_structurantsOuverts)"
-                                 HelperText="Standard : 1 000 000 po" />
+                @* #29 — Figée dès la première équipe inscrite, comme le budget. *@
+                <MudCheckBox @bind-Value="_saisieLibre" Color="Color.Warning" Class="mb-1"
+                             Disabled="@(!_structurantsOuverts)" Label="Saisie libre" />
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-3 d-block" Style="margin-left:32px">
+                    Pas de budget ni de limites : chaque coach saisit sa trésorerie, son staff,
+                    les PSP et les blessures de ses joueurs. Pour reprendre une équipe qui a
+                    déjà joué. Modifications tracées.
+                </MudText>
+
+                @if (!_saisieLibre)
+                {
+                    <MudNumericField T="int" @bind-Value="_budget" Label="Budget de départ (po)"
+                                     Variant="Variant.Outlined" Class="mb-3"
+                                     Min="500000" Max="2000000" Step="50000"
+                                     Disabled="@(!_structurantsOuverts)"
+                                     HelperText="Standard : 1 000 000 po" />
+                }
 
                 @if (DisplayHelpers.AvecPlayoffs(_format))
                 {
@@ -387,6 +399,7 @@ else
     const string Playoff8 = "8 équipes";
 
     bool _modeBrouillard;
+    bool _saisieLibre;
 
     // Barème de PSP (R6) — valeurs LRB par défaut, ajustées selon le jeu choisi.
     int _xpTd = 3, _xpPasse = 1, _xpInterception = 2, _xpElimination = 2, _xpMvp = 4;
@@ -540,6 +553,7 @@ else
         _description     = ligue.Description;
         _format          = ligue.Format;
         _budget          = ligue.BudgetDepart;
+        _saisieLibre     = ligue.SaisieLibre;
         _nbEquipesLabel  = ligue.NombreEquipesPlayoff switch
         {
             2 => Playoff2,
@@ -682,6 +696,7 @@ else
                 BudgetDepart           = _budget,
                 NombreEquipesPlayoff   = nbPlayoff,
                 ModeBrouillard         = _modeBrouillard,
+                SaisieLibre            = _saisieLibre,
                 PspParTouchdown         = _xpTd,
                 PspParPasse             = _xpPasse,
                 PspParInterception      = _xpInterception,

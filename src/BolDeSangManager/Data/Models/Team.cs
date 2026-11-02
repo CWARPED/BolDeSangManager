@@ -137,6 +137,32 @@ public class TeamPlayerSkill
     public bool EnAttenteValidation { get; set; } = false; // Waiting commissioner validation
 }
 
+/// <summary>
+/// #29 — Trace d'une modification faite à la main dans une ligue en « Saisie
+/// libre » (trésorerie, staff, puis PSP, compétences, blessures…). Le coach
+/// modifie librement sa propre équipe : l'historique rend la triche VISIBLE au
+/// commissaire au lieu de l'interdire.
+///
+/// <c>UserId</c> sans clé étrangère : la trace doit survivre à la suppression
+/// d'un compte (affichée alors « compte supprimé »). Le sujet (« Équipe »,
+/// « #5 Grishnak ») est un texte figé pour la même raison : un joueur supprimé
+/// ne doit pas emporter sa ligne d'historique.
+/// </summary>
+public class ModificationLibre
+{
+    public int Id { get; set; }
+    public int TeamId { get; set; }
+    public Team Team { get; set; } = null!;
+    public string UserId { get; set; } = string.Empty;
+    public DateTime Date { get; set; } = DateTime.UtcNow;
+    /// <summary>« Équipe » ou « #5 Grishnak ».</summary>
+    public string Sujet { get; set; } = string.Empty;
+    /// <summary>« Trésorerie », « Relances », « PSP »…</summary>
+    public string Champ { get; set; } = string.Empty;
+    public string Avant { get; set; } = string.Empty;
+    public string Apres { get; set; } = string.Empty;
+}
+
 public class PlayerInjury
 {
     public int Id { get; set; }

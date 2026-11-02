@@ -33,6 +33,11 @@ else
         </div>
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap" AlignItems="AlignItems.Center">
             <MudChip T="string" Color="@LeagueColor(_ligue.Statut)">@LeagueLabel(_ligue.Statut)</MudChip>
+            @if (_ligue.SaisieLibre)
+            {
+                <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined"
+                         title="Pas de budget ni de limites : chaque coach tient lui-même son équipe.">Saisie libre</MudChip>
+            }
             @* Bascule vue coach / vue commissaire. Visible DANS LES DEUX
                positions — la masquer en vue coach enfermerait l'utilisateur
                sans retour possible. Purement cosmétique : le serveur revérifie

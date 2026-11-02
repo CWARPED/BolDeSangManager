@@ -312,6 +312,9 @@ namespace BolDeSangManager.Migrations
                     b.Property<int>("RulesVersionId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<bool>("SaisieLibre")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Statut")
                         .HasColumnType("INTEGER");
 
@@ -649,6 +652,45 @@ namespace BolDeSangManager.Migrations
                     b.HasIndex("SaisiParId");
 
                     b.ToTable("MatchSheets");
+                });
+
+            modelBuilder.Entity("BolDeSangManager.Data.Models.ModificationLibre", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Apres")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Avant")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Champ")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTime>("Date")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Sujet")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TeamId");
+
+                    b.ToTable("ModificationsLibres");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PalierAmeliorationPsp", b =>
@@ -1989,6 +2031,17 @@ namespace BolDeSangManager.Migrations
                     b.Navigation("Match");
 
                     b.Navigation("SaisiPar");
+                });
+
+            modelBuilder.Entity("BolDeSangManager.Data.Models.ModificationLibre", b =>
+                {
+                    b.HasOne("BolDeSangManager.Data.Models.Team", "Team")
+                        .WithMany()
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Team");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.PalierAmeliorationPsp", b =>

@@ -129,6 +129,31 @@ public class LeagueExportServiceTests : IDisposable
         Assert.Equal(4, Assert.Single(quantites.Where(q => q.Nom == StaffService.NomFans)).Quantite);
     }
 
+    /// <summary>#29 : le mode « Saisie libre » voyage avec la ligue.</summary>
+    [Fact]
+    public async Task ExportImport_SaisieLibre_Conservee()
+    {
+        var (ligue, commissaire) = await SetupLigueAvecEquipesAsync();
+        await using (var setup = _factory.CreateContext())
+        {
+            (await setup.Leagues.FindAsync(ligue.Id))!.SaisieLibre = true;
+            await setup.SaveChangesAsync();
+        }
+
+        byte[] bytes;
+        await using (var dbExport = _factory.CreateContext())
+            bytes = await CreateService(dbExport).ExportAsync(ligue.Id);
+        League importee;
+        await using (var dbImport = _factory.CreateContext())
+        {
+            using var flux = new MemoryStream(bytes);
+            importee = await CreateService(dbImport).ImportAsync(flux, commissaire.Id);
+        }
+
+        await using var verif = _factory.CreateContext();
+        Assert.True((await verif.Leagues.FindAsync(importee.Id))!.SaisieLibre);
+    }
+
     [Fact]
     public async Task Import_JsonSansStaff_RetombeSurLesColonnesHistoriques()
     {

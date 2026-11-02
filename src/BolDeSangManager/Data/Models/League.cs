@@ -28,6 +28,16 @@ public class League
     public bool ModeBrouillard { get; set; } = false;
 
     /// <summary>
+    /// #29 « Saisie libre » : l'application ne fait plus respecter les règles de
+    /// coût. Création d'équipe sans budget bloquant (trésorerie saisie), staff
+    /// et trésorerie modifiables à tout moment, limites de composition en simple
+    /// avertissement. Sert à reprendre une équipe qui a déjà vécu. Les gains
+    /// d'après-match restent crédités comme d'habitude. Paramètre STRUCTURANT :
+    /// figé dès la première équipe inscrite, comme le budget.
+    /// </summary>
+    public bool SaisieLibre { get; set; } = false;
+
+    /// <summary>
     /// Règlement de la ligue en markdown brut (R5). Rédigé par les commissaires,
     /// consultable par tous les participants et exportable en PDF.
     /// Le HTML brut est désactivé au rendu : voir MarkdownService.
