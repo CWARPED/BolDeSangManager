@@ -282,6 +282,74 @@ public class DataEditServiceTests
     }
 
     [Fact]
+    public async Task ClonerVersion_CopieCoupsDePouceStarPlayersEtLiguesThematiques()
+    {
+        // #21 : « BB WC 2027 » créée en copie de « Saison 3 » est née sans
+        // coups de pouce, sans star players ni ligues thématiques.
+        using var factory = new TestDbFactory();
+        int gameId, srcVersionId;
+
+        using (var db = factory.CreateContext())
+        {
+            (gameId, srcVersionId) = SeedVersion(db);
+            var elus = new TeamType { GameId = gameId, RulesVersionId = srcVersionId, Nom = "Élus du Chaos" };
+            var khorne = new ThemedLeague { RulesVersionId = srcVersionId, Nom = "Favoris de Khorne", Ordre = 2 };
+            var grashnak = new StarPlayer
+            {
+                RulesVersionId = srcVersionId, Nom = "Grashnak", Cout = 240_000, Mouvement = 6, Force = 5,
+                Agilite = "4+", CapacitePasse = "6+", Armure = "10+", Competences = "Châtaigne, Frénésie",
+                ReglesSpeciales = "Cornes du Taureau", Ordre = 3
+            };
+            db.AddRange(elus, khorne, grashnak,
+                new StarPlayer { RulesVersionId = srcVersionId, Nom = "Glart", Cout = 195_000 },
+                new Inducement
+                {
+                    RulesVersionId = srcVersionId, Nom = "Pot-de-vin", Description = "Annule une expulsion",
+                    Cout = 100_000, QuantiteMax = 3, Restriction = "Bagarreurs", Ordre = 4
+                });
+            db.SaveChanges();
+            db.Add(new TeamTypeThemedLeague { TeamTypeId = elus.Id, ThemedLeagueId = khorne.Id });
+            db.Add(new StarPlayerThemedLeague { StarPlayerId = grashnak.Id, ThemedLeagueId = khorne.Id });
+            db.SaveChanges();
+        }
+
+        int newVersionId;
+        using (var db = factory.CreateContext())
+            newVersionId = (await new DataEditService(db, NullLogger<DataEditService>.Instance)
+                .CreerVersionAsync(gameId, "BB WC 2027", srcVersionId)).Id;
+
+        using (var db = factory.CreateContext())
+        {
+            var cp = await db.Inducements.SingleAsync(i => i.RulesVersionId == newVersionId);
+            Assert.Equal(("Pot-de-vin", "Annule une expulsion", 100_000, 3, "Bagarreurs", 4),
+                (cp.Nom, cp.Description, cp.Cout, cp.QuantiteMax, cp.Restriction, cp.Ordre));
+
+            var ligue = await db.ThemedLeagues
+                .Include(l => l.Equipes).ThenInclude(e => e.TeamType)
+                .Include(l => l.StarPlayers).ThenInclude(s => s.StarPlayer)
+                .SingleAsync(l => l.RulesVersionId == newVersionId);
+            Assert.Equal(("Favoris de Khorne", 2), (ligue.Nom, ligue.Ordre));
+            // Les liaisons pointent vers les COPIES, jamais vers la version source.
+            Assert.Equal(newVersionId, ligue.Equipes.Single().TeamType.RulesVersionId);
+            Assert.Equal(newVersionId, ligue.StarPlayers.Single().StarPlayer.RulesVersionId);
+
+            var stars = await db.StarPlayers.Include(s => s.Ligues)
+                .Where(s => s.RulesVersionId == newVersionId).OrderBy(s => s.Nom).ToListAsync();
+            Assert.Equal(["Glart", "Grashnak"], stars.Select(s => s.Nom));
+            Assert.Empty(stars[0].Ligues);   // ouvert à tous : reste ouvert à tous
+            var g = stars[1];
+            Assert.Equal((240_000, 6, 5, "4+", "6+", "10+", "Châtaigne, Frénésie", "Cornes du Taureau", 3),
+                (g.Cout, g.Mouvement, g.Force, g.Agilite, g.CapacitePasse, g.Armure, g.Competences, g.ReglesSpeciales, g.Ordre));
+
+            // La source est intacte.
+            Assert.Equal(1, await db.Inducements.CountAsync(i => i.RulesVersionId == srcVersionId));
+            Assert.Equal(2, await db.StarPlayers.CountAsync(s => s.RulesVersionId == srcVersionId));
+            Assert.Equal(1, await db.Set<StarPlayerThemedLeague>()
+                .CountAsync(x => x.ThemedLeague.RulesVersionId == srcVersionId));
+        }
+    }
+
+    [Fact]
     public async Task SupprimerVersion_SupprimeAussiLaReserveEtSesCompetences()
     {
         using var factory = new TestDbFactory();

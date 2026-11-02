@@ -293,6 +293,87 @@ public class CataloguePortableTests
         }
     }
 
+    // ── Rattachements race → ligue (#21) ─────────────────────────────────────
+    // Sans eux, une version complétée par import (cas réel : « BB WC 2027 »,
+    // 0 rattachement contre 50 en Saison 3) ne donne plus accès à aucun star
+    // player restreint : aucune race n'appartient plus à aucune ligue.
+
+    private static async Task<int> AjouterRaceAsync(TestDbFactory factory, int versionId, string nom, string? ligue = null)
+    {
+        using var db = factory.CreateContext();
+        var v = await db.RulesVersions.FindAsync(versionId);
+        var tt = new TeamType { GameId = v!.GameId, RulesVersionId = versionId, Nom = nom };
+        db.TeamTypes.Add(tt);
+        await db.SaveChangesAsync();
+        if (ligue is not null)
+        {
+            var l = await db.ThemedLeagues.FirstOrDefaultAsync(x => x.RulesVersionId == versionId && x.Nom == ligue)
+                    ?? db.ThemedLeagues.Add(new ThemedLeague { RulesVersionId = versionId, Nom = ligue }).Entity;
+            await db.SaveChangesAsync();
+            db.Add(new TeamTypeThemedLeague { TeamTypeId = tt.Id, ThemedLeagueId = l.Id });
+            await db.SaveChangesAsync();
+        }
+        return tt.Id;
+    }
+
+    [Fact]
+    public async Task LesRacesRattacheesAuxLiguesVoyagent()
+    {
+        using var factory = new TestDbFactory();
+        var source = await SeedSourceAsync(factory);
+        await AjouterRaceAsync(factory, source, "Gobelins", "Bagarre des Terres Arides");
+        await AjouterRaceAsync(factory, source, "Ogres", "Bagarre des Terres Arides");
+        var cible = await SeedCibleAsync(factory);
+        var gobelins = await AjouterRaceAsync(factory, cible, "Gobelins");
+        var elfes = await AjouterRaceAsync(factory, cible, "Elfes Sylvains", "Bagarre des Terres Arides");
+        // « Ogres » n'existe pas dans la cible.
+
+        byte[] fichier;
+        using (var db = factory.CreateContext())
+            fichier = await Svc(db).ExportCatalogueAsync(source);
+
+        using (var db = factory.CreateContext())
+        {
+            var (ok, messages) = await Svc(db).ImportCatalogueAsync(cible, new MemoryStream(fichier));
+            Assert.True(ok, string.Join(" / ", messages));
+            Assert.Contains(messages, m => m.Contains("Ogres"));   // signalé, pas inventé
+        }
+
+        using (var db = factory.CreateContext())
+        {
+            var ligue = await db.ThemedLeagues.Include(l => l.Equipes)
+                .SingleAsync(l => l.RulesVersionId == cible && l.Nom == "Bagarre des Terres Arides");
+            // La sélection du fichier remplace celle de la cible, comme pour
+            // les star players : Gobelins entre, Elfes Sylvains sort.
+            Assert.Equal([gobelins], ligue.Equipes.Select(e => e.TeamTypeId));
+        }
+    }
+
+    [Fact]
+    public async Task UnFichierSansRacesNeTouchePasAuxRattachements()
+    {
+        // Les exports produits avant #21 n'ont pas le champ : ils ne doivent
+        // pas vider les rattachements existants de la cible.
+        using var factory = new TestDbFactory();
+        var cible = await SeedCibleAsync(factory);
+        var gobelins = await AjouterRaceAsync(factory, cible, "Gobelins", "Classique du Vieux Monde");
+
+        var json = """
+        { "jeu": "Blood Bowl", "version": "Test",
+          "ligues": [ { "nom": "Classique du Vieux Monde" } ],
+          "coupsDePouce": [], "starPlayers": [] }
+        """;
+        using (var db = factory.CreateContext())
+        {
+            var (ok, erreurs) = await Svc(db).ImportCatalogueAsync(
+                cible, new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)));
+            Assert.True(ok, string.Join(" / ", erreurs));
+        }
+
+        using (var db = factory.CreateContext())
+            Assert.True(await db.Set<TeamTypeThemedLeague>().AnyAsync(x => x.TeamTypeId == gobelins));
+    }
+
     // ── Feuille imprimée ─────────────────────────────────────────────────────
 
     /// <summary>

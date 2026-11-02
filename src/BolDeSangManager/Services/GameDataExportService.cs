@@ -870,6 +870,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
 
         var ligues = await db.ThemedLeagues
             .Where(l => l.RulesVersionId == rulesVersionId)
+            .Include(l => l.Equipes).ThenInclude(e => e.TeamType)
             .OrderBy(l => l.Nom)
             .ToListAsync();
 
@@ -887,7 +888,9 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
         var dto = new CataloguePortableDto(
             Jeu: version.Game?.Nom ?? "",
             Version: version.Nom,
-            Ligues: ligues.Select(l => new LiguePortableDto(l.Nom)).ToList(),
+            Ligues: ligues.Select(l => new LiguePortableDto(l.Nom,
+                l.Equipes.Where(e => e.TeamType is not null)
+                         .Select(e => e.TeamType.Nom).OrderBy(n => n).ToList())).ToList(),
             CoupsDePouce: coupsDePouce.Select(i => new CoupDePoucePortableDto(
                 i.Nom, i.Description, i.Cout, i.QuantiteMax, i.Restriction)).ToList(),
             StarPlayers: stars.Select(sp => new StarPlayerPortableDto(
@@ -1034,6 +1037,41 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 await db.SaveChangesAsync();
             }
 
+            // ── Races rattachées aux ligues (#21) ───────────────────────────
+            // Référencées par NOM dans la version cible. Champ absent (fichier
+            // antérieur à #21) = on ne touche à rien ; présent = la sélection
+            // du fichier remplace celle de la cible, comme pour les star players.
+            var races = await db.TeamTypes
+                .Where(t => t.RulesVersionId == rulesVersionId)
+                .ToListAsync();
+            foreach (var l in dto.Ligues ?? [])
+            {
+                if (string.IsNullOrWhiteSpace(l.Nom) || l.Races is null) continue;
+                var ligue = await LigueOuCreee(l.Nom.Trim());
+
+                var actuels = await db.Set<TeamTypeThemedLeague>()
+                    .Where(x => x.ThemedLeagueId == ligue.Id)
+                    .ToListAsync();
+                db.Set<TeamTypeThemedLeague>().RemoveRange(actuels);
+
+                foreach (var nomRace in l.Races.Where(n => !string.IsNullOrWhiteSpace(n)).Distinct())
+                {
+                    var race = races.FirstOrDefault(t =>
+                        string.Equals(t.Nom, nomRace.Trim(), StringComparison.OrdinalIgnoreCase));
+                    if (race is null)
+                    {
+                        avertissements.Add(
+                            $"Ligue « {ligue.Nom} » : la race « {nomRace} » n'existe pas dans cette version, rattachement ignoré.");
+                        continue;
+                    }
+                    db.Set<TeamTypeThemedLeague>().Add(new TeamTypeThemedLeague
+                    {
+                        TeamTypeId = race.Id, ThemedLeagueId = ligue.Id
+                    });
+                }
+                await db.SaveChangesAsync();
+            }
+
             await transaction.CommitAsync();
 
             logger.LogInformation(
@@ -1098,7 +1136,12 @@ record CataloguePortableDto(
     List<StarPlayerPortableDto> StarPlayers
 );
 
-record LiguePortableDto(string Nom);
+/// <summary>
+/// Ligue thématique + les races qui y appartiennent, par NOM. <c>Races</c> est
+/// null dans les fichiers antérieurs à #21 : l'import laisse alors les
+/// rattachements de la cible intacts.
+/// </summary>
+record LiguePortableDto(string Nom, List<string>? Races = null);
 
 record CoupDePoucePortableDto(
     string Nom,

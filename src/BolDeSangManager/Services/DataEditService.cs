@@ -388,6 +388,73 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             });
         await db.SaveChangesAsync();
 
+        // Coups de pouce, ligues thématiques et star players (#21). Sans ce
+        // bloc, une édition créée par copie naissait sans aucun d'eux et
+        // l'association devait tout ressaisir.
+        var sourceCoups = await db.Inducements
+            .Where(i => i.RulesVersionId == sourceVersionId).ToListAsync();
+        foreach (var src in sourceCoups)
+            db.Inducements.Add(new Inducement
+            {
+                RulesVersionId = destVersionId,
+                Nom            = src.Nom,
+                Description    = src.Description,
+                Cout           = src.Cout,
+                QuantiteMax    = src.QuantiteMax,
+                Restriction    = src.Restriction,
+                Ordre          = src.Ordre
+            });
+
+        var sourceLigues = await db.ThemedLeagues
+            .Include(l => l.Equipes)
+            .Where(l => l.RulesVersionId == sourceVersionId).ToListAsync();
+        var liguesMap = new Dictionary<int, ThemedLeague>();
+        foreach (var src in sourceLigues)
+        {
+            var copie = new ThemedLeague { RulesVersionId = destVersionId, Nom = src.Nom, Ordre = src.Ordre };
+            db.ThemedLeagues.Add(copie);
+            liguesMap[src.Id] = copie;
+        }
+
+        var sourceStars = await db.StarPlayers
+            .Include(s => s.Ligues)
+            .Where(s => s.RulesVersionId == sourceVersionId).ToListAsync();
+        var starsMap = new Dictionary<int, StarPlayer>();
+        foreach (var src in sourceStars)
+        {
+            var copie = new StarPlayer
+            {
+                RulesVersionId  = destVersionId,
+                Nom             = src.Nom,
+                Cout            = src.Cout,
+                Mouvement       = src.Mouvement,
+                Force           = src.Force,
+                Agilite         = src.Agilite,
+                CapacitePasse   = src.CapacitePasse,
+                Armure          = src.Armure,
+                Competences     = src.Competences,
+                ReglesSpeciales = src.ReglesSpeciales,
+                Ordre           = src.Ordre
+            };
+            db.StarPlayers.Add(copie);
+            starsMap[src.Id] = copie;
+        }
+        await db.SaveChangesAsync();
+
+        // Liaisons remappées vers les copies ; une liaison dont une extrémité
+        // n'a pas été clonée est ignorée plutôt que de pointer vers la source.
+        // ⚠️ Une ligue sans star player rattaché signifie « ouvert à tous » :
+        // perdre une liaison élargirait l'accès en silence — d'où le test.
+        foreach (var src in sourceLigues)
+            foreach (var lien in src.Equipes)
+                if (teamTypeMap.TryGetValue(lien.TeamTypeId, out var tt))
+                    db.Add(new TeamTypeThemedLeague { TeamTypeId = tt.Id, ThemedLeagueId = liguesMap[src.Id].Id });
+        foreach (var src in sourceStars)
+            foreach (var lien in src.Ligues)
+                if (liguesMap.TryGetValue(lien.ThemedLeagueId, out var ligue))
+                    db.Add(new StarPlayerThemedLeague { StarPlayerId = starsMap[src.Id].Id, ThemedLeagueId = ligue.Id });
+        await db.SaveChangesAsync();
+
         logger.LogInformation("Clonage : v{Src} → v{Dest} ({NbSkills} skills, {NbTypes} types, {NbStaff} staff)", sourceVersionId, destVersionId, sourceSkills.Count, sourceTypes.Count, sourceStaff.Count);
     }
 
