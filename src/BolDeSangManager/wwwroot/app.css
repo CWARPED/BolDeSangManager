@@ -1267,3 +1267,9 @@ h1:focus {
 td.cellule-edition { padding: 4px 8px 12px !important; border-bottom: none !important; }
 .panneau-edition { border-left: 3px solid var(--mud-palette-primary) !important; }
 .panneau-edition .mud-chip { margin: 2px 4px 2px 0; }
+/* Champs alignés : même marge haute partout, pastilles sous le contrôle. */
+.panneau-edition .mud-input-control { margin-top: 0 !important; }
+.panneau-edition .ligne-ajout { display: flex; align-items: center; gap: 4px; }
+.panneau-edition .pastilles-edition { margin-top: 6px; min-height: 24px; }
+.panneau-edition .mud-button-group-root .mud-button-root { height: 40px; }
+.panneau-edition .groupe-stats .mud-button-root { min-width: 40px; padding-left: 6px; padding-right: 6px; }
