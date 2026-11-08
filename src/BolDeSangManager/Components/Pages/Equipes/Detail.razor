@@ -190,7 +190,8 @@ else
         <!-- Effectif -->
         <MudTabPanel Text="@($"Effectif ({_equipe.Joueurs.Count(j => !j.EstMort && !j.EstRetraite)})")" Icon="@Icons.Material.Filled.Group">
             <div style="overflow-x:auto">
-                <MudTable Items="@_equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).OrderBy(j => j.Numero)" Dense="true" Hover="true" Elevation="0">
+                <MudTable Items="@_equipe.Joueurs.Where(j => !j.EstMort && !j.EstRetraite).OrderBy(j => j.Numero)" Dense="true" Hover="true" Elevation="0"
+                          RowClassFunc="@((TeamPlayer j, int _) => j.Id == _editionJoueurId ? "ligne-en-edition" : "")">
                     <HeaderContent>
                         <MudTh>#</MudTh>
                         <MudTh>Nom</MudTh>
@@ -213,14 +214,10 @@ else
                     <RowTemplate Context="j">
                         <MudTd DataLabel="N°">@j.Numero</MudTd>
                         <MudTd DataLabel="Nom">
-                            @if (_editionJoueurId == j.Id) { @ChampNom(j) }
-                            else
+                            <b>@j.Nom</b>
+                            @if (j.EstCapitaine)
                             {
-                                <b>@j.Nom</b>
-                                @if (j.EstCapitaine)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Capitaine</MudChip>
-                                }
+                                <MudChip T="string" Size="Size.Small" Color="Color.Warning" Class="ml-1">Capitaine</MudChip>
                             }
                         </MudTd>
                         <MudTd DataLabel="Poste">
@@ -241,11 +238,7 @@ else
                             @* Un seul bloc : en vue téléphone, MudTd aligne ses enfants
                                en ligne, ce qui écrasait compétences, menu et accès. *@
                             <div>
-                            <MudText Typo="Typo.caption">@CompetencesJoueur(j, avecHaines: _editionJoueurId != j.Id)</MudText>
-                            @if (_editionJoueurId == j.Id)
-                            {
-                                @EditionHaines(j)
-                            }
+                            <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
                             @if (j.PlayerPosition?.AccesCategories.Any() == true)
                             {
                                 <div style="font-size:10px; margin-top:2px">
@@ -286,9 +279,9 @@ else
                         }
                     </RowTemplate>
                     <ChildRowContent Context="jl">
-                        @if (_editionJoueurId == jl.Id && _libre)
+                        @if (_editionJoueurId == jl.Id)
                         {
-                            <MudTr><td colspan="20">@EditionLibre(jl)</td></MudTr>
+                            <MudTr><td colspan="20" class="cellule-edition">@PanneauEdition(jl)</td></MudTr>
                         }
                     </ChildRowContent>
                 </MudTable>
@@ -304,8 +297,10 @@ else
                     Morts &amp; Retraités (@absents.Count)
                 </MudText>
                 <div style="overflow-x:auto">
+                    @* Atténuation par LIGNE, pas sur la table : le panneau d'édition
+                       ouvert sous une ligne doit rester pleinement lisible. *@
                     <MudTable Items="@absents" Dense="true" Elevation="0"
-                              Style="opacity:0.55">
+                              RowClassFunc="@((TeamPlayer j, int _) => j.Id == _editionJoueurId ? "ligne-absent ligne-en-edition" : "ligne-absent")">
                         <HeaderContent>
                             <MudTh>#</MudTh>
                             <MudTh>Nom</MudTh>
@@ -321,8 +316,7 @@ else
                         <RowTemplate Context="j">
                             <MudTd DataLabel="N°">@j.Numero</MudTd>
                             <MudTd DataLabel="Nom">
-                                @if (_editionJoueurId == j.Id) { @ChampNom(j) } else {
-                                <span style="text-decoration:line-through">@j.Nom</span> }
+                                <span style="text-decoration:line-through">@j.Nom</span>
                                 @if (j.EstMort)
                                 {
                                     <MudIcon Icon="@Icons.Material.Filled.Dangerous" Color="Color.Error"
@@ -341,11 +335,7 @@ else
                                 }
                             </MudTd>
                             <MudTd DataLabel="Compétences">
-                                <MudText Typo="Typo.caption">@CompetencesJoueur(j, avecHaines: _editionJoueurId != j.Id)</MudText>
-                                @if (_editionJoueurId == j.Id)
-                                {
-                                    @EditionHaines(j)
-                                }
+                                <MudText Typo="Typo.caption">@CompetencesJoueur(j)</MudText>
                             </MudTd>
                             <MudTd DataLabel="Améliorations" Style="text-align:center">@j.Improvements.Count</MudTd>
                             @if (_peutEditerJoueurs)
@@ -354,9 +344,9 @@ else
                             }
                         </RowTemplate>
                         <ChildRowContent Context="jl">
-                            @if (_editionJoueurId == jl.Id && _libre)
+                            @if (_editionJoueurId == jl.Id)
                             {
-                                <MudTr><td colspan="20" style="opacity:1">@EditionLibre(jl)</td></MudTr>
+                                <MudTr><td colspan="20" class="cellule-edition">@PanneauEdition(jl)</td></MudTr>
                             }
                         </ChildRowContent>
                     </MudTable>
@@ -566,18 +556,61 @@ else
     bool _editionEnCours;
     SelecteurHaine? _selecteurEdition;
 
+    // Le crayon de la ligne en édition reste allumé ; un second clic referme.
     RenderFragment CrayonJoueur(TeamPlayer j) =>
         _editionJoueurId == j.Id
-            ? @<span style="white-space:nowrap">
-                  <MudIconButton Icon="@Icons.Material.Filled.Check" Color="Color.Success" Size="Size.Small"
-                                 title="Enregistrer" aria-label="Enregistrer" Disabled="@_editionEnCours"
-                                 OnClick="EnregistrerEdition" />
-                  <MudIconButton Icon="@Icons.Material.Filled.Close" Size="Size.Small"
-                                 title="Annuler" aria-label="Annuler" OnClick="AnnulerEdition" />
-              </span>
+            ? @<MudIconButton Icon="@Icons.Material.Filled.EditOff" Size="Size.Small" Color="Color.Primary"
+                              title="Fermer sans enregistrer" aria-label="Fermer l'édition" OnClick="AnnulerEdition" />
             : @<MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
                               title="Modifier le joueur" aria-label="Modifier le joueur"
                               OnClick="@(() => DemarrerEdition(j))" />;
+
+    /// <summary>
+    /// Panneau d'édition, sous la ligne : un seul bloc, en sections titrées
+    /// (Joueur, Haines, puis en saisie libre Progression, Compétences,
+    /// Caractéristiques, Blessures), boutons en bas. Rien n'est écrit avant
+    /// « Enregistrer ».
+    /// </summary>
+    RenderFragment PanneauEdition(TeamPlayer j) =>
+        @<MudPaper Outlined="true" Class="pa-3 panneau-edition">
+            <MudText Typo="Typo.subtitle2" Class="mb-3">
+                <b>Modifier #@j.Numero</b>
+                <span style="color:var(--mud-palette-text-secondary)"> · @j.PlayerPosition?.Nom</span>
+            </MudText>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" md="6">
+                    @TitreSection("Joueur")
+                    @ChampNom(j)
+                </MudItem>
+                <MudItem xs="12" md="6">
+                    @TitreSection("Haines")
+                    @EditionHaines(j)
+                </MudItem>
+            </MudGrid>
+            @if (_libre)
+            {
+                <MudDivider Class="my-3" />
+                @EditionLibre(j)
+            }
+            <MudDivider Class="my-3" />
+            <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Wrap="Wrap.Wrap" Spacing="2">
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-none d-sm-flex">
+                    Entrée dans le nom : enregistrer · Échap : annuler
+                </MudText>
+                <MudStack Row="true" Spacing="2" Class="ml-auto">
+                    <MudButton Variant="Variant.Text" OnClick="AnnulerEdition" aria-label="Annuler">Annuler</MudButton>
+                    <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.Check"
+                               Disabled="@_editionEnCours" OnClick="EnregistrerEdition" aria-label="Enregistrer">Enregistrer</MudButton>
+                </MudStack>
+            </MudStack>
+        </MudPaper>;
+
+    static RenderFragment TitreSection(string titre) =>
+        @<MudText Typo="Typo.overline" Color="Color.Secondary" Class="d-block mb-1" Style="line-height:1.6">@titre</MudText>;
+
+    /// <summary>« Aucune » quand la liste est vide : la section garde sa forme.</summary>
+    static RenderFragment AucunSiVide(bool vide) =>
+        @<span>@if (vide) { <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mb-1">Aucune</MudText> }</span>;
 
     /// <summary>
     /// Nom en édition, et la case « Capitaine » quand la race a la règle et que
@@ -586,9 +619,9 @@ else
     RenderFragment ChampNom(TeamPlayer j) =>
         @<div>
             <MudTextField T="string" Value="@_editionNom" ValueChanged="@(v => _editionNom = v)"
-                          Immediate="true" AutoFocus="true" Variant="Variant.Text" Margin="Margin.Dense"
-                          MaxLength="@JoueurEditionService.NomLongueurMax" Placeholder="Vide = numéro"
-                          Style="min-width:150px" OnKeyDown="ToucheEdition" />
+                          Immediate="true" AutoFocus="true" Variant="Variant.Outlined" Margin="Margin.Dense"
+                          Label="Nom" HelperText="Vide = numéro de maillot"
+                          MaxLength="@JoueurEditionService.NomLongueurMax" OnKeyDown="ToucheEdition" />
             @if (CapitaineEditable(j))
             {
                 <MudCheckBox T="bool" Value="_editionCapitaine" ValueChanged="@(v => _editionCapitaine = v)"
@@ -605,7 +638,8 @@ else
     /// pas en gagner.
     /// </summary>
     RenderFragment EditionHaines(TeamPlayer j) =>
-        @<div class="mt-1">
+        @<div>
+            @AucunSiVide(_editionHaines.Count == 0)
             @foreach (var h in _editionHaines)
             {
                 <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Outlined"
@@ -613,7 +647,7 @@ else
             }
             @if (!j.EstMort)
             {
-                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
                     <SelecteurHaine @ref="_selecteurEdition" Suggestions="_suggestionsHaine"
                                     Value="@_editionSaisie" ValueChanged="@(v => _editionSaisie = v)"
                                     Label="Ajouter une Haine" OnEntree="AjouterHaineEdition" />
@@ -997,24 +1031,24 @@ else
     /// son effet (une Séquelle rend sa caractéristique, Mort ramène le joueur).
     /// </summary>
     RenderFragment EditionLibre(TeamPlayer j) =>
-        @<div class="pa-2 edition-libre">
-            <MudGrid Spacing="2">
-                <MudItem xs="12" sm="6" md="3">
+        @<div class="edition-libre">
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="6" lg="3">
+                    @TitreSection("Progression")
                     <MudNumericField T="int" @bind-Value="_editionPsp" Label="PSP disponibles" Min="0"
                                      Max="@SaisieLibreService.PspMax" Variant="Variant.Outlined" Margin="Margin.Dense" />
                     <MudCheckBox T="bool" @bind-Value="_editionRpm" Label="Rate le prochain match"
                                  Size="Size.Small" Dense="true" Color="Color.Warning" />
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Compétences acquises</MudText>
-                    <div>
-                        @foreach (var id in _editionCompetences.ToList())
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
-                                     OnClose="@(_ => _editionCompetences.Remove(id))">@NomCompetence(id)</MudChip>
-                        }
-                    </div>
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                <MudItem xs="12" sm="6" lg="3">
+                    @TitreSection("Compétences acquises")
+                    @AucunSiVide(_editionCompetences.Count == 0)
+                    @foreach (var id in _editionCompetences.ToList())
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary"
+                                 OnClose="@(_ => _editionCompetences.Remove(id))">@NomCompetence(id)</MudChip>
+                    }
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="mt-1">
                         <SelecteurHaine @ref="_selecteurCompetence" Suggestions="SuggestionsCompetence(j)"
                                         Value="@_saisieCompetence" ValueChanged="@(v => _saisieCompetence = v)"
                                         Label="Ajouter une compétence" Placeholder="ex. Garde" OnEntree="AjouterCompetenceEdition" />
@@ -1022,50 +1056,52 @@ else
                                        title="Ajouter la compétence" aria-label="Ajouter la compétence" OnClick="AjouterCompetenceEdition" />
                     </MudStack>
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Caractéristiques</MudText>
-                    <div>
-                        @foreach (var (stat, i) in _editionCarac.Select((s, i) => (s, i)).ToList())
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
-                                     OnClose="@(_ => _editionCarac.RemoveAt(i))">+1 @BlessureHelpers.AbregeStat(stat)</MudChip>
-                        }
-                    </div>
-                    <div>
+                <MudItem xs="12" sm="6" lg="3">
+                    @TitreSection("Caractéristiques")
+                    @AucunSiVide(_editionCarac.Count == 0)
+                    @foreach (var (stat, i) in _editionCarac.Select((s, i) => (s, i)).ToList())
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success"
+                                 OnClose="@(_ => _editionCarac.RemoveAt(i))">+1 @BlessureHelpers.AbregeStat(stat)</MudChip>
+                    }
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">Ajouter +1</MudText>
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined" Color="Color.Success">
                         @foreach (var st in Stats)
                         {
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Success" Class="px-1" Style="min-width:0"
-                                       title="@($"+1 {BlessureHelpers.LibelleStat(st)}")"
-                                       OnClick="@(() => _editionCarac.Add(st))">+@BlessureHelpers.AbregeStat(st)</MudButton>
+                            <MudButton Style="min-width:40px"
+                                       title="@($"+1 {BlessureHelpers.LibelleStat(st)}")" aria-label="@($"+1 {BlessureHelpers.AbregeStat(st)}")"
+                                       OnClick="@(() => _editionCarac.Add(st))">@BlessureHelpers.AbregeStat(st)</MudButton>
                         }
-                    </div>
+                    </MudButtonGroup>
                 </MudItem>
-                <MudItem xs="12" sm="6" md="3">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Blessures</MudText>
-                    <div>
-                        @foreach (var (b, i) in _editionBlessures.Select((b, i) => (b, i)).ToList())
-                        {
-                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
-                                     OnClose="@(_ => _editionBlessures.RemoveAt(i))">@BlessureHelpers.Resume(b.Type, b.Stat)</MudChip>
-                        }
-                    </div>
-                    <div>
-                        <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="px-1" Style="min-width:0"
-                                   title="Blessure sérieuse : une BP"
-                                   OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.BlessurePersistante)))">+BP</MudButton>
-                        <span class="mud-typography-caption ml-1" style="color:var(--mud-palette-text-secondary)">Séquelle :</span>
-                        @foreach (var st in Stats)
-                        {
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="px-1" Style="min-width:0"
-                                       title="@($"Séquelle : −1 {BlessureHelpers.LibelleStat(st)}")"
-                                       OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.Sequelle, st)))">−@BlessureHelpers.AbregeStat(st)</MudButton>
-                        }
+                <MudItem xs="12" sm="6" lg="3">
+                    @TitreSection("Blessures")
+                    @AucunSiVide(_editionBlessures.Count == 0)
+                    @foreach (var (b, i) in _editionBlessures.Select((b, i) => (b, i)).ToList())
+                    {
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                 OnClose="@(_ => _editionBlessures.RemoveAt(i))">@BlessureHelpers.Resume(b.Type, b.Stat)</MudChip>
+                    }
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">Ajouter</MudText>
+                    <MudStack Row="true" Spacing="1">
+                        <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error"
+                                   title="Blessure sérieuse : une BP (+1 aux jets d'élimination)" aria-label="Ajouter une BP"
+                                   OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.BlessurePersistante)))">BP</MudButton>
                         @if (!_editionBlessures.Any(b => b.Type == InjuryType.Mort))
                         {
-                            <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Error" Class="px-1" Style="min-width:0"
-                                       OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.Mort)))">+Mort</MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error" aria-label="Ajouter Mort"
+                                       OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.Mort)))">Mort</MudButton>
                         }
-                    </div>
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block mt-2">Séquelle (−1)</MudText>
+                    <MudButtonGroup Size="Size.Small" Variant="Variant.Outlined" Color="Color.Error">
+                        @foreach (var st in Stats)
+                        {
+                            <MudButton Style="min-width:40px"
+                                       title="@($"Séquelle : −1 {BlessureHelpers.LibelleStat(st)}")" aria-label="@($"Séquelle −1 {BlessureHelpers.AbregeStat(st)}")"
+                                       OnClick="@(() => _editionBlessures.Add(new(null, InjuryType.Sequelle, st)))">@BlessureHelpers.AbregeStat(st)</MudButton>
+                        }
+                    </MudButtonGroup>
                 </MudItem>
             </MudGrid>
         </div>;

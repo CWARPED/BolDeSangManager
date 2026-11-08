@@ -1259,3 +1259,11 @@ h1:focus {
     display: inline-block;
     white-space: nowrap;
 }
+
+/* ── Page d'équipe : édition d'un joueur (crayon en bout de ligne) ───────── */
+.ligne-en-edition > td { background: rgba(229, 57, 53, 0.08); }
+.ligne-absent > td { opacity: 0.55; }
+.ligne-absent.ligne-en-edition > td { opacity: 1; }
+td.cellule-edition { padding: 4px 8px 12px !important; border-bottom: none !important; }
+.panneau-edition { border-left: 3px solid var(--mud-palette-primary) !important; }
+.panneau-edition .mud-chip { margin: 2px 4px 2px 0; }
