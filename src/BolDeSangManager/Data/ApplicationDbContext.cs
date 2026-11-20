@@ -43,6 +43,8 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
     public DbSet<SpecialRule> SpecialRules => Set<SpecialRule>();
     public DbSet<Inducement> Inducements => Set<Inducement>();
     public DbSet<StarPlayer> StarPlayers => Set<StarPlayer>();
+    public DbSet<TeamStarPlayer> TeamStarPlayers => Set<TeamStarPlayer>();
+    public DbSet<TeamInducement> TeamInducements => Set<TeamInducement>();
     public DbSet<ThemedLeague> ThemedLeagues => Set<ThemedLeague>();
     public DbSet<TeamTypeSpecialRule> TeamTypeSpecialRules => Set<TeamTypeSpecialRule>();
     public DbSet<ModificationLibre> ModificationsLibres => Set<ModificationLibre>();
@@ -372,6 +374,38 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
 
         builder.Entity<StarPlayer>()
             .HasIndex(s => new { s.RulesVersionId, s.Nom })
+            .IsUnique();
+
+        // Stars recrutées en saisie libre : supprimées avec l'équipe ; une star
+        // recrutée ne peut PAS disparaître du catalogue (Restrict), sinon la
+        // VEA de l'équipe baisserait en silence.
+        builder.Entity<TeamStarPlayer>()
+            .HasOne(x => x.Team).WithMany(t => t.StarPlayers)
+            .HasForeignKey(x => x.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<TeamStarPlayer>()
+            .HasOne(x => x.StarPlayer).WithMany()
+            .HasForeignKey(x => x.StarPlayerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<TeamStarPlayer>()
+            .HasIndex(x => new { x.TeamId, x.StarPlayerId })
+            .IsUnique();
+
+        // Coups de pouce détenus en saisie libre : même régime que les stars.
+        builder.Entity<TeamInducement>()
+            .HasOne(x => x.Team).WithMany(t => t.CoupsDePouce)
+            .HasForeignKey(x => x.TeamId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.Entity<TeamInducement>()
+            .HasOne(x => x.Inducement).WithMany()
+            .HasForeignKey(x => x.InducementId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.Entity<TeamInducement>()
+            .HasIndex(x => new { x.TeamId, x.InducementId })
             .IsUnique();
 
         // Catalogue de ligues thématiques + ses deux tables de liaison.

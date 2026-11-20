@@ -21,7 +21,10 @@ namespace BolDeSangManager.Helpers;
 public static class VeaCalculator
 {
     /// <summary>
-    /// Somme la valeur des joueurs actifs et du staff détenu.
+    /// Somme la valeur des joueurs actifs, du staff détenu et des star players
+    /// recrutés et des coups de pouce détenus en saisie libre
+    /// (<see cref="TeamStarPlayer"/>, <see cref="TeamInducement"/> — la requête
+    /// doit avoir chargé <c>StarPlayers.StarPlayer</c> et <c>CoupsDePouce.Inducement</c>).
     ///
     /// Les joueurs morts ou retraités sont exclus. Le staff compte sa quantité
     /// TOTALE, y compris les unités offertes à la création (<c>MinCreation</c>) :
@@ -52,7 +55,18 @@ public static class VeaCalculator
             .Where(s => s.LeagueStaffType is not null && s.LeagueStaffType.CompteDansVea)
             .Sum(s => s.Quantite * StaffService.CoutUnitaire(s.LeagueStaffType, equipe.TeamType));
 
-        return totalJoueurs + totalStaff;
+        // Stars recrutées en saisie libre : leur coût de catalogue, lu en direct.
+        var totalStars = equipe.StarPlayers
+            .Where(s => s.StarPlayer is not null)
+            .Sum(s => s.StarPlayer.Cout);
+
+        // Coups de pouce détenus en saisie libre : coût du catalogue × quantité
+        // (décision produit ; un prix variable vaut 0 au catalogue).
+        var totalCoupsDePouce = equipe.CoupsDePouce
+            .Where(c => c.Inducement is not null)
+            .Sum(c => c.Inducement.Cout * c.Quantite);
+
+        return totalJoueurs + totalStaff + totalStars + totalCoupsDePouce;
     }
 
     /// <summary>

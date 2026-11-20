@@ -49,12 +49,18 @@ else
             </MudText>
         </div>
         <MudStack Row="true" Spacing="2" Wrap="Wrap.Wrap">
-            @if (_peutEditer)
+            @* « Modifier » : en saisie libre il reste ouvert pendant le tournoi
+               (coach et commissaire), l'écran passant alors en mode qui ne
+               reconstruit pas l'effectif. La suppression garde ses règles. *@
+            @if (_peutEditer || _peutEditerLibre)
             {
                 <MudButton Href="@($"/equipes/rejoindre?teamId={_equipe.Id}")" Variant="Variant.Outlined" Color="Color.Primary"
                           StartIcon="@Icons.Material.Filled.Edit" Size="Size.Small">
                     Modifier
                 </MudButton>
+            }
+            @if (_peutEditer)
+            {
                 <MudButton OnClick="ConfirmerSuppression" Variant="Variant.Outlined" Color="Color.Error"
                           StartIcon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small">
                     Supprimer
@@ -74,7 +80,7 @@ else
     @if (_reglesSpeciales.Count > 0)
     {
         <MudText Typo="Typo.subtitle2" Class="mb-1">Règles spéciales</MudText>
-        <MudExpansionPanels Class="mb-4" Elevation="0" Dense="true"
+        <MudExpansionPanels Class="mb-4 regles-speciales" Elevation="0" Dense="true"
                             Style="border:1px solid var(--mud-palette-lines-default); border-radius:4px">
             @foreach (var lien in _reglesSpeciales)
             {
@@ -287,6 +293,56 @@ else
                 </MudTable>
             </div>
 
+            @* Saisie libre : star players recrutés — lignes de l'effectif, comptées
+               dans la VEA, absentes des feuilles de match. Lecture seule ici :
+               on les choisit par le bouton « Modifier » de l'équipe. *@
+            @{
+                var stars = _equipe.StarPlayers.Where(x => x.StarPlayer is not null)
+                    .Select(x => x.StarPlayer).OrderBy(s => s.Nom).ToList();
+            }
+            @if (stars.Any())
+            {
+                <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><b>Star players (@stars.Count)</b></MudText>
+                @if (stars.Any())
+                {
+                    <div style="overflow-x:auto">
+                        <MudTable Items="@stars" Dense="true" Elevation="0">
+                            <HeaderContent>
+                                <MudTh>Nom</MudTh>
+                                <MudTh Style="text-align:center; white-space:nowrap">M</MudTh>
+                                <MudTh Style="text-align:center; white-space:nowrap">F</MudTh>
+                                <MudTh Style="text-align:center; white-space:nowrap">AG</MudTh>
+                                <MudTh Style="text-align:center; white-space:nowrap">CP</MudTh>
+                                <MudTh Style="text-align:center; white-space:nowrap">AV</MudTh>
+                                <MudTh>Compétences</MudTh>
+                                <MudTh Style="text-align:center; white-space:nowrap">Valeur</MudTh>
+                            </HeaderContent>
+                            <RowTemplate Context="sp">
+                                <MudTd DataLabel="Nom" Style="white-space:nowrap"><b>@sp.Nom</b></MudTd>
+                                <MudTd DataLabel="Mouvement" Style="text-align:center; white-space:nowrap">@sp.Mouvement</MudTd>
+                                <MudTd DataLabel="Force" Style="text-align:center; white-space:nowrap">@sp.Force</MudTd>
+                                <MudTd DataLabel="Agilité" Style="text-align:center; white-space:nowrap">@sp.Agilite</MudTd>
+                                <MudTd DataLabel="Passe" Style="text-align:center; white-space:nowrap">@sp.CapacitePasse</MudTd>
+                                <MudTd DataLabel="Armure" Style="text-align:center; white-space:nowrap">@sp.Armure</MudTd>
+                                <MudTd DataLabel="Compétences">
+                                    <div>
+                                        <MudText Typo="Typo.caption">@string.Join(", ", sp.CompetencesListe)</MudText>
+                                        @if (!string.IsNullOrWhiteSpace(sp.ReglesSpeciales))
+                                        {
+                                            @* Le nom de la règle seulement : le texte complet (jusqu'à
+                                               450 caractères) écrasait les colonnes de stats. Texte
+                                               intégral au survol, et sur /regles. *@
+                                            <div style="font-size:10px; color:#9e9e9e; font-style:italic" title="@sp.ReglesSpeciales">@NomRegleStar(sp.ReglesSpeciales)</div>
+                                        }
+                                    </div>
+                                </MudTd>
+                                <MudTd DataLabel="Valeur" Style="text-align:center; white-space:nowrap">@sp.Cout.ToString("N0")</MudTd>
+                            </RowTemplate>
+                        </MudTable>
+                    </div>
+                }
+            }
+
             @{
                 var absents = _equipe.Joueurs.Where(j => j.EstMort || j.EstRetraite).OrderBy(j => j.Numero).ToList();
             }
@@ -401,6 +457,52 @@ else
                         </MudItem>
                     }
                 </MudGrid>
+            }
+
+            @* Saisie libre : coups de pouce détenus — comptés dans la VEA,
+               imprimés sur le PDF. Même composant qu'à la création. *@
+            @{
+                var cdps = _equipe.CoupsDePouce.Where(c => c.Inducement is not null)
+                    .OrderBy(c => c.Inducement.Ordre).ThenBy(c => c.Inducement.Nom).ToList();
+            }
+            @if (cdps.Any() || (_peutEditerLibre && _coupsDePouceCatalogue.Any()))
+            {
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mt-6 mb-2">
+                    <MudText Typo="Typo.subtitle2"><b>Coups de pouce</b></MudText>
+                    @if (_peutEditerLibre && !_editionCoupsDePouce)
+                    {
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                       title="Modifier les coups de pouce" aria-label="Modifier les coups de pouce"
+                                       OnClick="DemarrerCoupsDePouce" />
+                    }
+                </MudStack>
+                @if (_editionCoupsDePouce)
+                {
+                    <SelecteurCoupsDePouce Catalogue="_coupsDePouceCatalogue" Quantites="_editCoupsDePouce" />
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-2">
+                        <MudButton Variant="Variant.Text" OnClick="@(() => _editionCoupsDePouce = false)">Annuler</MudButton>
+                        <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@_coupsDePouceEnCours"
+                                   StartIcon="@Icons.Material.Filled.Check" OnClick="EnregistrerCoupsDePouce">Enregistrer</MudButton>
+                    </MudStack>
+                }
+                else if (cdps.Any())
+                {
+                    <MudGrid>
+                        @foreach (var c in cdps)
+                        {
+                            <MudItem xs="6" sm="4" md="2">
+                                <MudPaper Elevation="1" Class="pa-3 text-center">
+                                    <MudText Typo="Typo.caption" Color="Color.Secondary">@c.Inducement.Nom</MudText>
+                                    <MudText Typo="Typo.h5"><b>@c.Quantite</b></MudText>
+                                </MudPaper>
+                            </MudItem>
+                        }
+                    </MudGrid>
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">Aucun coup de pouce.</MudText>
+                }
             }
         </MudTabPanel>
 
@@ -814,7 +916,10 @@ else
             if (_peutEditerJoueurs)
                 _suggestionsHaine = await HaineService.GetSuggestionsAsync(ligueHaine.RulesVersionId);
             if (_peutEditerJoueurs && ligueHaine.SaisieLibre)
+            {
                 _competencesVersion = await TeamService.GetCompetencesAsync(null, ligueHaine.RulesVersionId);
+                _coupsDePouceCatalogue = await TeamService.GetCoupsDePouceCatalogueAsync(ligueHaine.RulesVersionId);
+            }
             _historiqueVisible = ligueHaine.SaisieLibre && await Auth.PeutGererLigueAsync(_userId, ligueHaine.Id);
             await ChargerHistoriqueAsync();
         }
@@ -1156,6 +1261,49 @@ else
             Snackbar.Add(ex.Message, Severity.Warning);
         }
         finally { _editionRessourcesEnCours = false; }
+    }
+
+    // ── Saisie libre : coups de pouce détenus ────────────────────────────
+    List<Inducement> _coupsDePouceCatalogue = [];
+    Dictionary<int, int> _editCoupsDePouce = [];
+    bool _editionCoupsDePouce;
+    bool _coupsDePouceEnCours;
+
+    void DemarrerCoupsDePouce()
+    {
+        if (_equipe is null) return;
+        _editCoupsDePouce = _equipe.CoupsDePouce.ToDictionary(c => c.InducementId, c => c.Quantite);
+        _editionCoupsDePouce = true;
+    }
+
+    async Task EnregistrerCoupsDePouce()
+    {
+        if (_coupsDePouceEnCours) return;
+        _coupsDePouceEnCours = true;
+        try
+        {
+            var auDela = await SaisieLibre.ModifierCoupsDePouceAsync(Id, _userId, _editCoupsDePouce);
+            _equipe = await TeamService.GetEquipeAsync(Id);
+            if (_equipe is not null) _vea = TeamService.CalculerVEA(_equipe);
+            await ChargerHistoriqueAsync();
+            _editionCoupsDePouce = false;
+            Snackbar.Add(auDela.Count > 0
+                    ? $"Coups de pouce enregistrés — au-delà du maximum habituel : {string.Join(", ", auDela)}."
+                    : "Coups de pouce enregistrés.",
+                auDela.Count > 0 ? Severity.Warning : Severity.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            Snackbar.Add(ex.Message, Severity.Warning);
+        }
+        finally { _coupsDePouceEnCours = false; }
+    }
+
+    /// <summary>« Cerveau des Trolls : Une fois par mi-temps… » → « Cerveau des Trolls ».</summary>
+    static string NomRegleStar(string texte)
+    {
+        var i = texte.IndexOf(':');
+        return (i > 0 ? texte[..i] : texte).Trim();
     }
 
     IEnumerable<(string, string)> StaffItems()

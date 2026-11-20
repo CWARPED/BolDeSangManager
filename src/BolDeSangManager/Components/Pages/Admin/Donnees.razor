@@ -1337,7 +1337,16 @@
             $"Supprimer « {cp.Nom} » ?", yesText: "Supprimer", cancelText: "Annuler");
         if (ok != true) return;
 
-        await DataEditService.SupprimerCoupDePouceAsync(cp.Id);
+        try
+        {
+            await DataEditService.SupprimerCoupDePouceAsync(cp.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Détenu par une équipe en saisie libre : refus explicite.
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return;
+        }
         await ChargerDonneesAsync();
     }
 
@@ -1423,7 +1432,16 @@
             $"Supprimer « {sp.Nom} » ?", yesText: "Supprimer", cancelText: "Annuler");
         if (ok != true) return;
 
-        await DataEditService.SupprimerStarPlayerAsync(sp.Id);
+        try
+        {
+            await DataEditService.SupprimerStarPlayerAsync(sp.Id);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Star recrutée par une équipe en saisie libre : refus explicite.
+            Snackbar.Add(ex.Message, Severity.Warning);
+            return;
+        }
         await ChargerDonneesAsync();
     }
 }

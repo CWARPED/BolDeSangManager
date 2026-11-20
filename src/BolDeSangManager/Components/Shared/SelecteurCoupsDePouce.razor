@@ -1,0 +1,92 @@
+@* Saisie libre — coups de pouce d'une équipe : liste des coups de pouce
+   retenus (quantité modifiable, corbeille) + un sélecteur pour en ajouter.
+   Partagé par la création d'équipe (Rejoindre) et la fiche d'équipe : le même
+   geste aux deux endroits.
+
+   Le composant modifie directement le dictionnaire `Quantites` (id → quantité)
+   et prévient le parent par `QuantitesChanged`. Une quantité au-delà du
+   maximum du catalogue est signalée, jamais refusée. *@
+@inject ISnackbar Snackbar
+
+@foreach (var cp in Retenus())
+{
+    <MudPaper Elevation="0" Class="pa-2 mb-2" Style="border:1px solid rgba(144,202,249,0.45); border-radius:4px">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+            <div style="flex:1; min-width:140px">
+                <MudText Typo="Typo.body2"><b>@cp.Nom</b></MudText>
+                @if (!string.IsNullOrWhiteSpace(cp.Restriction))
+                {
+                    <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style:italic">@cp.Restriction</MudText>
+                }
+            </div>
+            <MudNumericField T="int" Value="@Quantites[cp.Id]" ValueChanged="@(v => DefinirAsync(cp, v))"
+                             Min="1" Max="@CoupsDePouceEquipe.QuantiteMaxSaisie" Label="Qté"
+                             Variant="Variant.Text" Margin="Margin.Dense" Style="width:70px" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width:80px; text-align:right">
+                @((cp.Cout * Quantites[cp.Id]).ToString("N0")) po
+            </MudText>
+            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Color="Color.Error"
+                           aria-label="@($"Retirer {cp.Nom}")" OnClick="@(() => RetirerAsync(cp))" />
+        </MudStack>
+    </MudPaper>
+}
+
+@if (Ajoutables().Any())
+{
+    <div class="mt-3">
+        <MudSelect T="int?" @key="_cle" Value="@((int?)null)" ValueChanged="AjouterAsync"
+                   Label="Ajouter un coup de pouce" Variant="Variant.Outlined" Margin="Margin.Dense"
+                   Style="max-width:360px">
+            @foreach (var cp in Ajoutables())
+            {
+                <MudSelectItem T="int?" Value="@((int?)cp.Id)">@cp.Nom — @LibelleCout(cp)</MudSelectItem>
+            }
+        </MudSelect>
+    </div>
+}
+
+@code {
+    /// <summary>Catalogue de la version (tout est proposé : la restriction est indicative).</summary>
+    [Parameter, EditorRequired] public List<Inducement> Catalogue { get; set; } = [];
+
+    /// <summary>État courant, id → quantité ; modifié en place.</summary>
+    [Parameter, EditorRequired] public Dictionary<int, int> Quantites { get; set; } = [];
+
+    [Parameter] public EventCallback QuantitesChanged { get; set; }
+
+    int _cle;   // recrée le sélecteur pour le remettre à vide après un ajout
+
+    IEnumerable<Inducement> Retenus() =>
+        Catalogue.Where(c => Quantites.GetValueOrDefault(c.Id) > 0);
+
+    IEnumerable<Inducement> Ajoutables() =>
+        Catalogue.Where(c => Quantites.GetValueOrDefault(c.Id) == 0);
+
+    static string LibelleCout(Inducement cp) =>
+        (cp.Cout > 0 ? $"{cp.Cout:N0} po" : "prix variable")
+        + (cp.QuantiteMax > 0 ? $" (0-{cp.QuantiteMax})" : "");
+
+    async Task AjouterAsync(int? id)
+    {
+        _cle++;
+        if (id is not int i) return;
+        var cp = Catalogue.FirstOrDefault(c => c.Id == i);
+        if (cp is null) return;
+        await DefinirAsync(cp, 1);
+    }
+
+    async Task RetirerAsync(Inducement cp)
+    {
+        Quantites.Remove(cp.Id);
+        await QuantitesChanged.InvokeAsync();
+    }
+
+    async Task DefinirAsync(Inducement cp, int valeur)
+    {
+        valeur = Math.Clamp(valeur, 1, CoupsDePouceEquipe.QuantiteMaxSaisie);
+        Quantites[cp.Id] = valeur;
+        if (cp.QuantiteMax > 0 && valeur > cp.QuantiteMax)
+            Snackbar.Add($"Au-delà du maximum : {cp.QuantiteMax} {cp.Nom} d'habitude.", Severity.Warning);
+        await QuantitesChanged.InvokeAsync();
+    }
+}

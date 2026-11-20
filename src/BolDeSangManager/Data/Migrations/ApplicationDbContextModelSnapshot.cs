@@ -1463,6 +1463,31 @@ namespace BolDeSangManager.Migrations
                     b.ToTable("Teams");
                 });
 
+            modelBuilder.Entity("BolDeSangManager.Data.Models.TeamInducement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("InducementId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("Quantite")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("InducementId");
+
+                    b.HasIndex("TeamId", "InducementId")
+                        .IsUnique();
+
+                    b.ToTable("TeamInducements");
+                });
+
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamPlayer", b =>
                 {
                     b.Property<int>("Id")
@@ -1581,6 +1606,31 @@ namespace BolDeSangManager.Migrations
                         .IsUnique();
 
                     b.ToTable("TeamStaffs");
+                });
+
+            modelBuilder.Entity("BolDeSangManager.Data.Models.TeamStarPlayer", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("RecruteLe")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("StarPlayerId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("TeamId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("StarPlayerId");
+
+                    b.HasIndex("TeamId", "StarPlayerId")
+                        .IsUnique();
+
+                    b.ToTable("TeamStarPlayers");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamType", b =>
@@ -2370,6 +2420,25 @@ namespace BolDeSangManager.Migrations
                     b.Navigation("TeamType");
                 });
 
+            modelBuilder.Entity("BolDeSangManager.Data.Models.TeamInducement", b =>
+                {
+                    b.HasOne("BolDeSangManager.Data.Models.Inducement", "Inducement")
+                        .WithMany()
+                        .HasForeignKey("InducementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BolDeSangManager.Data.Models.Team", "Team")
+                        .WithMany("CoupsDePouce")
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Inducement");
+
+                    b.Navigation("Team");
+                });
+
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamPlayer", b =>
                 {
                     b.HasOne("BolDeSangManager.Data.Models.PlayerPosition", "PlayerPosition")
@@ -2423,6 +2492,25 @@ namespace BolDeSangManager.Migrations
                         .IsRequired();
 
                     b.Navigation("LeagueStaffType");
+
+                    b.Navigation("Team");
+                });
+
+            modelBuilder.Entity("BolDeSangManager.Data.Models.TeamStarPlayer", b =>
+                {
+                    b.HasOne("BolDeSangManager.Data.Models.StarPlayer", "StarPlayer")
+                        .WithMany()
+                        .HasForeignKey("StarPlayerId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BolDeSangManager.Data.Models.Team", "Team")
+                        .WithMany("StarPlayers")
+                        .HasForeignKey("TeamId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("StarPlayer");
 
                     b.Navigation("Team");
                 });
@@ -2663,9 +2751,13 @@ namespace BolDeSangManager.Migrations
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.Team", b =>
                 {
+                    b.Navigation("CoupsDePouce");
+
                     b.Navigation("Joueurs");
 
                     b.Navigation("Staff");
+
+                    b.Navigation("StarPlayers");
                 });
 
             modelBuilder.Entity("BolDeSangManager.Data.Models.TeamPlayer", b =>

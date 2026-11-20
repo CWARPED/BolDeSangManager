@@ -1339,6 +1339,8 @@ public class LeagueService(
         //    échouer toute la suppression.
         await db.PhaseDeReposValidations.Where(p => p.LeagueId == ligueId).ExecuteDeleteAsync();
         await db.ModificationsLibres.Where(m => teamIds.Contains(m.TeamId)).ExecuteDeleteAsync();
+        await db.TeamStarPlayers.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
+        await db.TeamInducements.Where(x => teamIds.Contains(x.TeamId)).ExecuteDeleteAsync();
         await db.TeamStaffs.Where(ts => teamIds.Contains(ts.TeamId)
                                      || staffIds.Contains(ts.LeagueStaffTypeId)).ExecuteDeleteAsync();
 

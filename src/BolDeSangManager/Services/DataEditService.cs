@@ -751,27 +751,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     /// Le recoupement se fait sur les identifiants du catalogue, jamais sur des
     /// noms saisis à la main.
     /// </summary>
-    public async Task<List<StarPlayer>> GetStarPlayersAccessiblesAsync(int teamTypeId)
-    {
-        var race = await db.TeamTypes
-            .Include(t => t.LiguesListe)
-            .FirstOrDefaultAsync(t => t.Id == teamTypeId);
-
-        if (race is null) return [];
-
-        var liguesDeLaRace = race.LiguesListe.Select(x => x.ThemedLeagueId).ToHashSet();
-
-        var candidats = await db.StarPlayers
-            .Include(s => s.Ligues)
-            .Where(s => s.RulesVersionId == race.RulesVersionId)
-            .OrderBy(s => s.Nom)
-            .ToListAsync();
-
-        return candidats
-            .Where(s => s.Ligues.Count == 0
-                        || s.Ligues.Any(x => liguesDeLaRace.Contains(x.ThemedLeagueId)))
-            .ToList();
-    }
+    public Task<List<StarPlayer>> GetStarPlayersAccessiblesAsync(int teamTypeId) =>
+        StarPlayerRecrutement.AccessiblesAsync(db, teamTypeId);
 
     // ── Coups de pouce et star players ───────────────────────────────────────
     // Deux catalogues INFORMATIFS rattachés à une version de règles. Aucune
@@ -839,6 +820,11 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     {
         var cp = await db.Inducements.FindAsync(id);
         if (cp is null) return;
+        // Détenu par une équipe en saisie libre : il compte dans sa VEA.
+        var nbEquipes = await db.TeamInducements.CountAsync(x => x.InducementId == id);
+        if (nbEquipes > 0)
+            throw new InvalidOperationException(
+                $"« {cp.Nom} » est détenu par {nbEquipes} équipe(s) : retirez-le de ces équipes d'abord.");
         db.Inducements.Remove(cp);
         await db.SaveChangesAsync();
         logger.LogInformation("Coup de pouce supprimé : {Nom} (id={Id})", cp.Nom, id);
@@ -911,6 +897,12 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     {
         var star = await db.StarPlayers.FindAsync(id);
         if (star is null) return;
+        // Une star recrutée en saisie libre compte dans la VEA de son équipe :
+        // la retirer du catalogue la ferait disparaître de l'effectif en silence.
+        var nbEquipes = await db.TeamStarPlayers.CountAsync(x => x.StarPlayerId == id);
+        if (nbEquipes > 0)
+            throw new InvalidOperationException(
+                $"« {star.Nom} » est recruté par {nbEquipes} équipe(s) : retirez-le de ces équipes d'abord.");
         db.StarPlayers.Remove(star);
         await db.SaveChangesAsync();
         logger.LogInformation("Star player supprimé : {Nom} (id={Id})", star.Nom, id);

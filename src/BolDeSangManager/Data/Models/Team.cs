@@ -60,6 +60,61 @@ public class Team
 
     /// <summary>Staff détenu par l'équipe (source de vérité depuis le dev staff).</summary>
     public ICollection<TeamStaff> Staff { get; set; } = [];
+
+    /// <summary>
+    /// Star players recrutés — ligues en « Saisie libre » uniquement. Voir
+    /// <see cref="TeamStarPlayer"/>.
+    /// </summary>
+    public ICollection<TeamStarPlayer> StarPlayers { get; set; } = [];
+
+    /// <summary>
+    /// Coups de pouce détenus — ligues en « Saisie libre » uniquement. Voir
+    /// <see cref="TeamInducement"/>.
+    /// </summary>
+    public ICollection<TeamInducement> CoupsDePouce { get; set; } = [];
+}
+
+/// <summary>
+/// Coup de pouce du catalogue détenu par une équipe d'une ligue en « Saisie
+/// libre », avec sa quantité (2 Pots-de-vin = une ligne, Quantite 2).
+///
+/// Même régime que <see cref="TeamStarPlayer"/> : lien vers le catalogue (coût
+/// lu en direct), coût × quantité compté dans la VEA (décision produit), rien
+/// débité de la trésorerie, imprimé sur le PDF. Liaison vers
+/// <see cref="Inducement"/> en Restrict. Une ligne par coup de pouce et par
+/// équipe (index unique) ; quantité 0 = pas de ligne.
+/// </summary>
+public class TeamInducement
+{
+    public int Id { get; set; }
+    public int TeamId { get; set; }
+    public Team Team { get; set; } = null!;
+    public int InducementId { get; set; }
+    public Inducement Inducement { get; set; } = null!;
+    public int Quantite { get; set; } = 1;
+}
+
+/// <summary>
+/// Star player du catalogue recruté par une équipe d'une ligue en « Saisie
+/// libre » (une équipe qui a déjà vécu arrive parfois avec ses stars).
+///
+/// C'est une LIGNE DE L'EFFECTIF, pas un <see cref="TeamPlayer"/> : la star
+/// s'affiche sur la fiche et le PDF et son coût compte dans la VEA, mais elle
+/// ne figure pas sur les feuilles de match (ni PSP, ni blessure). Le coût est
+/// lu EN DIRECT dans le catalogue : une correction de l'Admin se propage.
+///
+/// Liaison vers <see cref="StarPlayer"/> en Restrict : on ne retire pas du
+/// catalogue une star qu'une équipe a recrutée. Une même star au plus une fois
+/// par équipe (index unique).
+/// </summary>
+public class TeamStarPlayer
+{
+    public int Id { get; set; }
+    public int TeamId { get; set; }
+    public Team Team { get; set; } = null!;
+    public int StarPlayerId { get; set; }
+    public StarPlayer StarPlayer { get; set; } = null!;
+    public DateTime RecruteLe { get; set; } = DateTime.UtcNow;
 }
 
 public class TeamPlayer

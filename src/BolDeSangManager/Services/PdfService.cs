@@ -277,6 +277,28 @@ public class PdfService
 
                             pair = !pair;
                         }
+
+                        // Stars recrutées en saisie libre : lignes de l'effectif,
+                        // sans numéro ni PSP (elles ne jouent pas les feuilles).
+                        foreach (var sp in equipe.StarPlayers
+                                     .Where(x => x.StarPlayer is not null)
+                                     .Select(x => x.StarPlayer).OrderBy(s => s.Nom))
+                        {
+                            var bg = pair ? Colors.Grey.Lighten3 : Colors.White;
+                            Cell(table, bg, "★", center: true);
+                            Cell(table, bg, sp.Nom);
+                            Cell(table, bg, "Star player");
+                            Cell(table, bg, sp.Mouvement.ToString(), center: true);
+                            Cell(table, bg, sp.Force.ToString(), center: true);
+                            Cell(table, bg, sp.Agilite, center: true);
+                            Cell(table, bg, sp.CapacitePasse, center: true);
+                            Cell(table, bg, sp.Armure, center: true);
+                            Cell(table, bg, "—", center: true);
+                            Cell(table, bg, $"{sp.Cout / 1000}k", center: true);
+                            Cell(table, bg, string.Join(", ", new[] { sp.Competences, sp.ReglesSpeciales }
+                                .Where(x => !string.IsNullOrWhiteSpace(x))));
+                            pair = !pair;
+                        }
                     });
 
                     // Légende
@@ -295,6 +317,23 @@ public class PdfService
                             .Padding(2)
                             .Text("Stat réduite par blessure").FontSize(7).FontColor(Colors.Red.Darken3);
                     });
+
+                    // ── Coups de pouce DÉTENUS (saisie libre) ────────────
+                    // Toujours imprimés quand l'équipe en a : c'est son
+                    // inventaire, distinct du catalogue complet en option.
+                    var coupsDePouceEquipe = equipe.CoupsDePouce
+                        .Where(c => c.Inducement is not null)
+                        .OrderBy(c => c.Inducement.Ordre).ThenBy(c => c.Inducement.Nom)
+                        .ToList();
+                    if (coupsDePouceEquipe.Count > 0)
+                    {
+                        col.Item().PaddingTop(6).Text(t =>
+                        {
+                            t.Span("Coups de pouce : ").Bold().FontSize(9).FontColor(Colors.Red.Darken2);
+                            t.Span(string.Join(", ", coupsDePouceEquipe.Select(c =>
+                                c.Quantite > 1 ? $"{c.Inducement.Nom} ×{c.Quantite}" : c.Inducement.Nom))).FontSize(9);
+                        });
+                    }
 
                     // ── Règles spéciales de l'équipe (LRB p.93-94) ───────
                     // Les NOMS sont toujours imprimés : le coach doit savoir

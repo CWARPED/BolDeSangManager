@@ -47,8 +47,9 @@ public class Inducement
 
 /// <summary>
 /// Star player : mercenaire que l'on peut louer pour un match via les coups de
-/// pouce. Il ne rejoint JAMAIS un effectif — d'où l'absence de tout lien avec
-/// <see cref="Team"/> ou <see cref="TeamPlayer"/>.
+/// pouce. Il ne devient jamais un <see cref="TeamPlayer"/>. Seule exception :
+/// une ligue en « Saisie libre » peut l'inscrire à l'effectif d'une équipe via
+/// <see cref="TeamStarPlayer"/> (fiche, PDF, VEA — pas les feuilles de match).
 ///
 /// Purement informatif : la fiche sert au coach à comparer sa VEA à celle de
 /// l'adversaire et à décider à la table. Nom, stats, compétences, coût et
