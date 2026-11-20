@@ -1273,3 +1273,9 @@ td.cellule-edition { padding: 4px 8px 12px !important; border-bottom: none !impo
 .panneau-edition .pastilles-edition { margin-top: 6px; min-height: 24px; }
 .panneau-edition .mud-button-group-root .mud-button-root { height: 40px; }
 .panneau-edition .groupe-stats .mud-button-root { min-width: 40px; padding-left: 6px; padding-right: 6px; }
+
+/* Règles spéciales de la fiche d'équipe : MudBlazor écarte de 16 px le panneau
+   déplié de ses voisins, ce qui coupait la liste en blocs détachés. On garde
+   une liste continue, séparée par un simple filet. */
+.regles-speciales .mud-expand-panel.mud-panel-expanded { margin: 0; }
+.regles-speciales .mud-expand-panel + .mud-expand-panel { border-top: 1px solid var(--mud-palette-lines-default); }
