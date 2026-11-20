@@ -138,4 +138,15 @@ public class BaremePsp
         if (estMvp) xp += BonusMvp;
         return xp;
     }
+
+    /// <summary>
+    /// PSP tapée à la main sur une ligne quand le JPV arrive sur ce joueur ou le
+    /// quitte. La valeur tapée reste figée pour les ACTIONS, mais le bonus JPV
+    /// la suit : sans ça, déplacer l'étoile laissait le bonus sur l'ancien JPV et
+    /// ne le donnait pas au nouveau (feuilles de la ligue DB GBLR, où le TD est
+    /// tapé à 5 au lieu des 3 du barème, donc presque toutes les lignes sont
+    /// figées). <c>null</c> = pas de saisie : la valeur suit déjà le barème.
+    /// </summary>
+    public int? AjusterSaisiePourJpv(int? saisie, bool devientJpv) =>
+        saisie is null ? null : Math.Max(0, saisie.Value + (devientJpv ? BonusMvp : -BonusMvp));
 }

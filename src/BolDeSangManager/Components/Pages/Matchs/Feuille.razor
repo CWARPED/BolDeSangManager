@@ -436,11 +436,23 @@ else
         _availableExterieur = [.. _availableExterieur.OrderBy(p => p.Numero)];
     }
 
-    static void ToggleMvp(List<PlayerMatchData> equipe, PlayerMatchData r)
+    /// <summary>
+    /// Un seul JPV par équipe. Une PSP tapée à la main reçoit (ou rend) le bonus
+    /// JPV quand l'étoile arrive ou part : sinon elle resterait figée.
+    /// </summary>
+    void ToggleMvp(List<PlayerMatchData> equipe, PlayerMatchData r)
     {
         bool val = !r.EstMVP;
-        foreach (var x in equipe) x.EstMVP = false;
-        r.EstMVP = val;
+        foreach (var x in equipe.Where(x => x.EstMVP))
+        {
+            x.PspSaisie = _bareme.AjusterSaisiePourJpv(x.PspSaisie, devientJpv: false);
+            x.EstMVP = false;
+        }
+        if (val)
+        {
+            r.PspSaisie = _bareme.AjusterSaisiePourJpv(r.PspSaisie, devientJpv: true);
+            r.EstMVP = true;
+        }
     }
 
     // ─── Helpers de rendu ─────────────────────────────────────────────────────

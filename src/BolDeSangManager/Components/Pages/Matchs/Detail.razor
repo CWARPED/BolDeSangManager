@@ -662,11 +662,25 @@ else
     bool EstMvp(PlayerEditData r, bool domicile) =>
         r.TeamPlayerId == (domicile ? _mvpDomId : _mvpExtId);
 
-    /// <summary>Un seul MVP par équipe : re-cliquer sur le même le retire.</summary>
+    /// <summary>
+    /// Un seul JPV par équipe : re-cliquer sur le même le retire. Une PSP tapée
+    /// à la main (ou figée à l'ouverture parce qu'elle diverge du barème) reçoit
+    /// ou rend le bonus JPV quand l'étoile arrive ou part.
+    /// </summary>
     void BasculerMvp(PlayerEditData r, bool domicile)
     {
-        if (domicile) _mvpDomId = _mvpDomId == r.TeamPlayerId ? null : r.TeamPlayerId;
-        else          _mvpExtId = _mvpExtId == r.TeamPlayerId ? null : r.TeamPlayerId;
+        var liste    = domicile ? _editDomicile : _editExterieur;
+        var ancienId = domicile ? _mvpDomId : _mvpExtId;
+        var ancien   = liste.FirstOrDefault(x => x.TeamPlayerId == ancienId);
+        if (ancien is not null)
+            ancien.PspSaisie = _baremeXp.AjusterSaisiePourJpv(ancien.PspSaisie, devientJpv: false);
+
+        int? nouveauId = ancienId == r.TeamPlayerId ? null : r.TeamPlayerId;
+        if (nouveauId is not null)
+            r.PspSaisie = _baremeXp.AjusterSaisiePourJpv(r.PspSaisie, devientJpv: true);
+
+        if (domicile) _mvpDomId = nouveauId;
+        else          _mvpExtId = nouveauId;
     }
 
     void AjouterDomicile(SelecteurJoueurMatch.JoueurDisponible p)
