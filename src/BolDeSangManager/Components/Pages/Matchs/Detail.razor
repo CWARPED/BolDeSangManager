@@ -331,6 +331,8 @@ else
     List<PlayerEditData> _editExterieur = [];
     int? _mvpDomId;
     int? _mvpExtId;
+    /// <summary>Auteur d'une correction, pour la trace dans les logs du serveur.</summary>
+    string _userId = "";
     /// <summary>
     /// Gains RÉELLEMENT enregistrés, saisis à la main — comme sur la feuille
     /// initiale. `CalculerGains` ne fournit qu'une estimation affichée à côté :
@@ -382,6 +384,7 @@ else
 
         var authState = await AuthProvider.GetAuthenticationStateAsync();
         var userId = authState.User.FindFirst(c => c.Type.Contains("nameidentifier"))?.Value ?? "";
+        _userId = userId;
 
         // ⚠️ Ne PAS tester le rôle "Commissaire" : DbSeeder l'a supprimé (migré vers
         // "Admin"). Le test IsInRole("Commissaire") renvoyait donc toujours false et
@@ -749,7 +752,7 @@ else
                 HaineCible   = BlessureHelpers.PermetHaine(r.Blessure) ? r.HaineCible : null,
             }).ToList();
 
-            await MatchService.ModifierFeuilleAsync(Id, feuilleModifiee, records);
+            await MatchService.ModifierFeuilleAsync(Id, feuilleModifiee, records, _userId);
             _match = await MatchService.GetMatchAsync(Id);
             _modeEdition = false;
             Snackbar.Add("Feuille modifiée avec succès.", Severity.Success);

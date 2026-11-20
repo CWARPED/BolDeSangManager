@@ -575,6 +575,80 @@ public class MatchServiceTests : IDisposable
         Assert.Equal(0, (await db2.TeamPlayers.FindAsync(joueurDom.Id))!.PointsStarPlayer);
     }
 
+    // Variante restée ouverte après #25 : les PSP du match corrigé ont été
+    // dépensés à l'après-match d'un AUTRE match (le suivant). Cette dépense
+    // n'est pas rendue par la correction — et ne doit pas l'être — donc le
+    // stock est inférieur aux gains de la feuille corrigée au moment de
+    // l'inversion : le plancher à 0 avalait la différence.
+    [Fact]
+    public async Task ModifierFeuille_GainsDepensesAuMatchSuivant_NeRecreditePasLesPsp()
+    {
+        var (dom, ext, joueurDom, _, match1, saisiPar) = await SetupMatchContextAsync();
+        int divId;
+        await using (var db = _factory.CreateContext())
+            divId = (await db.Matches.FindAsync(match1.Id))!.DivisionId!.Value;
+
+        // Match 1 : JPV, 4 PSP, rien dépensé.
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).SaisirFeuilleMatchAsync(match1.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, EstMVP = true }], saisiPar.Id);
+
+        // Match 2 : JPV encore (4) → stock 8, entièrement dépensé à l'après-match du match 2.
+        int match2Id;
+        await using (var db = _factory.CreateContext())
+            match2Id = (await DataSeeder.SeedMatchAsync(db, dom.Id, ext.Id, divId)).Id;
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).SaisirFeuilleMatchAsync(match2Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, EstMVP = true }], saisiPar.Id);
+        await using (var db = _factory.CreateContext())
+        {
+            var j = await db.TeamPlayers.FindAsync(joueurDom.Id);
+            Assert.Equal(8, j!.PointsStarPlayer);
+            var feuille2 = await db.MatchSheets.SingleAsync(f => f.MatchId == match2Id);
+            db.PlayerImprovements.Add(new PlayerImprovement
+            {
+                TeamPlayerId = joueurDom.Id, MatchSheetId = feuille2.Id, Palier = 1, PspDepensee = 8
+            });
+            j.PointsStarPlayer = 0;
+            await db.SaveChangesAsync();
+        }
+
+        // Le commissaire corrige le match 1 sans toucher au JPV.
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).ModifierFeuilleAsync(match1.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, EstMVP = true }]);
+
+        await using var db2 = _factory.CreateContext();
+        // Rien n'a changé pour ce joueur : il a toujours tout dépensé.
+        Assert.Equal(0, (await db2.TeamPlayers.FindAsync(joueurDom.Id))!.PointsStarPlayer);
+        // L'amélioration du match 2 n'est pas touchée par la correction du match 1.
+        Assert.True(await db2.PlayerImprovements.AnyAsync(i => i.TeamPlayerId == joueurDom.Id));
+    }
+
+    [Fact]
+    public async Task ModifierFeuille_RetirerUnJpvDontLesGainsSontDejaDepenses_NeDescendPasSousZero()
+    {
+        // Gains du match 1 dépensés ailleurs, puis la correction RETIRE le JPV :
+        // 0 − 4 donnerait −4. Le plancher n'agit qu'à la fin de la correction.
+        var (_, _, joueurDom, _, match, saisiPar) = await SetupMatchContextAsync();
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).SaisirFeuilleMatchAsync(match.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, EstMVP = true }], saisiPar.Id);
+        await using (var db = _factory.CreateContext())
+        {
+            var j = await db.TeamPlayers.FindAsync(joueurDom.Id);
+            j!.PointsStarPlayer = 0;   // dépensés à l'après-match d'un autre match
+            await db.SaveChangesAsync();
+        }
+
+        await using (var db = _factory.CreateContext())
+            await CreateService(db).ModifierFeuilleAsync(match.Id, FeuilleNulle(),
+                [new() { TeamPlayerId = joueurDom.Id, EstCoteDomicile = true, EstMVP = false }]);
+
+        await using var db2 = _factory.CreateContext();
+        Assert.Equal(0, (await db2.TeamPlayers.FindAsync(joueurDom.Id))!.PointsStarPlayer);
+    }
+
     [Fact]
     public async Task ModifierFeuille_SequelleSansCaracteristique_EstRefuseeAvantToutRetourArriere()
     {

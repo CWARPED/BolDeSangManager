@@ -227,7 +227,7 @@ public class MatchService(
         await TraiterBlessuresAsync(records, matchId);
 
         // Ajouter les PSP aux joueurs
-        await MettreAJourPSPJoueursAsync(records);
+        await MettreAJourPSPJoueursAsync(records, matchId);
 
         // Mettre à jour le statut du match
         match.ScoreDomicile = feuille.TouchdownsDomicile;
@@ -766,15 +766,22 @@ public class MatchService(
         }
     }
 
-    private async Task MettreAJourPSPJoueursAsync(List<MatchPlayerRecord> records)
+    private async Task MettreAJourPSPJoueursAsync(List<MatchPlayerRecord> records, int matchId)
     {
         var ids = records.Select(r => r.TeamPlayerId).Distinct().ToList();
         var joueurs = await db.TeamPlayers.Where(j => ids.Contains(j.Id)).ToDictionaryAsync(j => j.Id);
 
         foreach (var record in records)
         {
-            if (joueurs.TryGetValue(record.TeamPlayerId, out var joueur))
-                joueur.PointsStarPlayer += record.PspGagnes;
+            if (!joueurs.TryGetValue(record.TeamPlayerId, out var joueur)) continue;
+            joueur.PointsStarPlayer += record.PspGagnes;
+            // Trace PSP : une ligne par mouvement, pour pouvoir rejouer le
+            // stock d'un joueur depuis les logs quand un signalement arrive.
+            if (record.PspGagnes != 0)
+                logger.LogInformation(
+                    "PSP match id={MatchId} : {Nom} (id={JoueurId}) +{Gain}{Jpv} → stock {Stock}",
+                    matchId, joueur.Nom, joueur.Id, record.PspGagnes,
+                    record.EstMVP ? " (JPV)" : "", joueur.PointsStarPlayer);
         }
         await db.SaveChangesAsync();
     }
@@ -871,7 +878,8 @@ public class MatchService(
         await NotifierMatchAsync(matchId);
     }
 
-    public async Task ModifierFeuilleAsync(int matchId, MatchSheet feuilleModifiee, List<MatchPlayerRecord> nouveauxRecords)
+    public async Task ModifierFeuilleAsync(int matchId, MatchSheet feuilleModifiee, List<MatchPlayerRecord> nouveauxRecords,
+        string? corrigeParId = null)
     {
         // AVANT toute inversion : un refus après coup laisserait la feuille
         // à moitié défaite.
@@ -955,6 +963,9 @@ public class MatchService(
             // R4 : restituer l'XP dépensée pour cette amélioration, sinon elle
             // serait perdue (l'XP gagnée du match est retirée par ailleurs).
             j.PointsStarPlayer += imp.PspDepensee;
+            logger.LogInformation(
+                "PSP match id={MatchId} correction : {Nom} (id={JoueurId}) amélioration annulée, +{Rendus} rendus → stock {Stock}",
+                matchId, j.Nom, j.Id, imp.PspDepensee, j.PointsStarPlayer);
 
             // Inverser le mod de stat éventuel
             if (imp.StatAmelioree.HasValue)
@@ -989,12 +1000,24 @@ public class MatchService(
         // ajoutés une seconde fois par la nouvelle feuille → PSP doublés.
         // Les joueurs déjà suivis par le contexte gardent leur valeur en mémoire
         // (dépense rendue) : EF n'écrase pas une entité suivie à la requête.
+        // ⚠️ AUCUN plancher ici : le stock peut passer TRANSITOIREMENT sous 0
+        // quand ces gains ont été dépensés à l'après-match d'un AUTRE match
+        // (dépense que la correction ne rend pas, à raison). Un plancher à 0
+        // avalait la différence, puis la nouvelle feuille la recréditait : le
+        // JPV retrouvait ses PSP en gardant la compétence achetée avec.
+        // Le plancher n'est appliqué qu'après la nouvelle feuille (plus bas).
         var pspIds = feuille.RecordsJoueurs.Select(r => r.TeamPlayerId).Distinct().ToList();
         var joueursPsp = await db.TeamPlayers.Where(j => pspIds.Contains(j.Id)).ToDictionaryAsync(j => j.Id);
         foreach (var old in feuille.RecordsJoueurs)
         {
             if (joueursPsp.TryGetValue(old.TeamPlayerId, out var j))
-                j.PointsStarPlayer = Math.Max(0, j.PointsStarPlayer - old.PspGagnes);
+            {
+                j.PointsStarPlayer -= old.PspGagnes;
+                if (old.PspGagnes != 0)
+                    logger.LogInformation(
+                        "PSP match id={MatchId} correction : {Nom} (id={JoueurId}) −{Gain}{Jpv} (ancienne feuille) → stock {Stock}",
+                        matchId, j.Nom, j.Id, old.PspGagnes, old.EstMVP ? " (JPV)" : "", j.PointsStarPlayer);
+            }
         }
         await db.SaveChangesAsync();
 
@@ -1074,7 +1097,18 @@ public class MatchService(
 
         await MettreAJourStatsEquipesAsync(match, feuille, nouveauxRecords);
         await TraiterBlessuresAsync(nouveauxRecords, matchId);
-        await MettreAJourPSPJoueursAsync(nouveauxRecords);
+        await MettreAJourPSPJoueursAsync(nouveauxRecords, matchId);
+
+        // Plancher FINAL, seulement après inversion ET réapplication. Un stock
+        // encore négatif ici = la correction a retiré des PSP déjà dépensés
+        // ailleurs ; on le ramène à 0 et on le trace pour le commissaire.
+        foreach (var j in joueursPsp.Values.Where(j => j.PointsStarPlayer < 0))
+        {
+            logger.LogWarning(
+                "Correction match id={MatchId} : PSP du joueur id={JoueurId} à {Psp} (déjà dépensés), ramenés à 0",
+                matchId, j.Id, j.PointsStarPlayer);
+            j.PointsStarPlayer = 0;
+        }
 
         match.ScoreDomicile  = feuille.TouchdownsDomicile;
         match.ScoreExterieur = feuille.TouchdownsExterieur;
@@ -1089,7 +1123,10 @@ public class MatchService(
         // ni ce qui a changé.
         await EnvoyerEmailCorrectionAsync(match, matchId, ancienScoreDom, ancienScoreExt,
                                           feuille.NotesCommissaire);
-        logger.LogInformation("Feuille match id={MatchId} modifiée par commissaire", matchId);
+        logger.LogInformation(
+            "Feuille match id={MatchId} modifiée par commissaire id={UserId} : score {AncDom}-{AncExt} → {NouvDom}-{NouvExt}, {NbRecords} joueurs, après-match des deux coaches à refaire",
+            matchId, corrigeParId ?? "(inconnu)", ancienScoreDom, ancienScoreExt,
+            feuille.TouchdownsDomicile, feuille.TouchdownsExterieur, nouveauxRecords.Count);
         await NotifierMatchAsync(matchId);
     }
 
