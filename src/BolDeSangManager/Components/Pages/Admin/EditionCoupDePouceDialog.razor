@@ -28,6 +28,11 @@
                       Margin="Margin.Dense" Class="mt-3"
                       HelperText="Équipes concernées ou tarif particulier. Vide = accessible à toutes." />
 
+        <MudCheckBox @bind-Value="_estStarPlayer" Label="Star player" Color="Color.Warning" Class="mt-2" />
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">
+            Le coach choisit la star dans le catalogue ; elle s'imprime avec ses caractéristiques.
+        </MudText>
+
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="Annuler">Annuler</MudButton>
@@ -48,6 +53,7 @@
     int _cout;
     int _quantiteMax;
     string _restriction = "";
+    bool _estStarPlayer;
 
     protected override void OnInitialized()
     {
@@ -58,6 +64,7 @@
         _cout = Existant.Cout;
         _quantiteMax = Existant.QuantiteMax;
         _restriction = Existant.Restriction;
+        _estStarPlayer = Existant.EstStarPlayer;
     }
 
     async Task Valider()
@@ -65,9 +72,11 @@
         try
         {
             if (Existant is null)
-                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _quantiteMax, _restriction);
+                await DataEditService.CreerCoupDePouceAsync(VersionId, _nom, _description, _cout, _quantiteMax, _restriction,
+                    estStarPlayer: _estStarPlayer);
             else
-                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _quantiteMax, _restriction, Existant.Ordre);
+                await DataEditService.ModifierCoupDePouceAsync(Existant.Id, _nom, _description, _cout, _quantiteMax, _restriction,
+                    Existant.Ordre, _estStarPlayer);
 
             Dialog.Close(DialogResult.Ok(true));
         }

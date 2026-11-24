@@ -895,7 +895,7 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 l.Equipes.Where(e => e.TeamType is not null)
                          .Select(e => e.TeamType.Nom).OrderBy(n => n).ToList())).ToList(),
             CoupsDePouce: coupsDePouce.Select(i => new CoupDePoucePortableDto(
-                i.Nom, i.Description, i.Cout, i.QuantiteMax, i.Restriction)).ToList(),
+                i.Nom, i.Description, i.Cout, i.QuantiteMax, i.Restriction, i.EstStarPlayer)).ToList(),
             StarPlayers: stars.Select(sp => new StarPlayerPortableDto(
                 sp.Nom, sp.Cout, sp.Mouvement, sp.Force, sp.Agilite, sp.CapacitePasse,
                 sp.Armure, sp.Competences, sp.ReglesSpeciales,
@@ -989,6 +989,8 @@ public class GameDataExportService(ApplicationDbContext db, ILogger<GameDataExpo
                 cible.Cout = Math.Max(0, c.Cout);
                 cible.QuantiteMax = Math.Max(0, c.QuantiteMax);
                 cible.Restriction = c.Restriction ?? "";
+                // Absent d'un fichier antérieur : on garde la valeur en place.
+                if (c.EstStarPlayer is bool star) cible.EstStarPlayer = star;
             }
             await db.SaveChangesAsync();
 
@@ -1151,7 +1153,9 @@ record CoupDePoucePortableDto(
     string Description,
     int Cout,
     int QuantiteMax,
-    string? Restriction
+    string? Restriction,
+    /// <summary>Coup de pouce « Star player ». Optionnel : absent des fichiers antérieurs.</summary>
+    bool? EstStarPlayer = null
 );
 
 /// <summary>Star player + les ligues qui y donnent accès, référencées par NOM.</summary>

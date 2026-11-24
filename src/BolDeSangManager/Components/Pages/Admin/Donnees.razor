@@ -355,7 +355,7 @@
                 </HeaderContent>
                 <RowTemplate>
                     <MudTd DataLabel="Nom">
-                        <MudText Typo="Typo.body2"><b>@context.Nom</b></MudText>
+                        <MudText Typo="Typo.body2"><b>@context.Nom</b>@(context.EstStarPlayer ? " ★" : "")</MudText>
                         @if (!string.IsNullOrWhiteSpace(context.Description))
                         {
                             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block">@context.Description</MudText>
