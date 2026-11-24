@@ -92,6 +92,21 @@ public class TeamInducement
     public int InducementId { get; set; }
     public Inducement Inducement { get; set; } = null!;
     public int Quantite { get; set; } = 1;
+
+    /// <summary>
+    /// Prix unitaire saisi par le coach quand le catalogue ne le fixe pas
+    /// (<c>Inducement.Cout == 0</c> : pots-de-vin, chef cuistot, star…).
+    /// Null = prix du catalogue. Voir <c>CoupsDePouceEquipe.PrixUnitaire</c>.
+    /// </summary>
+    public int? PrixSaisi { get; set; }
+
+    /// <summary>
+    /// Star du catalogue choisie sur un coup de pouce « Star player »
+    /// (<c>Inducement.EstStarPlayer</c>) : imprimée avec ses caractéristiques
+    /// sur le PDF. Une ligne = une star. Liaison en Restrict.
+    /// </summary>
+    public int? StarPlayerId { get; set; }
+    public StarPlayer? StarPlayer { get; set; }
 }
 
 /// <summary>

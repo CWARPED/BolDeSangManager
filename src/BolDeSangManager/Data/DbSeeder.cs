@@ -235,7 +235,8 @@ public static class DbSeeder
                     QuantiteMax = qte,
                     Restriction = restriction,
                     Description = description,
-                    Ordre = ordre
+                    Ordre = ordre,
+                    EstStarPlayer = nom.StartsWith("Star Player", StringComparison.OrdinalIgnoreCase)
                 });
                 cpCrees++;
             }

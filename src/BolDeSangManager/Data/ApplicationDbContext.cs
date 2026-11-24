@@ -408,6 +408,14 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasIndex(x => new { x.TeamId, x.InducementId })
             .IsUnique();
 
+        // Star choisie sur un coup de pouce « Star player » : on ne retire pas
+        // du catalogue une star qu'une équipe détient.
+        builder.Entity<TeamInducement>()
+            .HasOne(x => x.StarPlayer).WithMany()
+            .HasForeignKey(x => x.StarPlayerId)
+            .IsRequired(false)
+            .OnDelete(DeleteBehavior.Restrict);
+
         // Catalogue de ligues thématiques + ses deux tables de liaison.
         builder.Entity<ThemedLeague>()
             .HasOne(l => l.RulesVersion).WithMany()

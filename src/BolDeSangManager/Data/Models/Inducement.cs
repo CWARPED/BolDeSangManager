@@ -43,6 +43,12 @@ public class Inducement
 
     /// <summary>Ordre d'affichage, comme pour les règles spéciales.</summary>
     public int Ordre { get; set; }
+
+    /// <summary>
+    /// Coup de pouce « Star player » : l'équipe qui le détient y rattache une
+    /// star du catalogue (une par ligne), imprimée avec ses caractéristiques.
+    /// </summary>
+    public bool EstStarPlayer { get; set; }
 }
 
 /// <summary>

@@ -27,7 +27,7 @@ public class SeedCatalogueCoupsDePouceTests : IDisposable
     }
 
     [Fact]
-    public async Task VersionVide_RecoitLeCatalogueInitial()
+    public async Task VersionVide_RecoitLeCatalogueInitial_EtStarPlayersEstCoche()
     {
         var versionId = await VersionAvecRegleSpecialeAsync();
 
@@ -37,6 +37,7 @@ public class SeedCatalogueCoupsDePouceTests : IDisposable
         await using var verif = _factory.CreateContext();
         var cps = await verif.Inducements.Where(i => i.RulesVersionId == versionId).ToListAsync();
         Assert.Equal(InducementSeedData.CoupsDePouce.Length, cps.Count);
+        Assert.Equal(["Star Players"], cps.Where(c => c.EstStarPlayer).Select(c => c.Nom));
         Assert.True(await verif.StarPlayers.CountAsync(s => s.RulesVersionId == versionId) > 0);
     }
 

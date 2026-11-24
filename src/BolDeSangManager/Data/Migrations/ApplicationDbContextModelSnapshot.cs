@@ -196,6 +196,9 @@ namespace BolDeSangManager.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<bool>("EstStarPlayer")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Nom")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -1472,7 +1475,13 @@ namespace BolDeSangManager.Migrations
                     b.Property<int>("InducementId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("PrixSaisi")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Quantite")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int?>("StarPlayerId")
                         .HasColumnType("INTEGER");
 
                     b.Property<int>("TeamId")
@@ -1481,6 +1490,8 @@ namespace BolDeSangManager.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("InducementId");
+
+                    b.HasIndex("StarPlayerId");
 
                     b.HasIndex("TeamId", "InducementId")
                         .IsUnique();
@@ -2428,6 +2439,11 @@ namespace BolDeSangManager.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("BolDeSangManager.Data.Models.StarPlayer", "StarPlayer")
+                        .WithMany()
+                        .HasForeignKey("StarPlayerId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("BolDeSangManager.Data.Models.Team", "Team")
                         .WithMany("CoupsDePouce")
                         .HasForeignKey("TeamId")
@@ -2435,6 +2451,8 @@ namespace BolDeSangManager.Migrations
                         .IsRequired();
 
                     b.Navigation("Inducement");
+
+                    b.Navigation("StarPlayer");
 
                     b.Navigation("Team");
                 });
