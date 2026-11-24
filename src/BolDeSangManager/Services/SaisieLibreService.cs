@@ -307,59 +307,18 @@ public class SaisieLibreService(
     }
 
     /// <summary>
-    /// Ajoute une star du catalogue à l'effectif (fiche d'équipe), tracé.
-    /// Mêmes contrôles qu'à la création : accessible à la race, une seule fois.
-    /// </summary>
-    /// <returns>Le nombre de stars de l'équipe après l'ajout : l'écran avertit
-    /// au-delà de <see cref="StarPlayerRecrutement.MaxConseille"/>.</returns>
-    public async Task<int> AjouterStarPlayerAsync(int teamId, string userId, int starPlayerId)
-    {
-        var equipe = await EquipeAutoriseeAsync(teamId, userId);
-        var actuelles = await db.TeamStarPlayers.Where(x => x.TeamId == teamId)
-            .Select(x => x.StarPlayerId).ToListAsync();
-        // Seule la NOUVELLE star est contrôlée contre la race : les stars déjà
-        // recrutées restent, même si l'Admin a changé leurs ligues depuis.
-        var star = (await StarPlayerRecrutement.ValiderAsync(db, equipe.TeamTypeId, [starPlayerId]))[0];
-        if (actuelles.Contains(starPlayerId))
-            throw new InvalidOperationException($"« {star.Nom} » est déjà dans l'équipe.");
-
-        db.TeamStarPlayers.Add(new TeamStarPlayer { TeamId = teamId, StarPlayerId = starPlayerId });
-        Tracer(teamId, userId, "Équipe", [("Star player", "—", star.Nom)]);
-        await db.SaveChangesAsync();
-        logger.LogInformation("Saisie libre : star player {Star} ajouté à l'équipe id={TeamId} par {UserId}",
-            star.Nom, teamId, userId);
-        return actuelles.Count + 1;
-    }
-
-    /// <summary>Retire une star de l'effectif (fiche d'équipe), tracé.</summary>
-    public async Task RetirerStarPlayerAsync(int teamId, string userId, int starPlayerId)
-    {
-        await EquipeAutoriseeAsync(teamId, userId);
-        var ligne = await db.TeamStarPlayers.Include(x => x.StarPlayer)
-            .FirstOrDefaultAsync(x => x.TeamId == teamId && x.StarPlayerId == starPlayerId)
-            ?? throw new InvalidOperationException("Ce star player n'est pas dans l'équipe.");
-
-        db.TeamStarPlayers.Remove(ligne);
-        Tracer(teamId, userId, "Équipe", [("Star player", ligne.StarPlayer.Nom, "—")]);
-        await db.SaveChangesAsync();
-        logger.LogInformation("Saisie libre : star player {Star} retiré de l'équipe id={TeamId} par {UserId}",
-            ligne.StarPlayer.Nom, teamId, userId);
-    }
-
-    /// <summary>
     /// Écran « Modifier » de l'équipe PENDANT le tournoi (saisie libre). Ne
     /// reconstruit JAMAIS l'effectif — la refonte d'inscription
     /// (<see cref="TeamService.ModifierEquipeAsync"/>) effacerait PSP,
     /// compétences et blessures : les joueurs existants ne sont pas touchés,
-    /// on ne peut qu'en AJOUTER. Nom, trésorerie, staff, star players (état
-    /// complet) et coups de pouce (état complet) sont réécrits. Tout ou rien,
+    /// on ne peut qu'en AJOUTER. Nom, trésorerie, staff et coups de pouce (état
+    /// complet, stars comprises) sont réécrits. Tout ou rien,
     /// chaque changement tracé.
     /// </summary>
     public async Task ModifierEquipeEnCoursAsync(
         int teamId, string userId, string nom, int tresorerie,
         IReadOnlyDictionary<int, int> staff,
-        IReadOnlyCollection<int> starPlayers,
-        IReadOnlyDictionary<int, int> coupsDePouce,
+        IReadOnlyDictionary<int, CoupDePouceSaisi> coupsDePouce,
         IReadOnlyList<(int positionId, string nom, int numero)> nouveauxJoueurs)
     {
         await using var tx = await db.Database.BeginTransactionAsync();
@@ -390,15 +349,6 @@ public class SaisieLibreService(
                 Tracer(teamId, userId, "Équipe", [("Joueur ajouté", "—", $"{libelle} ({postes[positionId].Nom})")]);
             }
 
-            // Stars : état complet ; celles déjà recrutées restent valables.
-            var actuelles = await db.TeamStarPlayers.Where(x => x.TeamId == teamId)
-                .Select(x => x.StarPlayerId).ToListAsync();
-            await StarPlayerRecrutement.ValiderAsync(db, equipe.TeamTypeId, starPlayers, actuelles);
-            foreach (var id in actuelles.Where(id => !starPlayers.Contains(id)))
-                await RetirerStarPlayerAsync(teamId, userId, id);
-            foreach (var id in starPlayers.Where(id => !actuelles.Contains(id)))
-                await AjouterStarPlayerAsync(teamId, userId, id);
-
             await ModifierCoupsDePouceAsync(teamId, userId, coupsDePouce);
             // En dernier : la trésorerie saisie fait foi (aucun débit des ajouts).
             await ModifierRessourcesEquipeAsync(teamId, userId, tresorerie, staff);
@@ -417,21 +367,23 @@ public class SaisieLibreService(
 
     /// <summary>
     /// Coups de pouce de l'équipe (fiche d'équipe), état COMPLET voulu : id →
-    /// quantité, 0 ou absent = retiré. Chaque changement est tracé.
+    /// saisie (quantité, prix, star), quantité 0 ou absent = retiré. Chaque
+    /// changement est tracé.
     /// </summary>
     /// <returns>Les coups de pouce au-delà du maximum du catalogue, que l'écran
     /// signale (jamais un refus).</returns>
     public async Task<List<string>> ModifierCoupsDePouceAsync(
-        int teamId, string userId, IReadOnlyDictionary<int, int> quantites)
+        int teamId, string userId, IReadOnlyDictionary<int, CoupDePouceSaisi> voulus)
     {
         var equipe = await EquipeAutoriseeAsync(teamId, userId);
-        var voulues = await CoupsDePouceEquipe.ValiderAsync(db, equipe.League.RulesVersionId, quantites);
-        var actuelles = await db.TeamInducements.Include(x => x.Inducement)
+        var actuelles = await db.TeamInducements.Include(x => x.Inducement).Include(x => x.StarPlayer)
             .Where(x => x.TeamId == teamId).ToListAsync();
+        var voulues = await CoupsDePouceEquipe.ValiderAsync(db, equipe.League.RulesVersionId, equipe.TeamTypeId,
+            voulus, actuelles.Select(x => x.StarPlayerId).OfType<int>().ToList());
 
         var changements = CoupsDePouceEquipe.Appliquer(db, teamId, actuelles, voulues);
         Tracer(teamId, userId, "Équipe",
-            changements.Select(c => ($"Coup de pouce : {c.nom}", c.avant.ToString(), c.apres.ToString())));
+            changements.Select(c => ($"Coup de pouce : {c.nom}", c.avant, c.apres)));
         await db.SaveChangesAsync();
         logger.LogInformation("Saisie libre : coups de pouce de l'équipe id={TeamId} modifiés par {UserId} ({Nb} changement(s))",
             teamId, userId, changements.Count);

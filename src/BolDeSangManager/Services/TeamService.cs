@@ -132,8 +132,8 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             // Staff : indispensable au calcul de VEA, qui vaudrait sinon zéro.
             .Include(t => t.Staff).ThenInclude(s => s.LeagueStaffType)
             // Stars recrutées (saisie libre) : affichées et comptées dans la VEA.
-            .Include(t => t.StarPlayers).ThenInclude(s => s.StarPlayer)
             .Include(t => t.CoupsDePouce).ThenInclude(c => c.Inducement)
+            .Include(t => t.CoupsDePouce).ThenInclude(c => c.StarPlayer)
             .FirstOrDefaultAsync(t => t.Id == teamId);
 
     public async Task<List<Team>> GetEquipesCoachAsync(string coachId) =>
@@ -145,8 +145,8 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .Include(t => t.Joueurs.Where(j => !j.EstMort && !j.EstRetraite))
                 .ThenInclude(j => j.Improvements).ThenInclude(i => i.Skill)
             .Include(t => t.Staff).ThenInclude(s => s.LeagueStaffType)
-            .Include(t => t.StarPlayers).ThenInclude(s => s.StarPlayer)
             .Include(t => t.CoupsDePouce).ThenInclude(c => c.Inducement)
+            .Include(t => t.CoupsDePouce).ThenInclude(c => c.StarPlayer)
             .Where(t => t.CoachId == coachId)
             .OrderByDescending(t => t.CreeLe)
             .ToListAsync();
@@ -162,8 +162,8 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             .Include(t => t.Joueurs.Where(j => !j.EstMort && !j.EstRetraite))
                 .ThenInclude(j => j.Improvements).ThenInclude(i => i.Skill)
             .Include(t => t.Staff).ThenInclude(s => s.LeagueStaffType)
-            .Include(t => t.StarPlayers).ThenInclude(s => s.StarPlayer)
             .Include(t => t.CoupsDePouce).ThenInclude(c => c.Inducement)
+            .Include(t => t.CoupsDePouce).ThenInclude(c => c.StarPlayer)
             .Where(t => t.LeagueId == ligueId)
             .OrderByDescending(t => t.PointsLigue)
             .ToListAsync();
@@ -172,16 +172,15 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
     /// Quantités de staff par identifiant de LeagueStaffType. Les bornes de
     /// création (min/max) sont vérifiées ici, pas seulement dans l'UI.
     /// </param>
-    /// <param name="starPlayers">
-    /// Stars du catalogue recrutées (ids de <see cref="StarPlayer"/>) — ligue en
-    /// saisie libre uniquement, stars accessibles à la race, chacune une fois.
+    /// <param name="coupsDePouce">
+    /// Coups de pouce (id → quantité, prix saisi, star) — ligue en saisie libre
+    /// uniquement. Voir <see cref="CoupsDePouceEquipe.ValiderAsync"/>.
     /// </param>
     public async Task<Team> CreerEquipeAsync(
         Team equipe,
         List<(int positionId, string nom, int numero)> joueurs,
         IReadOnlyDictionary<int, int>? staff = null,
-        IReadOnlyCollection<int>? starPlayers = null,
-        IReadOnlyDictionary<int, int>? coupsDePouce = null)
+        IReadOnlyDictionary<int, CoupDePouceSaisi>? coupsDePouce = null)
     {
         var ligue = await db.Leagues.FirstOrDefaultAsync(l => l.Id == equipe.LeagueId)
             ?? throw new InvalidOperationException("Ligue introuvable");
@@ -196,8 +195,7 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         if (!ligue.SaisieLibre)
             ValiderRoster(teamType, joueurs);
         var tresorerieSaisie = equipe.Tresorerie;
-        var stars = await ValiderStarPlayersAsync(ligue, teamType.Id, starPlayers);
-        var cdp = await ValiderCoupsDePouceAsync(ligue, coupsDePouce);
+        var cdp = await ValiderCoupsDePouceAsync(ligue, teamType.Id, coupsDePouce);
 
         // « Favori de… » : quand la race n'autorise qu'une seule divinité, elle
         // est IMPOSÉE — on l'assigne sans rien demander (Pestiférés → Nurgle).
@@ -254,8 +252,6 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             AjouterCompetencesDepart(joueur.Id, position.CompetencesDepart);
         }
 
-        foreach (var star in stars)
-            db.TeamStarPlayers.Add(new TeamStarPlayer { TeamId = equipe.Id, StarPlayerId = star.Id });
         CoupsDePouceEquipe.Appliquer(db, equipe.Id, [], cdp);
 
         await db.SaveChangesAsync();
@@ -296,31 +292,17 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         StarPlayerRecrutement.AccessiblesAsync(db, teamTypeId);
 
     /// <summary>
-    /// Stars voulues à la création ou à la refonte d'une équipe : refusées hors
-    /// saisie libre, validées contre la race sinon (voir
-    /// <see cref="StarPlayerRecrutement.ValiderAsync"/>).
-    /// </summary>
-    private async Task<List<StarPlayer>> ValiderStarPlayersAsync(
-        League ligue, int teamTypeId, IReadOnlyCollection<int>? starPlayers,
-        IReadOnlyCollection<int>? dejaRecrutees = null)
-    {
-        if (starPlayers is null || starPlayers.Count == 0) return [];
-        if (!ligue.SaisieLibre)
-            throw new InvalidOperationException("Les star players ne se recrutent que dans une ligue en saisie libre.");
-        return await StarPlayerRecrutement.ValiderAsync(db, teamTypeId, starPlayers, dejaRecrutees);
-    }
-
-    /// <summary>
     /// Coups de pouce voulus à la création ou à la refonte : refusés hors saisie
     /// libre, validés contre le catalogue de la version sinon.
     /// </summary>
-    private async Task<List<(Inducement coupDePouce, int quantite)>> ValiderCoupsDePouceAsync(
-        League ligue, IReadOnlyDictionary<int, int>? coupsDePouce)
+    private async Task<List<CoupDePouceValide>> ValiderCoupsDePouceAsync(
+        League ligue, int teamTypeId, IReadOnlyDictionary<int, CoupDePouceSaisi>? coupsDePouce,
+        IReadOnlyCollection<int>? starsDejaDetenues = null)
     {
-        if (coupsDePouce is null || coupsDePouce.Values.All(q => q == 0)) return [];
+        if (coupsDePouce is null || coupsDePouce.Values.All(v => v.Quantite == 0)) return [];
         if (!ligue.SaisieLibre)
             throw new InvalidOperationException("Les coups de pouce ne s'attachent à une équipe que dans une ligue en saisie libre.");
-        return await CoupsDePouceEquipe.ValiderAsync(db, ligue.RulesVersionId, coupsDePouce);
+        return await CoupsDePouceEquipe.ValiderAsync(db, ligue.RulesVersionId, teamTypeId, coupsDePouce, starsDejaDetenues);
     }
 
     /// <summary>
@@ -422,14 +404,13 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
         int tresorerie,
         IReadOnlyDictionary<int, int> staff,
         List<(int positionId, string nom, int numero)> joueurs,
-        IReadOnlyCollection<int>? starPlayers = null,
-        IReadOnlyDictionary<int, int>? coupsDePouce = null)
+        IReadOnlyDictionary<int, CoupDePouceSaisi>? coupsDePouce = null)
     {
         var equipe = await db.Teams
             .Include(t => t.League)
             .Include(t => t.Joueurs).ThenInclude(j => j.Competences)
-            .Include(t => t.StarPlayers)
             .Include(t => t.CoupsDePouce).ThenInclude(c => c.Inducement)
+            .Include(t => t.CoupsDePouce).ThenInclude(c => c.StarPlayer)
             .FirstOrDefaultAsync(t => t.Id == teamId)
             ?? throw new InvalidOperationException("Équipe introuvable");
 
@@ -446,11 +427,10 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             ValiderRoster(teamType, joueurs);
         if (libre)
             SaisieLibreRegles.ValiderTresorerie(tresorerie);
-        // null = l'écran ne touche pas aux stars ; sinon la liste remplace l'existant.
-        var stars = starPlayers is null ? null
-            : await ValiderStarPlayersAsync(equipe.League, teamType.Id, starPlayers,
-                equipe.StarPlayers.Select(x => x.StarPlayerId).ToList());
-        var cdp = coupsDePouce is null ? null : await ValiderCoupsDePouceAsync(equipe.League, coupsDePouce);
+        // null = l'écran ne touche pas aux coups de pouce ; sinon l'état complet.
+        var cdp = coupsDePouce is null ? null
+            : await ValiderCoupsDePouceAsync(equipe.League, teamType.Id, coupsDePouce,
+                equipe.CoupsDePouce.Select(c => c.StarPlayerId).OfType<int>().ToList());
 
         // Supprimer l'ancien roster (compétences puis joueurs)
         var anciennesCompetences = equipe.Joueurs.SelectMany(j => j.Competences).ToList();
@@ -498,14 +478,6 @@ public class TeamService(ApplicationDbContext db, ILogger<TeamService> logger)
             AjouterCompetencesDepart(joueur.Id, position.CompetencesDepart);
         }
 
-        if (stars is not null)
-        {
-            var voulues = stars.Select(st => st.Id).ToHashSet();
-            db.TeamStarPlayers.RemoveRange(equipe.StarPlayers.Where(x => !voulues.Contains(x.StarPlayerId)));
-            var deja = equipe.StarPlayers.Select(x => x.StarPlayerId).ToHashSet();
-            foreach (var id in voulues.Where(id => !deja.Contains(id)))
-                db.TeamStarPlayers.Add(new TeamStarPlayer { TeamId = equipe.Id, StarPlayerId = id });
-        }
         if (cdp is not null)
             CoupsDePouceEquipe.Appliquer(db, equipe.Id, equipe.CoupsDePouce, cdp);
 

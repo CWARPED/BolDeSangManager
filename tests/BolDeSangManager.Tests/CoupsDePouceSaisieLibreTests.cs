@@ -74,8 +74,12 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
     private async Task<int> CreerAsync(Fixture f, Dictionary<int, int>? cdp = null)
     {
         await using var db = _factory.CreateContext();
-        return (await Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, null, cdp)).Id;
+        return (await Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, cdp is null ? null : Q(cdp))).Id;
     }
+
+    /// <summary>id → quantité, sans prix ni star.</summary>
+    private static Dictionary<int, CoupDePouceSaisi> Q(Dictionary<int, int> quantites) =>
+        quantites.ToDictionary(kv => kv.Key, kv => new CoupDePouceSaisi(kv.Value));
 
     // ── Création ────────────────────────────────────────────────────────────
 
@@ -121,7 +125,7 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
         var f = await SetupAsync(libre: false);
         await using var db = _factory.CreateContext();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, null, new Dictionary<int, int> { [f.PotsDeVin] = 1 }));
+            Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, Q(new Dictionary<int, int> { [f.PotsDeVin] = 1 })));
         Assert.Empty(await db.Teams.ToListAsync());
     }
 
@@ -131,7 +135,7 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
         var f = await SetupAsync(libre: true);
         await using var db = _factory.CreateContext();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, null, new Dictionary<int, int> { [f.AutreVersion] = 1 }));
+            Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, Q(new Dictionary<int, int> { [f.AutreVersion] = 1 })));
         Assert.Empty(await db.Teams.ToListAsync());
     }
 
@@ -141,7 +145,7 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
         var f = await SetupAsync(libre: true);
         await using var db = _factory.CreateContext();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, null, new Dictionary<int, int> { [f.PotsDeVin] = -1 }));
+            Teams(db).CreerEquipeAsync(NouvelleEquipe(f), [(f.PositionId, "J1", 1)], null, Q(new Dictionary<int, int> { [f.PotsDeVin] = -1 })));
     }
 
     [Fact]
@@ -158,7 +162,7 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
 
         await using (var db = _factory.CreateContext())
             await Teams(db).ModifierEquipeAsync(id, f.Coach, "Les Revenants", 0, new Dictionary<int, int>(),
-                [(f.PositionId, "J1", 1)], null, new Dictionary<int, int> { [f.Prieres] = 3 });
+                [(f.PositionId, "J1", 1)], Q(new Dictionary<int, int> { [f.Prieres] = 3 }));
         await using (var db = _factory.CreateContext())
         {
             var l = await db.TeamInducements.SingleAsync();
@@ -181,11 +185,11 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
         var id = await EquipeEnCoursAsync(f);
 
         await using (var db = _factory.CreateContext())
-            Assert.Empty(await Libre(db).ModifierCoupsDePouceAsync(id, f.Coach, new Dictionary<int, int> { [f.PotsDeVin] = 1, [f.Prieres] = 2 }));
+            Assert.Empty(await Libre(db).ModifierCoupsDePouceAsync(id, f.Coach, Q(new Dictionary<int, int> { [f.PotsDeVin] = 1, [f.Prieres] = 2 })));
         await using (var db = _factory.CreateContext())
             // Prières passe à 4 (> 3) : accepté, signalé. Pots-de-vin retiré (absent = 0).
             Assert.Equal(["Prières à Nuffle"],
-                await Libre(db).ModifierCoupsDePouceAsync(id, f.Coach, new Dictionary<int, int> { [f.Prieres] = 4 }));
+                await Libre(db).ModifierCoupsDePouceAsync(id, f.Coach, Q(new Dictionary<int, int> { [f.Prieres] = 4 })));
 
         await using var verif = _factory.CreateContext();
         var l = await verif.TeamInducements.SingleAsync(x => x.TeamId == id);
@@ -207,7 +211,7 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
         var id = await EquipeEnCoursAsync(f);
         await using var db = _factory.CreateContext();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            Libre(db).ModifierCoupsDePouceAsync(id, f.Coach, new Dictionary<int, int> { [f.PotsDeVin] = 1 }));
+            Libre(db).ModifierCoupsDePouceAsync(id, f.Coach, Q(new Dictionary<int, int> { [f.PotsDeVin] = 1 })));
     }
 
     [Fact]
@@ -217,8 +221,8 @@ public class CoupsDePouceSaisieLibreTests : IDisposable
         var id = await EquipeEnCoursAsync(f);
         await using var db = _factory.CreateContext();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            Libre(db).ModifierCoupsDePouceAsync(id, "un-autre", new Dictionary<int, int> { [f.PotsDeVin] = 1 }));
-        await Libre(db, commissaire: true).ModifierCoupsDePouceAsync(id, f.Commissaire, new Dictionary<int, int> { [f.PotsDeVin] = 1 });
+            Libre(db).ModifierCoupsDePouceAsync(id, "un-autre", Q(new Dictionary<int, int> { [f.PotsDeVin] = 1 })));
+        await Libre(db, commissaire: true).ModifierCoupsDePouceAsync(id, f.Commissaire, Q(new Dictionary<int, int> { [f.PotsDeVin] = 1 }));
         Assert.Equal(1, await db.TeamInducements.CountAsync(x => x.TeamId == id));
     }
 

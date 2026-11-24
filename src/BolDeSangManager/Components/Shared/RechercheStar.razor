@@ -1,0 +1,93 @@
+@* Recherche d'une star du catalogue sur un coup de pouce « Star player »
+   (saisie libre). Le coach tape quelques lettres, le navigateur propose les
+   stars accessibles à sa race ; dès que le texte correspond EXACTEMENT à une
+   star (casse ignorée), sa fiche s'affiche dessous et la star est retenue.
+   Un nom absent de la liste n'est pas retenu (décision produit : sans fiche,
+   pas de caractéristiques sur le PDF).
+
+   ⚠️ Pas de MudAutocomplete : sa liste ouverte pose un calque invisible qui
+   AVALE le clic suivant (« Enregistrer » demandait deux clics). <datalist>
+   natif, comme SelecteurHaine. *@
+
+<MudTextField T="string" Value="_texte" ValueChanged="SurSaisie" Immediate="true"
+              Label="Star player" Placeholder="Tapez un nom…" MaxLength="80"
+              Variant="Variant.Outlined" Margin="Margin.Dense" Clearable="true"
+              Error="@_inconnue" ErrorText="Aucune star de ce nom pour cette équipe"
+              HelperText="@(_enAttente ? "Choisissez une star dans la liste" : null)"
+              UserAttributes="_attributs" Style="min-width:200px" />
+<datalist id="@_id">
+    @foreach (var s in Stars)
+    {
+        <option value="@s.Nom">@($"{s.Cout:N0} po")</option>
+    }
+</datalist>
+
+@if (Choisie is { } sp)
+{
+    <div class="fiche-star mt-2">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.body2"><b>★ @sp.Nom</b></MudText>
+            <MudText Typo="Typo.caption" Color="Color.Secondary">@sp.Cout.ToString("N0") po</MudText>
+        </MudStack>
+        <div class="fiche-star-stats">
+            <span>M</span><span>F</span><span>AG</span><span>CP</span><span>AR</span>
+            <b>@sp.Mouvement</b><b>@sp.Force</b><b>@sp.Agilite</b><b>@sp.CapacitePasse</b><b>@sp.Armure</b>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(sp.Competences))
+        {
+            <MudText Typo="Typo.caption" Color="Color.Primary" Class="d-block">@string.Join(", ", sp.CompetencesListe)</MudText>
+        }
+        @if (!string.IsNullOrWhiteSpace(sp.ReglesSpeciales))
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="d-block" Style="font-style:italic">@sp.ReglesSpeciales</MudText>
+        }
+    </div>
+}
+
+<style>
+    .fiche-star { border:1px solid rgba(255,193,7,0.45); border-radius:4px; padding:6px 8px; }
+    .fiche-star-stats { display:grid; grid-template-columns:repeat(5,1fr); text-align:center; margin:4px 0 2px; max-width:260px; }
+    .fiche-star-stats span { font-size:10px; color:#9e9e9e; }
+    .fiche-star-stats b { font-size:12px; }
+</style>
+
+@code {
+    /// <summary>Stars proposées (accessibles à la race, plus celles déjà détenues).</summary>
+    [Parameter, EditorRequired] public IReadOnlyList<StarPlayer> Stars { get; set; } = [];
+
+    [Parameter] public int? StarPlayerId { get; set; }
+    [Parameter] public EventCallback<int?> StarPlayerIdChanged { get; set; }
+
+    readonly string _id = $"stars-{Guid.NewGuid():N}";
+    Dictionary<string, object> _attributs = [];
+    string? _texte;
+    bool _inconnue;
+    bool _enAttente => !string.IsNullOrWhiteSpace(_texte) && Choisie is null && !_inconnue;
+    int? _dernierIdRecu;
+
+    StarPlayer? Choisie => StarPlayerId is int id ? Stars.FirstOrDefault(s => s.Id == id) : null;
+
+    protected override void OnInitialized() =>
+        _attributs = new() { ["list"] = _id, ["autocomplete"] = "off" };
+
+    protected override void OnParametersSet()
+    {
+        // Ne réécrire le texte que si la star a changé de l'EXTÉRIEUR : sinon on
+        // écraserait la frappe en cours à chaque rendu.
+        if (StarPlayerId == _dernierIdRecu && _texte is not null) return;
+        _dernierIdRecu = StarPlayerId;
+        _texte = Choisie?.Nom ?? _texte ?? "";
+        _inconnue = false;
+    }
+
+    async Task SurSaisie(string? texte)
+    {
+        _texte = texte ?? "";
+        var star = Stars.FirstOrDefault(s => string.Equals(s.Nom, _texte.Trim(), StringComparison.OrdinalIgnoreCase));
+        _inconnue = star is null && !string.IsNullOrWhiteSpace(_texte)
+                    && !Stars.Any(s => s.Nom.StartsWith(_texte.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (star?.Id == StarPlayerId) return;
+        _dernierIdRecu = star?.Id;
+        await StarPlayerIdChanged.InvokeAsync(star?.Id);
+    }
+}

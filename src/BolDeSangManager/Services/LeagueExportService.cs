@@ -48,8 +48,8 @@ public class LeagueExportService(
             .Include(l => l.Equipes).ThenInclude(e => e.Joueurs)
                 .ThenInclude(j => j.Improvements).ThenInclude(i => i.Skill)
             .Include(l => l.Equipes).ThenInclude(e => e.Staff).ThenInclude(ts => ts.LeagueStaffType)
-            .Include(l => l.Equipes).ThenInclude(e => e.StarPlayers).ThenInclude(x => x.StarPlayer)
             .Include(l => l.Equipes).ThenInclude(e => e.CoupsDePouce).ThenInclude(x => x.Inducement)
+            .Include(l => l.Equipes).ThenInclude(e => e.CoupsDePouce).ThenInclude(x => x.StarPlayer)
             .Include(l => l.StaffTypes)
             .Include(l => l.PaliersPoints)
             .Include(l => l.Divisions).ThenInclude(d => d.Matchs).ThenInclude(m => m.EquipeDomicile)
@@ -109,52 +109,48 @@ public class LeagueExportService(
     }
 
     /// <summary>
-    /// Recrée les stars recrutées d'une équipe importée, résolues par NOM dans
-    /// la version de règles d'accueil. Une star inconnue de cette version est
-    /// ignorée (avec un avertissement) : l'import ne doit pas échouer pour ça.
-    /// </summary>
-    private async Task RestaurerStarPlayersEquipeAsync(Team team, EquipeExportDto dto, int rulesVersionId)
-    {
-        if (dto.StarPlayers is not { Count: > 0 }) return;
-
-        foreach (var nom in dto.StarPlayers.Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var star = await db.StarPlayers.FirstOrDefaultAsync(s =>
-                s.RulesVersionId == rulesVersionId && s.Nom.ToLower() == nom.ToLower());
-            if (star is null)
-            {
-                logger.LogWarning("Star player « {Nom} » inconnu de la version, ignoré pour {Equipe}", nom, team.Nom);
-                continue;
-            }
-            db.TeamStarPlayers.Add(new TeamStarPlayer { TeamId = team.Id, StarPlayerId = star.Id });
-        }
-        await db.SaveChangesAsync();
-    }
-
-    /// <summary>
     /// Recrée les coups de pouce détenus d'une équipe importée, résolus par NOM
     /// dans la version d'accueil ; un nom inconnu est ignoré avec un avertissement.
     /// </summary>
     private async Task RestaurerCoupsDePouceEquipeAsync(Team team, EquipeExportDto dto, int rulesVersionId)
     {
-        if (dto.CoupsDePouce is not { Count: > 0 }) return;
+        // Le détail (prix, star) fait foi ; un fichier antérieur n'a que nom → quantité.
+        var lignes = dto.CoupsDePouceDetail
+            ?? dto.CoupsDePouce?.Select(kv => new CoupDePouceEquipeExportDto(kv.Key, kv.Value)).ToList()
+            ?? [];
+        if (lignes.Count == 0) return;
 
         var vus = new HashSet<int>();
-        foreach (var (nom, quantite) in dto.CoupsDePouce)
+        foreach (var ligne in lignes)
         {
-            if (quantite <= 0) continue;
+            if (ligne.Quantite <= 0) continue;
             var cp = await db.Inducements.FirstOrDefaultAsync(i =>
-                i.RulesVersionId == rulesVersionId && i.Nom.ToLower() == nom.ToLower());
+                i.RulesVersionId == rulesVersionId && i.Nom.ToLower() == ligne.Nom.ToLower());
             if (cp is null || !vus.Add(cp.Id))
             {
                 if (cp is null)
-                    logger.LogWarning("Coup de pouce « {Nom} » inconnu de la version, ignoré pour {Equipe}", nom, team.Nom);
+                    logger.LogWarning("Coup de pouce « {Nom} » inconnu de la version, ignoré pour {Equipe}", ligne.Nom, team.Nom);
                 continue;
             }
+
+            StarPlayer? star = null;
+            if (!string.IsNullOrWhiteSpace(ligne.StarPlayer))
+            {
+                star = await db.StarPlayers.FirstOrDefaultAsync(s =>
+                    s.RulesVersionId == rulesVersionId && s.Nom.ToLower() == ligne.StarPlayer.ToLower());
+                if (star is null)
+                    logger.LogWarning("Star « {Nom} » inconnue de la version, ignorée pour {Equipe}", ligne.StarPlayer, team.Nom);
+            }
+
             db.TeamInducements.Add(new TeamInducement
             {
                 TeamId = team.Id, InducementId = cp.Id,
-                Quantite = Math.Min(quantite, CoupsDePouceEquipe.QuantiteMaxSaisie)
+                Quantite = Math.Min(ligne.Quantite, CoupsDePouceEquipe.QuantiteMaxSaisie),
+                // Un prix saisi n'a de sens que si le catalogue d'accueil ne le fixe pas.
+                PrixSaisi = CoupsDePouceEquipe.PrixVariable(cp) && ligne.PrixSaisi is int prix
+                    ? Math.Clamp(prix, 0, CoupsDePouceEquipe.PrixMaxSaisi)
+                    : null,
+                StarPlayerId = star?.Id
             });
         }
         await db.SaveChangesAsync();
@@ -228,14 +224,16 @@ public class LeagueExportService(
             Staff: e.Staff
                 .Where(ts => ts.LeagueStaffType is not null)
                 .ToDictionary(ts => ts.LeagueStaffType!.Nom, ts => ts.Quantite),
-            // Stars recrutées en saisie libre, par NOM (ids non portables).
-            StarPlayers: e.StarPlayers
-                .Where(x => x.StarPlayer is not null)
-                .Select(x => x.StarPlayer.Nom).OrderBy(n => n).ToList(),
-            // Coups de pouce détenus en saisie libre : nom → quantité.
+            StarPlayers: null,
+            // Coups de pouce détenus en saisie libre : nom → quantité (lu par
+            // les versions antérieures), et le détail prix + star par NOM.
             CoupsDePouce: e.CoupsDePouce
                 .Where(x => x.Inducement is not null)
-                .ToDictionary(x => x.Inducement.Nom, x => x.Quantite)
+                .ToDictionary(x => x.Inducement.Nom, x => x.Quantite),
+            CoupsDePouceDetail: e.CoupsDePouce
+                .Where(x => x.Inducement is not null)
+                .Select(x => new CoupDePouceEquipeExportDto(x.Inducement.Nom, x.Quantite, x.PrixSaisi, x.StarPlayer?.Nom))
+                .ToList()
         )).ToList();
 
         var matchs = ligue.Divisions
@@ -507,7 +505,9 @@ public class LeagueExportService(
             await db.SaveChangesAsync();
 
             await RestaurerStaffEquipeAsync(team, equipeDto, ligue.Id);
-            await RestaurerStarPlayersEquipeAsync(team, equipeDto, rulesVersion.Id);
+            if (equipeDto.StarPlayers is { Count: > 0 })
+                logger.LogWarning("Stars « {Noms} » d'un ancien export ignorées pour {Equipe} : les stars passent désormais par le coup de pouce Star player",
+                    string.Join(", ", equipeDto.StarPlayers), team.Nom);
             await RestaurerCoupsDePouceEquipeAsync(team, equipeDto, rulesVersion.Id);
 
             foreach (var joueurDto in equipeDto.Joueurs)
@@ -765,13 +765,20 @@ record EquipeExportDto(
     /// </summary>
     Dictionary<string, int>? Staff = null,
     /// <summary>
-    /// Noms des star players recrutés (saisie libre). Optionnel : absent des
-    /// fichiers antérieurs, qui s'importent alors sans star.
+    /// Ancien chemin des stars (saisie libre, avant le coup de pouce Star
+    /// player). Plus écrit ; relu seulement pour avertir qu'il est ignoré.
     /// </summary>
     List<string>? StarPlayers = null,
     /// <summary>Coups de pouce détenus (saisie libre), nom → quantité. Optionnel.</summary>
-    Dictionary<string, int>? CoupsDePouce = null
+    Dictionary<string, int>? CoupsDePouce = null,
+    /// <summary>
+    /// Détail des coups de pouce (prix saisi, star par nom). Optionnel : absent
+    /// des fichiers antérieurs, l'import retombe alors sur <c>CoupsDePouce</c>.
+    /// </summary>
+    List<CoupDePouceEquipeExportDto>? CoupsDePouceDetail = null
 );
+
+record CoupDePouceEquipeExportDto(string Nom, int Quantite, int? PrixSaisi = null, string? StarPlayer = null);
 
 record JoueurExportDto(
     string Nom,

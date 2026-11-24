@@ -403,7 +403,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
                 Cout           = src.Cout,
                 QuantiteMax    = src.QuantiteMax,
                 Restriction    = src.Restriction,
-                Ordre          = src.Ordre
+                Ordre          = src.Ordre,
+                EstStarPlayer  = src.EstStarPlayer
             });
 
         var sourceLigues = await db.ThemedLeagues
@@ -766,7 +767,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
     public async Task<Inducement> CreerCoupDePouceAsync(
         int versionId, string nom, string description, int cout,
-        int quantiteMax = 0, string restriction = "", int ordre = 0)
+        int quantiteMax = 0, string restriction = "", int ordre = 0, bool estStarPlayer = false)
     {
         if (string.IsNullOrWhiteSpace(nom))
             throw new InvalidOperationException("Le nom du coup de pouce est obligatoire.");
@@ -784,7 +785,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
             Cout = Math.Max(0, cout),
             QuantiteMax = Math.Max(0, quantiteMax),
             Restriction = restriction?.Trim() ?? "",
-            Ordre = ordre
+            Ordre = ordre,
+            EstStarPlayer = estStarPlayer
         };
         db.Inducements.Add(cp);
         await db.SaveChangesAsync();
@@ -794,7 +796,7 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
 
     public async Task ModifierCoupDePouceAsync(
         int id, string nom, string description, int cout,
-        int quantiteMax, string restriction, int ordre)
+        int quantiteMax, string restriction, int ordre, bool? estStarPlayer = null)
     {
         var cp = await db.Inducements.FindAsync(id)
             ?? throw new InvalidOperationException("Coup de pouce introuvable.");
@@ -813,6 +815,8 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
         cp.QuantiteMax = Math.Max(0, quantiteMax);
         cp.Restriction = restriction?.Trim() ?? "";
         cp.Ordre = ordre;
+        // null = ne pas toucher : un appelant qui ignore la case ne la décoche pas.
+        if (estStarPlayer is bool star) cp.EstStarPlayer = star;
         await db.SaveChangesAsync();
     }
 
@@ -897,9 +901,13 @@ public class DataEditService(ApplicationDbContext db, ILogger<DataEditService> l
     {
         var star = await db.StarPlayers.FindAsync(id);
         if (star is null) return;
-        // Une star recrutée en saisie libre compte dans la VEA de son équipe :
-        // la retirer du catalogue la ferait disparaître de l'effectif en silence.
-        var nbEquipes = await db.TeamStarPlayers.CountAsync(x => x.StarPlayerId == id);
+        // Une star choisie sur un coup de pouce compte dans la VEA de son équipe
+        // et s'imprime sur sa feuille : la retirer du catalogue la ferait
+        // disparaître en silence. (TeamStarPlayers : ancien chemin, compté tant
+        // que la table existe — FK Restrict.)
+        var nbEquipes = await db.TeamInducements.Where(x => x.StarPlayerId == id).Select(x => x.TeamId)
+            .Union(db.TeamStarPlayers.Where(x => x.StarPlayerId == id).Select(x => x.TeamId))
+            .CountAsync();
         if (nbEquipes > 0)
             throw new InvalidOperationException(
                 $"« {star.Nom} » est recruté par {nbEquipes} équipe(s) : retirez-le de ces équipes d'abord.");

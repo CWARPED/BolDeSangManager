@@ -132,7 +132,7 @@ else
 
                 <!-- Effectif -->
                 <MudText Typo="Typo.subtitle2" Class="mb-2">
-                    <b>Effectif — @_slots.Count joueur(s)@(_starsChoisies.Count > 0 ? $" + {_starsChoisies.Count} star(s)" : "")</b>
+                    <b>Effectif — @_slots.Count joueur(s)</b>
                 </MudText>
 
                 @if (_modeTournoi && _slots.Any(s => s.Existant))
@@ -168,24 +168,6 @@ else
                             </MudText>
                             <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small"
                                          Color="Color.Error" OnClick="@(() => _slots.Remove(slot))" />
-                        </MudStack>
-                    </MudPaper>
-                }
-
-                @* Saisie libre : stars recrutées, lignes de l'effectif sans numéro. *@
-                @foreach (var star in _starsChoisies.ToList())
-                {
-                    <MudPaper Elevation="0" Class="pa-2 mb-2" Style="border:1px solid rgba(255,193,7,0.5); border-radius:4px">
-                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-                            <MudText Typo="Typo.caption" Style="width:20px; color:#ffc107">★</MudText>
-                            <MudText Typo="Typo.body2" Style="min-width:120px; flex:1"><b>@star.Nom</b></MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">Star player</MudText>
-                            <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width:70px; text-align:right">
-                                @star.Cout.ToString("N0") po
-                            </MudText>
-                            <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small"
-                                           Color="Color.Error" aria-label="Retirer la star"
-                                           OnClick="@(() => _starsChoisies.Remove(star))" />
                         </MudStack>
                     </MudPaper>
                 }
@@ -234,7 +216,7 @@ else
                 {
                     <MudDivider Class="my-4" />
                     <MudText Typo="Typo.subtitle2" Class="mb-3"><b>Coups de pouce</b></MudText>
-                    <SelecteurCoupsDePouce Catalogue="_coupsDePouceCatalogue" Quantites="_coupsDePouce" />
+                    <SelecteurCoupsDePouce Catalogue="_coupsDePouceCatalogue" Saisies="_coupsDePouce" Stars="_starsDispo" />
                 }
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-6" Spacing="2">
@@ -278,14 +260,6 @@ else
                     @PosteCard(pos)
                 }
 
-                @if (_libre && _starsDispo.Count > 0)
-                {
-                    <MudText Typo="Typo.subtitle2" Class="mt-4 mb-2"><b>Star players</b></MudText>
-                    @foreach (var sp in _starsDispo)
-                    {
-                        @StarCard(sp)
-                    }
-                }
             </MudItem>
         </MudGrid>
 
@@ -349,13 +323,13 @@ else
     string _nomEquipe = "";
     readonly List<PlayerSlot> _slots = [];
 
-    // Saisie libre : stars du catalogue accessibles à la race, et celles retenues.
+    // Saisie libre : stars accessibles à la race, proposées sur les coups de
+    // pouce « Star player ».
     List<StarPlayer> _starsDispo = [];
-    readonly List<StarPlayer> _starsChoisies = [];
 
-    // Saisie libre : catalogue des coups de pouce et quantités retenues (id → qté).
+    // Saisie libre : catalogue des coups de pouce et saisies retenues (id → saisie).
     List<Inducement> _coupsDePouceCatalogue = [];
-    readonly Dictionary<int, int> _coupsDePouce = [];
+    readonly Dictionary<int, CoupDePouceSaisi> _coupsDePouce = [];
 
     /// <summary>Staff proposé par la ligue (copie des règles, ajustée par le commissaire).</summary>
     List<LeagueStaffType> _staffLigue = [];
@@ -466,11 +440,11 @@ else
             _nomEquipe = equipe.Nom;
             if (_libre)
             {
-                _starsDispo = await TeamService.GetStarPlayersRecrutablesAsync(equipe.TeamTypeId);
-                _starsChoisies.AddRange(equipe.StarPlayers.Select(x => x.StarPlayer).OrderBy(s => s.Nom));
+                _starsDispo = CoupsDePouceEquipe.StarsProposees(
+                    await TeamService.GetStarPlayersRecrutablesAsync(equipe.TeamTypeId), equipe.CoupsDePouce);
                 _coupsDePouceCatalogue = await TeamService.GetCoupsDePouceCatalogueAsync(_ligue.RulesVersionId);
                 foreach (var c in equipe.CoupsDePouce)
-                    _coupsDePouce[c.InducementId] = c.Quantite;
+                    _coupsDePouce[c.InducementId] = new(c.Quantite, c.PrixSaisi, c.StarPlayerId);
             }
 
             // Staff déjà détenu : on repart des quantités réelles.
@@ -519,16 +493,10 @@ else
     {
         _selectedType = await TeamService.GetTeamTypeAvecPostesAsync(type.Id);
         _slots.Clear();
-        _starsChoisies.Clear();
         _starsDispo = _libre ? await TeamService.GetStarPlayersRecrutablesAsync(type.Id) : [];
-    }
-
-    void AjouterStar(StarPlayer sp)
-    {
-        if (_starsChoisies.Any(s => s.Id == sp.Id)) return;
-        if (_starsChoisies.Count >= StarPlayerRecrutement.MaxConseille)
-            Snackbar.Add($"Au-delà de {StarPlayerRecrutement.MaxConseille} star players d'habitude.", Severity.Warning);
-        _starsChoisies.Add(sp);
+        // Une star choisie pour l'ancienne race n'est peut-être plus accessible.
+        foreach (var (id, saisie) in _coupsDePouce.Where(kv => kv.Value.StarPlayerId is not null).ToList())
+            _coupsDePouce[id] = saisie with { StarPlayerId = null };
     }
 
     void AjouterJoueur(PlayerPosition pos)
@@ -603,7 +571,7 @@ else
                 var staffLigue = _staffLigue.Select(st => st.Id).ToHashSet();
                 await SaisieLibre.ModifierEquipeEnCoursAsync(TeamId, _userId, _nomEquipe, _tresorerieLibre,
                     _staffQuantites.Where(kv => staffLigue.Contains(kv.Key)).ToDictionary(kv => kv.Key, kv => kv.Value),
-                    StarsVoulues(), _coupsDePouce,
+                    _coupsDePouce,
                     _slots.Where(s => !s.Existant).Select(s => (s.PositionId, s.Nom, s.Numero)).ToList());
                 Snackbar.Add("Équipe modifiée.", Severity.Success);
                 Nav.NavigateTo($"/equipes/{TeamId}");
@@ -613,7 +581,7 @@ else
             {
                 equipe = await TeamService.ModifierEquipeAsync(
                     TeamId, _userId, _nomEquipe, _libre ? _tresorerieLibre : _budgetRestant, _staffQuantites, joueurs,
-                    _libre ? StarsVoulues() : null, _libre ? _coupsDePouce : null);
+                    _libre ? _coupsDePouce : null);
                 Snackbar.Add("Équipe modifiée avec succès !", Severity.Success);
             }
             else
@@ -625,7 +593,7 @@ else
                     LeagueId = LigueId,
                     TeamTypeId = _selectedType.Id,
                     Tresorerie = _libre ? _tresorerieLibre : _budgetRestant
-                }, joueurs, _staffQuantites, _libre ? StarsVoulues() : null, _libre ? _coupsDePouce : null);
+                }, joueurs, _staffQuantites, _libre ? _coupsDePouce : null);
                 Snackbar.Add("Équipe créée avec succès !", Severity.Success);
             }
 
@@ -640,8 +608,6 @@ else
             _saving = false;
         }
     }
-
-    List<int> StarsVoulues() => _starsChoisies.Select(s => s.Id).ToList();
 
     Skill? _competenceAffichee;
     void OuvrirCompetence(Skill s) => _competenceAffichee = s;
@@ -713,45 +679,6 @@ else
                                Color="@(!complet && !sansFonds ? Color.Warning : Color.Default)"
                                Disabled="@(complet || sansFonds)"
                                OnClick="@(() => AjouterJoueur(pos))" />
-            </MudStack>
-        </MudPaper>
-    </text>;
-
-    // Carte d'un star player du catalogue (saisie libre), même gabarit que PosteCard.
-    RenderFragment<StarPlayer> StarCard => sp =>
-    @<text>
-        @{
-            var pris = _starsChoisies.Any(s => s.Id == sp.Id);
-        }
-        <MudPaper Elevation="0" Class="pa-2 mb-2"
-                  Style="@($"border:1px solid {(pris ? "rgba(255,255,255,0.06)" : "rgba(255,193,7,0.45)")}; border-radius:4px; opacity:{(pris ? "0.45" : "1")}")">
-            <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Spacing="1">
-                <div style="flex:1; min-width:0">
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
-                        <MudText Typo="Typo.body2"><b>@sp.Nom</b></MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">@sp.Cout.ToString("N0") po</MudText>
-                    </MudStack>
-                    <div style="display:grid; grid-template-columns:repeat(5,1fr); text-align:center; margin:4px 0 2px">
-                        <span style="font-size:10px; color:#9e9e9e">MOV</span>
-                        <span style="font-size:10px; color:#9e9e9e">FOR</span>
-                        <span style="font-size:10px; color:#9e9e9e">AGI</span>
-                        <span style="font-size:10px; color:#9e9e9e">CP</span>
-                        <span style="font-size:10px; color:#9e9e9e">ARM</span>
-                        <span style="font-size:12px; font-weight:600">@sp.Mouvement</span>
-                        <span style="font-size:12px; font-weight:600">@sp.Force</span>
-                        <span style="font-size:12px; font-weight:600">@sp.Agilite</span>
-                        <span style="font-size:12px; font-weight:600">@sp.CapacitePasse</span>
-                        <span style="font-size:12px; font-weight:600">@sp.Armure</span>
-                    </div>
-                    @if (!string.IsNullOrWhiteSpace(sp.Competences))
-                    {
-                        <MudText Typo="Typo.caption" Color="Color.Primary">@string.Join(", ", sp.CompetencesListe)</MudText>
-                    }
-                </div>
-                <MudIconButton Icon="@Icons.Material.Filled.AddCircleOutline" Size="Size.Small"
-                               Color="@(pris ? Color.Default : Color.Warning)" Disabled="@pris"
-                               aria-label="@($"Recruter {sp.Nom}")"
-                               OnClick="@(() => AjouterStar(sp))" />
             </MudStack>
         </MudPaper>
     </text>;

@@ -1,15 +1,19 @@
 @* Saisie libre — coups de pouce d'une équipe : liste des coups de pouce
-   retenus (quantité modifiable, corbeille) + un sélecteur pour en ajouter.
+   retenus (quantité, prix, star, corbeille) + un sélecteur pour en ajouter.
    Partagé par la création d'équipe (Rejoindre) et la fiche d'équipe : le même
    geste aux deux endroits.
 
-   Le composant modifie directement le dictionnaire `Quantites` (id → quantité)
-   et prévient le parent par `QuantitesChanged`. Une quantité au-delà du
-   maximum du catalogue est signalée, jamais refusée. *@
+   Le composant modifie directement le dictionnaire `Saisies` (id → saisie)
+   et prévient le parent par `SaisiesChanged`. Une quantité au-delà du
+   maximum du catalogue est signalée, jamais refusée.
+   - Prix : saisi par le coach quand le catalogue ne le fixe pas (prix 0).
+   - « Star player » : une star par ligne, cherchée parmi `Stars` ; la choisir
+     pré-remplit le prix avec celui de la star (modifiable). *@
 @inject ISnackbar Snackbar
 
 @foreach (var cp in Retenus())
 {
+    var saisie = Saisies[cp.Id];
     <MudPaper Elevation="0" Class="pa-2 mb-2" Style="border:1px solid rgba(144,202,249,0.45); border-radius:4px">
         <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
             <div style="flex:1; min-width:140px">
@@ -19,15 +23,38 @@
                     <MudText Typo="Typo.caption" Color="Color.Secondary" Style="font-style:italic">@cp.Restriction</MudText>
                 }
             </div>
-            <MudNumericField T="int" Value="@Quantites[cp.Id]" ValueChanged="@(v => DefinirAsync(cp, v))"
-                             Min="1" Max="@CoupsDePouceEquipe.QuantiteMaxSaisie" Label="Qté"
-                             Variant="Variant.Text" Margin="Margin.Dense" Style="width:70px" />
+            @if (!(cp.EstStarPlayer && saisie.StarPlayerId is not null))
+            {
+                @* Largeur fixe sur un conteneur : le champ MudBlazor s'étire sinon
+                   dans la rangée et écarte les colonnes. *@
+                <div style="width:70px; flex:none">
+                    <MudNumericField T="int" Value="@saisie.Quantite" ValueChanged="@(v => DefinirQuantiteAsync(cp, v))"
+                                     Min="1" Max="@CoupsDePouceEquipe.QuantiteMaxSaisie" Label="Qté"
+                                     Variant="Variant.Text" Margin="Margin.Dense" />
+                </div>
+            }
+            @if (CoupsDePouceEquipe.PrixVariable(cp))
+            {
+                <div style="width:120px; flex:none">
+                    <MudNumericField T="int?" Value="@saisie.PrixSaisi" ValueChanged="@(v => DefinirPrixAsync(cp, v))"
+                                     Min="0" Max="@CoupsDePouceEquipe.PrixMaxSaisi" Step="5000" Label="Prix (po)"
+                                     Variant="Variant.Text" Margin="Margin.Dense"
+                                     aria-label="@($"Prix de {cp.Nom}")" />
+                </div>
+            }
             <MudText Typo="Typo.caption" Color="Color.Secondary" Style="min-width:80px; text-align:right">
-                @((cp.Cout * Quantites[cp.Id]).ToString("N0")) po
+                @(((saisie.PrixSaisi ?? cp.Cout) * saisie.Quantite).ToString("N0")) po
             </MudText>
             <MudIconButton Icon="@Icons.Material.Filled.DeleteOutline" Size="Size.Small" Color="Color.Error"
                            aria-label="@($"Retirer {cp.Nom}")" OnClick="@(() => RetirerAsync(cp))" />
         </MudStack>
+        @if (cp.EstStarPlayer)
+        {
+            <div class="mt-2">
+                <RechercheStar Stars="Stars" StarPlayerId="@saisie.StarPlayerId"
+                               StarPlayerIdChanged="@(id => DefinirStarAsync(cp, id))" />
+            </div>
+        }
     </MudPaper>
 }
 
@@ -49,18 +76,21 @@
     /// <summary>Catalogue de la version (tout est proposé : la restriction est indicative).</summary>
     [Parameter, EditorRequired] public List<Inducement> Catalogue { get; set; } = [];
 
-    /// <summary>État courant, id → quantité ; modifié en place.</summary>
-    [Parameter, EditorRequired] public Dictionary<int, int> Quantites { get; set; } = [];
+    /// <summary>État courant, id → saisie ; modifié en place.</summary>
+    [Parameter, EditorRequired] public Dictionary<int, CoupDePouceSaisi> Saisies { get; set; } = [];
 
-    [Parameter] public EventCallback QuantitesChanged { get; set; }
+    /// <summary>Stars proposées sur les coups de pouce « Star player ».</summary>
+    [Parameter] public IReadOnlyList<StarPlayer> Stars { get; set; } = [];
+
+    [Parameter] public EventCallback SaisiesChanged { get; set; }
 
     int _cle;   // recrée le sélecteur pour le remettre à vide après un ajout
 
     IEnumerable<Inducement> Retenus() =>
-        Catalogue.Where(c => Quantites.GetValueOrDefault(c.Id) > 0);
+        Catalogue.Where(c => Saisies.TryGetValue(c.Id, out var s) && s.Quantite > 0);
 
     IEnumerable<Inducement> Ajoutables() =>
-        Catalogue.Where(c => Quantites.GetValueOrDefault(c.Id) == 0);
+        Catalogue.Where(c => !Saisies.TryGetValue(c.Id, out var s) || s.Quantite == 0);
 
     static string LibelleCout(Inducement cp) =>
         (cp.Cout > 0 ? $"{cp.Cout:N0} po" : "prix variable")
@@ -72,21 +102,44 @@
         if (id is not int i) return;
         var cp = Catalogue.FirstOrDefault(c => c.Id == i);
         if (cp is null) return;
-        await DefinirAsync(cp, 1);
+        Saisies[cp.Id] = new CoupDePouceSaisi(1);
+        await SaisiesChanged.InvokeAsync();
     }
 
     async Task RetirerAsync(Inducement cp)
     {
-        Quantites.Remove(cp.Id);
-        await QuantitesChanged.InvokeAsync();
+        Saisies.Remove(cp.Id);
+        await SaisiesChanged.InvokeAsync();
     }
 
-    async Task DefinirAsync(Inducement cp, int valeur)
+    async Task DefinirQuantiteAsync(Inducement cp, int valeur)
     {
         valeur = Math.Clamp(valeur, 1, CoupsDePouceEquipe.QuantiteMaxSaisie);
-        Quantites[cp.Id] = valeur;
+        Saisies[cp.Id] = Saisies[cp.Id] with { Quantite = valeur };
         if (cp.QuantiteMax > 0 && valeur > cp.QuantiteMax)
             Snackbar.Add($"Au-delà du maximum : {cp.QuantiteMax} {cp.Nom} d'habitude.", Severity.Warning);
-        await QuantitesChanged.InvokeAsync();
+        await SaisiesChanged.InvokeAsync();
+    }
+
+    async Task DefinirPrixAsync(Inducement cp, int? prix)
+    {
+        Saisies[cp.Id] = Saisies[cp.Id] with
+        {
+            PrixSaisi = prix is int p ? Math.Clamp(p, 0, CoupsDePouceEquipe.PrixMaxSaisi) : null
+        };
+        await SaisiesChanged.InvokeAsync();
+    }
+
+    async Task DefinirStarAsync(Inducement cp, int? starId)
+    {
+        var star = Stars.FirstOrDefault(s => s.Id == starId);
+        var avant = Saisies[cp.Id];
+        // Une star = une ligne ; son prix est proposé, le coach peut le corriger.
+        Saisies[cp.Id] = star is null
+            ? avant with { StarPlayerId = null }
+            : avant with { StarPlayerId = star.Id, Quantite = 1, PrixSaisi = star.Cout };
+        if (star is not null && Saisies.Any(kv => kv.Key != cp.Id && kv.Value.StarPlayerId == star.Id))
+            Snackbar.Add($"« {star.Nom} » est déjà choisi sur un autre coup de pouce.", Severity.Warning);
+        await SaisiesChanged.InvokeAsync();
     }
 }

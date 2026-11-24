@@ -245,21 +245,13 @@ else
                 </RowTemplate>
             </MudTable>
         </div>
-        @if (_equipeDetail.StarPlayers.Any(x => x.StarPlayer is not null))
-        {
-            <MudText Typo="Typo.body2" Class="mt-2">
-                ★ Star players :
-                <b>@string.Join(", ", _equipeDetail.StarPlayers.Where(x => x.StarPlayer is not null)
-                    .OrderBy(x => x.StarPlayer.Nom).Select(x => $"{x.StarPlayer.Nom} ({x.StarPlayer.Cout:N0} po)"))</b>
-            </MudText>
-        }
         @if (_equipeDetail.CoupsDePouce.Any(x => x.Inducement is not null))
         {
             <MudText Typo="Typo.body2" Class="mt-1">
                 Coups de pouce :
                 <b>@string.Join(", ", _equipeDetail.CoupsDePouce.Where(x => x.Inducement is not null)
                     .OrderBy(x => x.Inducement.Ordre).ThenBy(x => x.Inducement.Nom)
-                    .Select(x => x.Quantite > 1 ? $"{x.Inducement.Nom} ×{x.Quantite}" : x.Inducement.Nom))</b>
+                    .Select(CoupsDePouceEquipe.Libelle))</b>
             </MudText>
         }
     }

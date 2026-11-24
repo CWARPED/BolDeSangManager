@@ -293,12 +293,15 @@ else
                 </MudTable>
             </div>
 
-            @* Saisie libre : star players recrutés — lignes de l'effectif, comptées
-               dans la VEA, absentes des feuilles de match. Lecture seule ici :
-               on les choisit par le bouton « Modifier » de l'équipe. *@
+            @* Saisie libre : stars choisies sur un coup de pouce « Star player » —
+               lignes de l'effectif avec leurs caractéristiques, comptées dans la
+               VEA (prix de la ligne), absentes des feuilles de match. Lecture
+               seule ici : elles se choisissent dans les coups de pouce. *@
             @{
-                var stars = _equipe.StarPlayers.Where(x => x.StarPlayer is not null)
-                    .Select(x => x.StarPlayer).OrderBy(s => s.Nom).ToList();
+                var lignesStars = _equipe.CoupsDePouce.Where(x => x.StarPlayer is not null && x.Inducement is not null)
+                    .OrderBy(x => x.Inducement.Ordre).ToList();
+                var stars = lignesStars.Select(x => x.StarPlayer!).ToList();
+                var prixStar = lignesStars.ToDictionary(x => x.StarPlayer!.Id, CoupsDePouceEquipe.PrixUnitaire);
             }
             @if (stars.Any())
             {
@@ -336,7 +339,7 @@ else
                                         }
                                     </div>
                                 </MudTd>
-                                <MudTd DataLabel="Valeur" Style="text-align:center; white-space:nowrap">@sp.Cout.ToString("N0")</MudTd>
+                                <MudTd DataLabel="Valeur" Style="text-align:center; white-space:nowrap">@prixStar[sp.Id].ToString("N0")</MudTd>
                             </RowTemplate>
                         </MudTable>
                     </div>
@@ -478,7 +481,7 @@ else
                 </MudStack>
                 @if (_editionCoupsDePouce)
                 {
-                    <SelecteurCoupsDePouce Catalogue="_coupsDePouceCatalogue" Quantites="_editCoupsDePouce" />
+                    <SelecteurCoupsDePouce Catalogue="_coupsDePouceCatalogue" Saisies="_editCoupsDePouce" Stars="_starsDispo" />
                     <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1" Class="mt-2">
                         <MudButton Variant="Variant.Text" OnClick="@(() => _editionCoupsDePouce = false)">Annuler</MudButton>
                         <MudButton Variant="Variant.Filled" Color="Color.Success" Disabled="@_coupsDePouceEnCours"
@@ -493,7 +496,18 @@ else
                             <MudItem xs="6" sm="4" md="2">
                                 <MudPaper Elevation="1" Class="pa-3 text-center">
                                     <MudText Typo="Typo.caption" Color="Color.Secondary">@c.Inducement.Nom</MudText>
-                                    <MudText Typo="Typo.h5"><b>@c.Quantite</b></MudText>
+                                    @if (c.StarPlayer is not null)
+                                    {
+                                        <MudText Typo="Typo.body2"><b>@c.StarPlayer.Nom</b></MudText>
+                                    }
+                                    else
+                                    {
+                                        <MudText Typo="Typo.h5"><b>@c.Quantite</b></MudText>
+                                    }
+                                    @if (CoupsDePouceEquipe.PrixUnitaire(c) > 0)
+                                    {
+                                        <MudText Typo="Typo.caption" Color="Color.Secondary">@CoupsDePouceEquipe.PrixUnitaire(c).ToString("N0") po</MudText>
+                                    }
                                 </MudPaper>
                             </MudItem>
                         }
@@ -1265,14 +1279,18 @@ else
 
     // ── Saisie libre : coups de pouce détenus ────────────────────────────
     List<Inducement> _coupsDePouceCatalogue = [];
-    Dictionary<int, int> _editCoupsDePouce = [];
+    Dictionary<int, CoupDePouceSaisi> _editCoupsDePouce = [];
+    List<StarPlayer> _starsDispo = [];
     bool _editionCoupsDePouce;
     bool _coupsDePouceEnCours;
 
-    void DemarrerCoupsDePouce()
+    async Task DemarrerCoupsDePouce()
     {
         if (_equipe is null) return;
-        _editCoupsDePouce = _equipe.CoupsDePouce.ToDictionary(c => c.InducementId, c => c.Quantite);
+        _editCoupsDePouce = _equipe.CoupsDePouce.ToDictionary(c => c.InducementId,
+            c => new CoupDePouceSaisi(c.Quantite, c.PrixSaisi, c.StarPlayerId));
+        _starsDispo = CoupsDePouceEquipe.StarsProposees(
+            await TeamService.GetStarPlayersRecrutablesAsync(_equipe.TeamTypeId), _equipe.CoupsDePouce);
         _editionCoupsDePouce = true;
     }
 
