@@ -160,10 +160,12 @@ public static class DbSeeder
     /// donc les entrées en place — les rattachements de races pointent sur des
     /// identifiants, ils survivent au renommage.
     ///
-    /// Idempotent : ne crée que ce qui manque, ne réécrit jamais une fiche que
-    /// le commissaire aurait modifiée à la main.
+    /// Idempotent : coups de pouce et stars ne sont créés que sur une version
+    /// qui n'en a AUCUN (catalogue initial) ; ensuite ils appartiennent à
+    /// l'association, renommages compris.
     /// </summary>
-    private static async Task SeedCoupsDePouceEtStarPlayersAsync(
+    /// <remarks>Publique pour les tests (idempotence face aux renommages).</remarks>
+    public static async Task SeedCoupsDePouceEtStarPlayersAsync(
         ApplicationDbContext db, ILogger logger)
     {
         // Versions Blood Bowl ayant déjà des règles spéciales : celles où le
@@ -212,9 +214,15 @@ public static class DbSeeder
                 .Select(i => i.Nom)
                 .ToListAsync();
 
+            // Catalogue INITIAL seulement : dès qu'une version a des coups de
+            // pouce, ils appartiennent à l'association. Comparer par nom
+            // recréait à chaque démarrage tout coup de pouce RENOMMÉ en admin
+            // (« Prières à Nuffle » → « Prières à Nuffle 10KPO » : 14 doublons
+            // constatés sur une copie de la base de prod, 24/11/2026).
             var cpCrees = 0;
             var ordre = 0;
-            foreach (var (nom, cout, qte, restriction, description) in InducementSeedData.CoupsDePouce)
+            foreach (var (nom, cout, qte, restriction, description) in
+                     cpExistants.Count == 0 ? InducementSeedData.CoupsDePouce : [])
             {
                 ordre++;
                 if (cpExistants.Any(n => string.Equals(n, nom, StringComparison.OrdinalIgnoreCase))) continue;
@@ -239,9 +247,11 @@ public static class DbSeeder
                 .Select(s => s.Nom)
                 .ToListAsync();
 
+            // Même règle que les coups de pouce : catalogue initial seulement,
+            // une star renommée en admin ne doit pas revenir en double.
             var spCrees = 0;
             ordre = 0;
-            foreach (var star in InducementSeedData.StarPlayers)
+            foreach (var star in spExistants.Count == 0 ? InducementSeedData.StarPlayers : [])
             {
                 ordre++;
                 if (spExistants.Any(n => string.Equals(n, star.Nom, StringComparison.OrdinalIgnoreCase))) continue;
